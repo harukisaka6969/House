@@ -1,0 +1,67 @@
+import "server-only";
+import argon2 from "argon2";
+import { db } from "./db";
+
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+
+export function hashPin(pin: string): Promise<string> {
+  return argon2.hash(pin);
+}
+
+export interface ProfileRow {
+  id: string;
+  slug: string;
+  name: string;
+  pin_hash: string;
+  failed_attempts: number;
+  locked_until: string | null;
+}
+
+export async function getProfileBySlug(slug: string): Promise<ProfileRow | null> {
+  const { data, error } = await db().from("profiles").select("*").eq("slug", slug).maybeSingle();
+  if (error) throw error;
+  return data as ProfileRow | null;
+}
+
+export async function getProfileById(id: string): Promise<ProfileRow | null> {
+  const { data, error } = await db().from("profiles").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data as ProfileRow | null;
+}
+
+export type PinCheckResult =
+  | { ok: true }
+  | { ok: false; reason: "locked"; lockedUntil: string }
+  | { ok: false; reason: "invalid" };
+
+/** Verifies a PIN against a profile, applying and persisting the 5-strikes / 15-minute lockout. */
+export async function checkPin(profile: ProfileRow, pin: string): Promise<PinCheckResult> {
+  const now = Date.now();
+  if (profile.locked_until && new Date(profile.locked_until).getTime() > now) {
+    return { ok: false, reason: "locked", lockedUntil: profile.locked_until };
+  }
+
+  const valid = await argon2.verify(profile.pin_hash, pin).catch(() => false);
+
+  if (valid) {
+    await db().from("profiles").update({ failed_attempts: 0, locked_until: null }).eq("id", profile.id);
+    return { ok: true };
+  }
+
+  const attempts = profile.failed_attempts + 1;
+  const lockedUntil = attempts >= MAX_ATTEMPTS ? new Date(now + LOCKOUT_MS).toISOString() : null;
+  await db()
+    .from("profiles")
+    .update({ failed_attempts: attempts >= MAX_ATTEMPTS ? 0 : attempts, locked_until: lockedUntil })
+    .eq("id", profile.id);
+
+  if (lockedUntil) return { ok: false, reason: "locked", lockedUntil };
+  return { ok: false, reason: "invalid" };
+}
+
+export async function changePin(profileId: string, newPin: string): Promise<void> {
+  const pin_hash = await hashPin(newPin);
+  const { error } = await db().from("profiles").update({ pin_hash }).eq("id", profileId);
+  if (error) throw error;
+}
