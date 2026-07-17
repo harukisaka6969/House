@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { browserSupportsWebAuthn, startAuthentication } from "@simplewebauthn/browser";
 import { apiPost } from "@/lib/apiClient";
+import { describeWebAuthnError } from "@/lib/webauthnErrors";
 
 type Mode = "idle" | "pin";
 
@@ -35,11 +36,17 @@ export default function LockScreen({ slug, name }: { slug: string; name: string 
         "/api/auth/webauthn/login-options",
         { slug }
       );
-      const response = await startAuthentication({ optionsJSON: options });
+      let response;
+      try {
+        response = await startAuthentication({ optionsJSON: options });
+      } catch (ceremonyErr) {
+        throw new Error(describeWebAuthnError(ceremonyErr));
+      }
       await apiPost("/api/auth/webauthn/login-verify", { response });
       goApp();
-    } catch {
-      setError("Face ID / Touch IDでの解錠に失敗しました。PINをお試しください。");
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : "";
+      setError(`Face ID / Touch IDでの解錠に失敗しました。${detail} PINをお試しください。`);
     } finally {
       setBusy(false);
     }

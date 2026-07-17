@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { shiftMonth } from "@/lib/date";
+import { describeWebAuthnError } from "@/lib/webauthnErrors";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import FamilyDashboard from "./FamilyDashboard";
@@ -76,13 +77,18 @@ function PasskeyBanner() {
     setErr("");
     try {
       const options = await apiGet<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/webauthn/register-options");
-      const response = await startRegistration({ optionsJSON: options });
+      let response;
+      try {
+        response = await startRegistration({ optionsJSON: options });
+      } catch (ceremonyErr) {
+        throw new Error(describeWebAuthnError(ceremonyErr));
+      }
       const deviceName = typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 40) : "このデバイス";
       await apiPost("/api/auth/webauthn/register-verify", { response, deviceName });
       refreshMe();
       setDismissed(true);
-    } catch {
-      setErr("登録に失敗しました。設定画面から再度お試しください。");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "登録に失敗しました。");
     } finally {
       setBusy(false);
     }

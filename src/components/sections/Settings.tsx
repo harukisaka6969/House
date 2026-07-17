@@ -5,6 +5,7 @@ import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/brow
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import { describeWebAuthnError } from "@/lib/webauthnErrors";
 import AnalysisExport from "./AnalysisExport";
 
 const emptyFamilyForm = { slug: "", name: "", pin: "" };
@@ -70,9 +71,14 @@ export default function Settings() {
     setDeviceMsg("");
     setRegBusy(true);
     try {
-      if (!browserSupportsWebAuthn()) throw new Error("このブラウザはパスキーに対応していません。");
+      if (!browserSupportsWebAuthn()) throw new Error("このブラウザ（またはアプリ内ブラウザ）はパスキーに対応していません。Safariで直接開いてお試しください。");
       const options = await apiGet<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/webauthn/register-options");
-      const response = await startRegistration({ optionsJSON: options });
+      let response;
+      try {
+        response = await startRegistration({ optionsJSON: options });
+      } catch (ceremonyErr) {
+        throw new Error(describeWebAuthnError(ceremonyErr));
+      }
       const deviceName = typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 40) : "このデバイス";
       await apiPost("/api/auth/webauthn/register-verify", { response, deviceName });
       setDeviceMsg("✓ このデバイスをFace ID / Touch IDに登録しました。");

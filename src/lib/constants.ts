@@ -1,12 +1,12 @@
 export const PRIVATE_ACCOUNT = "a3";
 
 export const CATEGORIES = [
-  "食費", "外食", "住居", "水道光熱", "通信", "交通",
+  "食費", "外食", "住居", "水道光熱", "通信", "交通", "車関係",
   "日用品", "趣味", "ペット", "医療", "交際費", "旅行", "投資", "その他",
 ] as const;
 
 export const CAT_COLORS = [
-  "#F5A524", "#2FB8A6", "#4C9AFF", "#8B7CF6", "#E86A92", "#6FCF6F",
+  "#F5A524", "#2FB8A6", "#4C9AFF", "#8B7CF6", "#E86A92", "#6FCF6F", "#5FB8DE",
   "#D9A0FF", "#FFB380", "#63C7E8", "#C9B458", "#FF8A7A", "#7FD1B9", "#B0A8FF", "#9AA4B2",
 ] as const;
 

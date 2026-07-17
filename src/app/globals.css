@@ -192,3 +192,13 @@ select.mf-input option { background: #181E25; }
 .mf-pindot.filled { background: #F5A524; border-color: #F5A524; }
 .mf-lockerr { color: #F26D5F; font-size: 12.5px; margin-top: 4px; min-height: 16px; }
 .mf-locklockout { color: #F5A524; font-size: 12.5px; margin-top: 4px; }
+
+.mf-modalbackdrop { position: fixed; inset: 0; background: rgba(8,10,13,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 100; padding: 0; }
+@media (min-width: 640px) { .mf-modalbackdrop { align-items: center; padding: 20px; } }
+.mf-modalcard { background: #181E25; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+@media (min-width: 640px) { .mf-modalcard { border-radius: 16px; } }
+.mf-modaltitle { font-size: 16px; font-weight: 700; color: #E7ECF2; margin-bottom: 2px; }
+.mf-modalsub { font-size: 12.5px; color: #93A0AE; margin-bottom: 14px; }
+.mf-fieldlabel { display: block; font-size: 12px; color: #93A0AE; margin: 12px 0 4px; }
+.mf-fieldlabel:first-child { margin-top: 0; }
+.mf-fieldlabel.required::after { content: " *"; color: #F5A524; }

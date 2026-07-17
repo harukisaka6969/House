@@ -7,6 +7,7 @@ import type { AssetOut, MaintenanceTaskOut, MaintenanceLogOut } from "@/lib/apiT
 import { MAINTENANCE_TEMPLATES, ASSET_KINDS } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import AiSuggestButton from "../AiSuggestButton";
 import { todayStrJST } from "@/lib/date";
 
 type UpcomingResponse = {
@@ -118,6 +119,8 @@ export default function Maintenance() {
     if (nextDue <= in30) return <span className="mf-badge warn">まもなく</span>;
     return null;
   };
+
+  const completingTask = completingId ? data.allTasks.find((t) => t.id === completingId) : null;
 
   const asset = selectedAsset ? data.assets.find((a) => a.id === selectedAsset) : null;
   const assetTasks = asset ? data.allTasks.filter((t) => t.asset_id === asset.id) : [];
@@ -250,37 +253,77 @@ export default function Maintenance() {
       )}
 
       {completingId && (
-        <div className="mf-panel">
-          <div className="mf-paneltitle">完了処理</div>
-          <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
-            メンテ費は必ず第1口座（生活費）からの支出として記録されます。
-          </div>
-          <div className="mf-formgrid">
-            <input className="mf-input" type="date" value={completeForm.done_date} onChange={(e) => setCompleteForm({ ...completeForm, done_date: e.target.value })} />
-            <input className="mf-input mf-mono" type="number" placeholder="実費" value={completeForm.actual_cost} onChange={(e) => setCompleteForm({ ...completeForm, actual_cost: e.target.value })} />
-            <input className="mf-input" placeholder="メモ" value={completeForm.memo} onChange={(e) => setCompleteForm({ ...completeForm, memo: e.target.value })} />
-          </div>
-          <div className="mf-quicklabel">カテゴリ</div>
-          <div className="mf-chips">
-            {allCats.map((c) => (
-              <button key={c} className={"mf-chipbtn" + (completeForm.category === c ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, category: c })}>
-                {c}
-              </button>
-            ))}
-          </div>
-          <div className="mf-row" style={{ marginTop: 10 }}>
-            <button className="mf-btn primary" onClick={() => submitComplete(completingId)}>
-              完了を記録
-            </button>
-            <button className="mf-btn ghost" onClick={() => { setCompletingId(null); setCompleteErr(""); }}>
-              キャンセル
-            </button>
-          </div>
-          {completeErr && (
-            <div className="mf-hint" style={{ color: "#F26D5F" }}>
-              {completeErr}
+        <div className="mf-modalbackdrop" onClick={() => { setCompletingId(null); setCompleteErr(""); }}>
+          <div className="mf-modalcard" onClick={(e) => e.stopPropagation()}>
+            <div className="mf-modaltitle">
+              {completingTask ? `${completingTask.asset_name}: ${completingTask.name}` : "メンテ"} を完了にする
             </div>
-          )}
+            <div className="mf-modalsub">メンテ費は必ず第1口座（生活費）からの支出として自動的に記録されます。</div>
+
+            <label className="mf-fieldlabel required" htmlFor="mf-complete-date">
+              実施日
+            </label>
+            <input
+              id="mf-complete-date"
+              className="mf-input"
+              type="date"
+              value={completeForm.done_date}
+              onChange={(e) => setCompleteForm({ ...completeForm, done_date: e.target.value })}
+            />
+
+            <label className="mf-fieldlabel required" htmlFor="mf-complete-cost">
+              実費（円）
+            </label>
+            <input
+              id="mf-complete-cost"
+              className="mf-input mf-mono"
+              type="number"
+              placeholder="例: 8000"
+              value={completeForm.actual_cost}
+              onChange={(e) => setCompleteForm({ ...completeForm, actual_cost: e.target.value })}
+            />
+
+            <label className="mf-fieldlabel" htmlFor="mf-complete-memo">
+              メモ（任意）
+            </label>
+            <input
+              id="mf-complete-memo"
+              className="mf-input"
+              placeholder="例: ○○オートで実施"
+              value={completeForm.memo}
+              onChange={(e) => setCompleteForm({ ...completeForm, memo: e.target.value })}
+            />
+
+            <div className="mf-fieldlabel required" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>支出のカテゴリ</span>
+              <AiSuggestButton
+                text={`${completingTask?.name ?? ""} ${completeForm.memo}`}
+                options={allCats}
+                onSuggest={(c) => setCompleteForm({ ...completeForm, category: c })}
+              />
+            </div>
+            <div className="mf-chips">
+              {allCats.map((c) => (
+                <button key={c} className={"mf-chipbtn" + (completeForm.category === c ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, category: c })}>
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            <div className="mf-row" style={{ marginTop: 16 }}>
+              <button className="mf-btn primary" onClick={() => submitComplete(completingId)}>
+                完了を記録
+              </button>
+              <button className="mf-btn ghost" onClick={() => { setCompletingId(null); setCompleteErr(""); }}>
+                キャンセル
+              </button>
+            </div>
+            {completeErr && (
+              <div className="mf-hint" style={{ color: "#F26D5F" }}>
+                {completeErr}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
