@@ -169,6 +169,18 @@ export interface UpcomingSummary {
   total: number;
 }
 
+export interface InventoryItemOut {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantity: number;
+  low_stock_threshold: number;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /* ---- family (read-only, whitelisted) ---- */
 
 export interface FamilyWishlistOut {

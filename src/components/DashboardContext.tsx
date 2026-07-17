@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { apiGet } from "@/lib/apiClient";
 import { nowMonthKeyJST, shiftMonth } from "@/lib/date";
 import { CATEGORIES } from "@/lib/constants";
-import type { MeResponse, MonthResponse, SettingsResponse, TrendPoint } from "@/lib/apiTypes";
+import type { MeResponse, MonthResponse, SettingsResponse, TrendPoint, InventoryItemOut } from "@/lib/apiTypes";
 
 interface DashboardState {
   slug: string;
@@ -25,6 +25,8 @@ interface DashboardState {
   advisorExtraContext: string | null;
   openAdvisorWithContext: (context: string) => void;
   clearAdvisorExtraContext: () => void;
+  lowStockItems: InventoryItemOut[];
+  refreshLowStock: () => void;
 }
 
 const Ctx = createContext<DashboardState | null>(null);
@@ -40,6 +42,8 @@ export function DashboardProvider({ slug, children }: { slug: string; children: 
   const [settingsTick, setSettingsTick] = useState(0);
   const [agentOpen, setAgentOpen] = useState(false);
   const [advisorExtraContext, setAdvisorExtraContext] = useState<string | null>(null);
+  const [lowStockItems, setLowStockItems] = useState<InventoryItemOut[]>([]);
+  const [lowStockTick, setLowStockTick] = useState(0);
 
   useEffect(() => {
     apiGet<MeResponse>("/api/auth/me").then(setMe).catch(() => {});
@@ -71,8 +75,13 @@ export function DashboardProvider({ slug, children }: { slug: string; children: 
     apiGet<SettingsResponse>("/api/settings").then(setSettings).catch(() => {});
   }, [settingsTick]);
 
+  useEffect(() => {
+    apiGet<{ items: InventoryItemOut[] }>("/api/inventory/low-stock").then((r) => setLowStockItems(r.items)).catch(() => {});
+  }, [lowStockTick]);
+
   const refreshMonth = useCallback(() => setMonthTick((t) => t + 1), []);
   const refreshSettings = useCallback(() => setSettingsTick((t) => t + 1), []);
+  const refreshLowStock = useCallback(() => setLowStockTick((t) => t + 1), []);
   const refreshMe = useCallback(() => {
     apiGet<MeResponse>("/api/auth/me").then(setMe).catch(() => {});
   }, []);
@@ -106,6 +115,8 @@ export function DashboardProvider({ slug, children }: { slug: string; children: 
     advisorExtraContext,
     openAdvisorWithContext,
     clearAdvisorExtraContext,
+    lowStockItems,
+    refreshLowStock,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

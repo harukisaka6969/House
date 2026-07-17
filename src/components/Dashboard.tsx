@@ -18,6 +18,7 @@ import Sim from "./sections/SimPanel";
 import Wishlist from "./sections/Wishlist";
 import LifeEvents from "./sections/LifeEvents";
 import Maintenance from "./sections/Maintenance";
+import Inventory from "./sections/Inventory";
 import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
 
@@ -31,6 +32,7 @@ const MENU: [string, string][] = [
   ["wishlist", "⑧ 買いたいもの"],
   ["lifeEvents", "⑨ 将来設計"],
   ["maintenance", "⑩ メンテナンス"],
+  ["inventory", "⑪ 在庫管理"],
   ["settings", "⑦ 設定"],
 ];
 
@@ -94,6 +96,31 @@ function PasskeyBanner() {
         あとで
       </button>
       {err && <span style={{ color: "#F26D5F", fontSize: 12 }}>{err}</span>}
+    </div>
+  );
+}
+
+function LowStockBanner({ onOpenInventory }: { onOpenInventory: () => void }) {
+  const { lowStockItems } = useDashboard();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (lowStockItems.length === 0 || dismissed) return null;
+
+  const names = lowStockItems.slice(0, 3).map((i) => i.name).join("・");
+  const rest = lowStockItems.length > 3 ? ` 他${lowStockItems.length - 3}件` : "";
+
+  return (
+    <div className="mf-pinbar" style={{ background: "#181E25", border: "1px solid rgba(242,109,95,0.35)", borderRadius: 10, padding: "10px 14px" }}>
+      <span>
+        ⚠ 在庫が少なくなっています: {names}
+        {rest}
+      </span>
+      <button className="mf-btn primary" onClick={onOpenInventory}>
+        在庫を見る
+      </button>
+      <button className="mf-btn ghost" onClick={() => setDismissed(true)}>
+        あとで
+      </button>
     </div>
   );
 }
@@ -173,6 +200,7 @@ function DashboardInner() {
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
         <PasskeyBanner />
+        <LowStockBanner onOpenInventory={() => setView("inventory")} />
       </div>
 
       <main className="mf-main">
@@ -196,6 +224,7 @@ function DashboardInner() {
             {view === "wishlist" && <Wishlist />}
             {view === "lifeEvents" && <LifeEvents />}
             {view === "maintenance" && <Maintenance />}
+            {view === "inventory" && <Inventory />}
             {view === "settings" && <Settings />}
           </>
         )}

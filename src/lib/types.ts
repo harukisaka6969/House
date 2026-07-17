@@ -154,3 +154,17 @@ export interface MaintenanceLogRow {
   expense_id: string | null;
   created_at: string;
 }
+
+/* ---- 在庫管理（消耗品）---- */
+
+export interface InventoryItemRow {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantity: number;
+  low_stock_threshold: number;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+}
