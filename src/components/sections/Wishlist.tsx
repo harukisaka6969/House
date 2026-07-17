@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fmt } from "@/lib/judge";
+import { categoriesForAccount } from "@/lib/constants";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { WishlistItemOut } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
@@ -51,7 +52,8 @@ export default function Wishlist() {
 
   const meName = me?.profile.name ?? "";
   const accounts = settings?.accounts ?? [];
-  const allCats = settings ? [...new Set(items.map((i) => i.category).filter(Boolean) as string[])] : [];
+  // ウィッシュリスト項目自体の分類（自由入力、例:「家電」）とは別物 — 支出として記録する際は実際の支出カテゴリ一覧を使う。
+  const expenseCats = settings?.allCategories ?? [];
 
   const savingItems = items.filter((i) => i.status === "saving");
   const neededTotal = savingItems.reduce((s, i) => s + Math.max(i.price - i.saved, 0), 0);
@@ -287,13 +289,20 @@ export default function Wishlist() {
                       <>
                         <div className="mf-chips">
                           {accounts.map((a) => (
-                            <button key={a.id} className={"mf-chipbtn" + (contributeForm.account === a.id ? " on" : "")} onClick={() => setContributeForm({ ...contributeForm, account: a.id })}>
+                            <button
+                              key={a.id}
+                              className={"mf-chipbtn" + (contributeForm.account === a.id ? " on" : "")}
+                              onClick={() => {
+                                const nextCats = categoriesForAccount(expenseCats, a.id);
+                                setContributeForm((f) => ({ ...f, account: a.id, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+                              }}
+                            >
                               {a.name.replace(/（.*）/, "")}
                             </button>
                           ))}
                         </div>
                         <div className="mf-chips">
-                          {allCats.map((c) => (
+                          {categoriesForAccount(expenseCats, contributeForm.account).map((c) => (
                             <button key={c} className={"mf-chipbtn" + (contributeForm.category === c ? " on" : "")} onClick={() => setContributeForm({ ...contributeForm, category: c })}>
                               {c}
                             </button>
@@ -335,13 +344,20 @@ export default function Wishlist() {
                       <>
                         <div className="mf-chips">
                           {accounts.map((a) => (
-                            <button key={a.id} className={"mf-chipbtn" + (purchaseForm.account === a.id ? " on" : "")} onClick={() => setPurchaseForm({ ...purchaseForm, account: a.id })}>
+                            <button
+                              key={a.id}
+                              className={"mf-chipbtn" + (purchaseForm.account === a.id ? " on" : "")}
+                              onClick={() => {
+                                const nextCats = categoriesForAccount(expenseCats, a.id);
+                                setPurchaseForm((f) => ({ ...f, account: a.id, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+                              }}
+                            >
                               {a.name.replace(/（.*）/, "")}
                             </button>
                           ))}
                         </div>
                         <div className="mf-chips">
-                          {allCats.map((c) => (
+                          {categoriesForAccount(expenseCats, purchaseForm.account).map((c) => (
                             <button key={c} className={"mf-chipbtn" + (purchaseForm.category === c ? " on" : "")} onClick={() => setPurchaseForm({ ...purchaseForm, category: c })}>
                               {c}
                             </button>

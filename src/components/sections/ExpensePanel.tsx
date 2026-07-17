@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
-import { CAT_COLORS } from "@/lib/constants";
+import { CAT_COLORS, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiPost } from "@/lib/apiClient";
 import { TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
@@ -30,6 +30,8 @@ export default function ExpensePanel() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!month) return null;
+
+  const catOptions = categoriesForAccount(allCats, form.account);
 
   const promoMsg = (promoted: string[]) => (promoted.length ? ` ✨「${promoted.join("、")}」を新カテゴリとして追加しました。` : "");
 
@@ -166,26 +168,49 @@ export default function ExpensePanel() {
           </button>
         </div>
         <div className="mf-formgrid">
-          <input className="mf-input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-          <select className="mf-input" value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <span className="mf-row" style={{ gap: 6 }}>
-            <select className="mf-input" style={{ flex: 1 }} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {allCats.map((c) => (
+          <div>
+            <label className="mf-fieldlabel" htmlFor="mf-exp-date">日付</label>
+            <input id="mf-exp-date" className="mf-input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          </div>
+          <div>
+            <label className="mf-fieldlabel" htmlFor="mf-exp-account">口座</label>
+            <select
+              id="mf-exp-account"
+              className="mf-input"
+              value={form.account}
+              onChange={(e) => {
+                const nextCats = categoriesForAccount(allCats, e.target.value);
+                setForm((f) => ({ ...f, account: e.target.value, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+              }}
+            >
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="mf-fieldlabel required" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>カテゴリ</span>
+              <AiSuggestButton text={form.memo} options={catOptions} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
+            </div>
+            <select className="mf-input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              {catOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
-            <AiSuggestButton text={form.memo} options={allCats} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
-          </span>
-          <input className="mf-input mf-mono" type="number" placeholder="金額" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          <input className="mf-input" placeholder="メモ（店名など）" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+          </div>
+          <div>
+            <label className="mf-fieldlabel required" htmlFor="mf-exp-amount">金額（円）</label>
+            <input id="mf-exp-amount" className="mf-input mf-mono" type="number" placeholder="例: 480" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          </div>
+          <div>
+            <label className="mf-fieldlabel" htmlFor="mf-exp-memo">メモ（任意）</label>
+            <input id="mf-exp-memo" className="mf-input" placeholder="例: コンビニ" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
+          </div>
         </div>
         {form.category === "その他" && (
           <div style={{ marginTop: 8 }}>

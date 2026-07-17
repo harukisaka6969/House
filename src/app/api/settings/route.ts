@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { checkPin, changePin, getProfileById } from "@/lib/pinAuth";
-import { getAllCategories } from "@/lib/categories";
+import { getAllCategories, getCustomCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
 import { listFamilyAccounts } from "@/lib/familyAccounts";
 
@@ -11,13 +11,15 @@ export async function GET() {
     const session = await requireOwnerSession();
     const profile = await getProfileById(session.profile_id);
     if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
-    const [customCategories, accounts, familyAccounts] = await Promise.all([
+    const [allCategories, customCategories, accounts, familyAccounts] = await Promise.all([
       getAllCategories(),
+      getCustomCategories(),
       getAccounts(),
       listFamilyAccounts(),
     ]);
     return NextResponse.json({
       profile: { id: profile.id, slug: profile.slug, name: profile.name },
+      allCategories,
       customCategories,
       accounts,
       familyAccounts,

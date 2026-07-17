@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { InventoryItemOut } from "@/lib/apiTypes";
 import { fmt } from "@/lib/judge";
+import { categoriesForAccount } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
@@ -33,7 +34,7 @@ export default function Inventory() {
   if (!items) return <div className="mf-empty">読み込み中…</div>;
 
   const accounts = settings?.accounts ?? [];
-  const allCats = settings?.customCategories ?? [];
+  const expenseCats = settings?.allCategories ?? [];
   const categories = [...new Set(items.map((i) => i.category))].sort();
   const grouped = categories.map((cat) => ({ cat, rows: items.filter((i) => i.category === cat).sort((a, b) => a.name.localeCompare(b.name, "ja")) }));
 
@@ -168,13 +169,20 @@ export default function Inventory() {
                             />
                             <div className="mf-chips">
                               {accounts.map((a) => (
-                                <button key={a.id} className={"mf-chipbtn" + (restockForm.account === a.id ? " on" : "")} onClick={() => setRestockForm({ ...restockForm, account: a.id })}>
+                                <button
+                                  key={a.id}
+                                  className={"mf-chipbtn" + (restockForm.account === a.id ? " on" : "")}
+                                  onClick={() => {
+                                    const nextCats = categoriesForAccount(expenseCats, a.id);
+                                    setRestockForm((f) => ({ ...f, account: a.id, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+                                  }}
+                                >
                                   {a.name.replace(/（.*）/, "")}
                                 </button>
                               ))}
                             </div>
                             <div className="mf-chips">
-                              {allCats.map((c) => (
+                              {categoriesForAccount(expenseCats, restockForm.account).map((c) => (
                                 <button key={c} className={"mf-chipbtn" + (restockForm.category === c ? " on" : "")} onClick={() => setRestockForm({ ...restockForm, category: c })}>
                                   {c}
                                 </button>

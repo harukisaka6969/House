@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fmt } from "@/lib/judge";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { AssetOut, MaintenanceTaskOut, MaintenanceLogOut } from "@/lib/apiTypes";
-import { MAINTENANCE_TEMPLATES, ASSET_KINDS } from "@/lib/constants";
+import { MAINTENANCE_TEMPLATES, ASSET_KINDS, categoriesForAccount } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
@@ -24,6 +24,8 @@ const emptyAssetForm = { name: "", kind: "car", acquired_date: "", memo: "" };
 
 export default function Maintenance() {
   const { allCats } = useDashboard();
+  // メンテ費は必ず第1口座（生活費）からの支出のため、カテゴリ候補も第1口座向けに絞り込む。
+  const a1Cats = categoriesForAccount(allCats, "a1");
   const [data, setData] = useState<UpcomingResponse | null>(null);
   const [view, setView] = useState<"upcoming" | "byAsset">("upcoming");
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
@@ -298,12 +300,12 @@ export default function Maintenance() {
               <span>支出のカテゴリ</span>
               <AiSuggestButton
                 text={`${completingTask?.name ?? ""} ${completeForm.memo}`}
-                options={allCats}
+                options={a1Cats}
                 onSuggest={(c) => setCompleteForm({ ...completeForm, category: c })}
               />
             </div>
             <div className="mf-chips">
-              {allCats.map((c) => (
+              {a1Cats.map((c) => (
                 <button key={c} className={"mf-chipbtn" + (completeForm.category === c ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, category: c })}>
                   {c}
                 </button>

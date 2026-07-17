@@ -92,8 +92,7 @@ export function DashboardProvider({ slug, children }: { slug: string; children: 
   const clearAdvisorExtraContext = useCallback(() => setAdvisorExtraContext(null), []);
 
   const allCats = useMemo(() => {
-    const customs = settings?.customCategories ?? [];
-    return [...CATEGORIES.filter((c) => c !== "その他"), ...customs, "その他"];
+    return settings?.allCategories ?? [...CATEGORIES.filter((c) => c !== "その他"), "その他"];
   }, [settings]);
 
   const value: DashboardState = {

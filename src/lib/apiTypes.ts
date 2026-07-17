@@ -111,6 +111,9 @@ export interface FamilyAccountOut {
 
 export interface SettingsResponse {
   profile: { id: string; slug: string; name: string };
+  /** 固定カテゴリ＋自動追加カテゴリ＋「その他」を合わせた選択肢一覧（ピッカー用）。 */
+  allCategories: string[];
+  /** 「その他」の学習結果として自動追加されたカテゴリのみ（削除管理UI用）。 */
   customCategories: string[];
   accounts: AccountOut[];
   familyAccounts: FamilyAccountOut[];

@@ -1,14 +1,27 @@
 export const PRIVATE_ACCOUNT = "a3";
 
+/** 「投資」は含めない — 投資の記録は第4口座・投資セクション（/api/investments）で専用に管理するため。 */
 export const CATEGORIES = [
   "食費", "外食", "住居", "水道光熱", "通信", "交通", "車関係",
-  "日用品", "趣味", "ペット", "医療", "交際費", "旅行", "投資", "その他",
+  "日用品", "趣味", "ペット", "医療", "交際費", "旅行", "その他",
 ] as const;
 
 export const CAT_COLORS = [
   "#F5A524", "#2FB8A6", "#4C9AFF", "#8B7CF6", "#E86A92", "#6FCF6F", "#5FB8DE",
-  "#D9A0FF", "#FFB380", "#63C7E8", "#C9B458", "#FF8A7A", "#7FD1B9", "#B0A8FF", "#9AA4B2",
+  "#D9A0FF", "#FFB380", "#63C7E8", "#C9B458", "#FF8A7A", "#7FD1B9", "#9AA4B2",
 ] as const;
+
+/** 第1口座（生活必需）専用カテゴリ — 第3口座選択時はこれらを候補から外す。 */
+export const A1_ONLY_CATEGORIES = ["食費", "住居", "水道光熱", "通信", "交通", "車関係", "日用品", "医療", "ペット"] as const;
+/** 第3口座（趣味・娯楽・交際）専用カテゴリ — 第1口座選択時はこれらを候補から外す。 */
+export const A3_ONLY_CATEGORIES = ["外食", "趣味", "交際費", "旅行"] as const;
+
+/** 選択中の口座に合わせてカテゴリ候補を絞り込む（第1/第3のみ対象、それ以外の口座は絞り込まない）。 */
+export function categoriesForAccount(allCats: string[], accountId: string): string[] {
+  if (accountId === "a1") return allCats.filter((c) => !(A3_ONLY_CATEGORIES as readonly string[]).includes(c));
+  if (accountId === "a3") return allCats.filter((c) => !(A1_ONLY_CATEGORIES as readonly string[]).includes(c));
+  return allCats;
+}
 
 export const DEFAULT_ACCOUNTS = [
   { id: "a1", name: "第1口座（生活費）", color: "#F5A524", budget: 180000, sort: 1 },

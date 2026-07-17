@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fmt } from "@/lib/judge";
-import { PRIVATE_ACCOUNT } from "@/lib/constants";
+import { PRIVATE_ACCOUNT, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiPost } from "@/lib/apiClient";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AgentWidget from "./AgentWidget";
@@ -46,6 +46,7 @@ function QuickEntryInner() {
   const acct = accounts.find((a) => a.id === form.account) ?? accounts[0];
   const acctSpent = acct?.spent ?? 0;
   const acctBudget = acct?.budget ?? 0;
+  const catOptions = categoriesForAccount(allCats, form.account);
   const meName = me?.profile.name ?? "";
   const myTotal = month.expenses.reduce((s, e) => s + (e.masked ? 0 : e.owner_name === meName ? e.amount : 0), 0);
 
@@ -210,7 +211,14 @@ function QuickEntryInner() {
           </div>
           <div className="mf-acctchips">
             {accounts.map((a) => (
-              <button key={a.id} className={"mf-chipbtn" + (form.account === a.id ? " on" : "")} onClick={() => setForm({ ...form, account: a.id })}>
+              <button
+                key={a.id}
+                className={"mf-chipbtn" + (form.account === a.id ? " on" : "")}
+                onClick={() => {
+                  const nextCats = categoriesForAccount(allCats, a.id);
+                  setForm((f) => ({ ...f, account: a.id, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+                }}
+              >
                 <span className="mf-dot" style={{ background: a.color }} />
                 {a.name.replace("口座", "")}
               </button>
@@ -225,10 +233,10 @@ function QuickEntryInner() {
             <span>
               <span className="mf-stepnum">3</span>カテゴリ
             </span>
-            <AiSuggestButton text={form.memo} options={allCats} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
+            <AiSuggestButton text={form.memo} options={catOptions} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
           </div>
           <div className="mf-chips">
-            {allCats.map((c) => (
+            {catOptions.map((c) => (
               <button key={c} className={"mf-chipbtn" + (form.category === c ? " on" : "")} onClick={() => setForm({ ...form, category: c })}>
                 {c}
               </button>
