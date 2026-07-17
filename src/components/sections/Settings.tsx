@@ -42,8 +42,8 @@ export default function Settings() {
 
   const changePin = async () => {
     setPinMsg("");
-    if (pinForm.next.length !== 6 || !/^\d{6}$/.test(pinForm.next)) {
-      setPinMsg("新しいPINは6桁の数字にしてください。");
+    if (!/^\d{4,8}$/.test(pinForm.next)) {
+      setPinMsg("新しいPINは4〜8桁の数字にしてください。");
       return;
     }
     if (pinForm.next !== pinForm.confirm) {
@@ -185,7 +185,7 @@ export default function Settings() {
             className="mf-input mf-mono"
             type="password"
             inputMode="numeric"
-            placeholder="新しいPIN（6桁）"
+            placeholder="新しいPIN（4〜8桁）"
             value={pinForm.next}
             onChange={(e) => setPinForm({ ...pinForm, next: e.target.value })}
           />

@@ -23,7 +23,7 @@ export async function GET() {
 
 const putSchema = z.object({
   current_pin: z.string().min(4).max(32),
-  new_pin: z.string().min(6).max(6).regex(/^\d{6}$/, "PINは6桁の数字にしてください"),
+  new_pin: z.string().regex(/^\d{4,8}$/, "PINは4〜8桁の数字にしてください"),
 });
 
 export async function PUT(req: Request) {
