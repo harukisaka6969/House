@@ -17,8 +17,8 @@ export async function POST(req: Request) {
     const profile = await getProfileById(result.profileId);
     if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-    await setSessionCookie({ profile_id: profile.id, slug: profile.slug });
-    return NextResponse.json({ profile: { id: profile.id, slug: profile.slug, name: profile.name } });
+    await setSessionCookie({ profile_id: profile.id, slug: profile.slug, role: profile.role });
+    return NextResponse.json({ profile: { id: profile.id, slug: profile.slug, name: profile.name, role: profile.role } });
   } catch (e) {
     return errorResponse(e);
   }

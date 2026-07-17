@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { addExpenseEntries, ValidationError, type NewExpenseInput } from "@/lib/expenses";
 import { getAllCategories } from "@/lib/categories";
 
@@ -16,7 +16,7 @@ const bodySchema = z.object({ entries: z.array(entrySchema).min(1).max(50) });
 
 export async function POST(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const { entries } = bodySchema.parse(await req.json());
     const allCats = await getAllCategories();
     const result = await addExpenseEntries(session.profile_id, entries as NewExpenseInput[], allCats);

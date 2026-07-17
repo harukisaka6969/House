@@ -4,14 +4,22 @@ import { getAccounts } from "./accounts";
 import { getIncomes } from "./incomes";
 import { getExpensesInRange, monthRange } from "./expenses";
 import { getInvestmentsInRange, getCumulativeInvestment } from "./investments";
-import { getAllProfiles, makeNameLookup } from "./profiles";
+import { getAllProfiles, makeNameLookup, findPartnerOwner } from "./profiles";
 import { getTrend } from "./trend";
 import { buildPerAccount, buildPerCategory, buildMonthTotals, buildMonthJudge, isMaskedForViewer } from "./aggregate";
+import { getAllWishlistItems, visibleWishlistItems } from "./wishlist";
+import { getLifeEvents } from "./lifeEvents";
+import { getTasksDueWithinDays, getRecentLogsWithAsset } from "./maintenance";
+import { todayStrJST } from "./date";
 
 /** 現行版 buildAgentContext を移植。相手の第3口座明細（§5）はここで構築時に除外する。 */
 export async function buildAdvisorContext(viewerProfileId: string, viewerName: string, monthKey: string): Promise<string> {
   const { from, toExclusive } = monthRange(monthKey);
-  const [accounts, incomeRows, expenseRows, investmentRows, profiles, trend, cumInvest] = await Promise.all([
+  const oneYearAgo = (() => {
+    const [y, m, d] = todayStrJST().split("-").map(Number);
+    return new Date(Date.UTC(y - 1, m - 1, d)).toISOString().slice(0, 10);
+  })();
+  const [accounts, incomeRows, expenseRows, investmentRows, profiles, trend, cumInvest, wishlistRows, lifeEvents, upcomingTasks, recentLogs] = await Promise.all([
     getAccounts(),
     getIncomes(monthKey),
     getExpensesInRange(from, toExclusive),
@@ -19,9 +27,13 @@ export async function buildAdvisorContext(viewerProfileId: string, viewerName: s
     getAllProfiles(),
     getTrend(),
     getCumulativeInvestment(),
+    getAllWishlistItems(),
+    getLifeEvents(),
+    getTasksDueWithinDays(180),
+    getRecentLogsWithAsset(oneYearAgo),
   ]);
   const nameOf = makeNameLookup(profiles);
-  const partner = profiles.find((p) => p.id !== viewerProfileId);
+  const partner = findPartnerOwner(profiles, viewerProfileId);
 
   const perAccount = buildPerAccount(accounts, expenseRows, viewerProfileId);
   const totals = buildMonthTotals(incomeRows, expenseRows, investmentRows);
@@ -43,6 +55,22 @@ export async function buildAdvisorContext(viewerProfileId: string, viewerName: s
     .join("\n");
   const invItems = investmentRows.map((iv) => `${iv.date} ${iv.name} ${fmt(iv.amount)} ${iv.memo || ""}`).join("\n");
 
+  const visibleWishlist = visibleWishlistItems(wishlistRows, viewerProfileId).filter((w) => w.status === "planning" || w.status === "saving");
+  const wishlistLines = visibleWishlist
+    .map((w) => `- ${w.name}（${w.status === "saving" ? "貯蓄中" : "検討中"}）: 価格${fmt(w.price)} / 貯蓄済${fmt(w.saved)} / 月々${fmt(w.monthly_plan)}${w.is_private ? "（本人限定）" : ""}`)
+    .join("\n");
+
+  const activeEvents = lifeEvents.filter((e) => e.status === "active");
+  const eventLines = activeEvents
+    .map((e) => {
+      const mid = Math.round((e.cost_low + e.cost_high) / 2);
+      return `- ${e.name}（${e.event_year}年）: 必要額目安${fmt(mid)} / 準備済み${fmt(e.funded)} / 残り${fmt(Math.max(mid - e.funded, 0))}`;
+    })
+    .join("\n");
+
+  const maintenanceLines = upcomingTasks.map((t) => `- ${t.name}: 予定日${t.next_due} / 想定費用${fmt(t.est_cost)}`).join("\n");
+  const maintenanceAnnualActual = recentLogs.reduce((s, l) => s + l.actual_cost, 0);
+
   void nameOf; // owner names not surfaced in the advisor context, only used elsewhere
 
   return `あなたは「坂家」の家計ダッシュボードに組み込まれた家計アドバイザーAIです。以下のデータに基づき、日本語で簡潔（原則300字以内）、率直かつ具体的に分析・アドバイスしてください。データにない事柄は推測であると明示すること。特定の金融商品の売買推奨はしないこと。
@@ -60,6 +88,13 @@ ${items || "なし"}
 【今月の投資】
 ${invItems || "なし"}
 【累計投資額】${fmt(cumInvest)}
+【買いたいものリスト（検討中・貯蓄中のみ）】
+${wishlistLines || "なし"}
+【将来設計イベント】
+${eventLines || "なし"}
+【今後6ヶ月のメンテ予定】
+${maintenanceLines || "なし"}
+【直近1年のメンテ実績費用】${fmt(maintenanceAnnualActual)}
 
-注意: 第3口座は夫婦間のプライベート口座であり、${partner?.name ?? "相手"}の第3口座の明細はあなたにも渡されていません。内容を聞かれたら「非公開のため分かりません」と答えてください。`;
+注意: 第3口座は夫婦間のプライベート口座であり、${partner?.name ?? "相手"}の第3口座の明細はあなたにも渡されていません。内容を聞かれたら「非公開のため分かりません」と答えてください。相手のis_private=trueのウィッシュアイテムも同様に渡されていません。`;
 }

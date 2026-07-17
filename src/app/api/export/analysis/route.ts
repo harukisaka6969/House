@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { requireSession, errorResponse, ApiError } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { isValidDateStr } from "@/lib/date";
 import { getExpensesInRange } from "@/lib/expenses";
 import { getIncomesInMonthRange } from "@/lib/incomes";
 import { getInvestmentsInRange } from "@/lib/investments";
 import { getAccounts } from "@/lib/accounts";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
-import { buildAnalysisExport, analysisExportToCsv, type AnalysisFilters, type Granularity, type OwnerFilter } from "@/lib/analysisExport";
+import { buildAnalysisExport, analysisExportToCsv, type AnalysisFilters, type AnalysisType, type Granularity, type OwnerFilter } from "@/lib/analysisExport";
 import { getProfileById } from "@/lib/pinAuth";
+import { getAllWishlistItems } from "@/lib/wishlist";
+import { getLifeEvents } from "@/lib/lifeEvents";
+import { getMaintenanceTasks } from "@/lib/maintenance";
 
 function addDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -27,7 +30,7 @@ function parseSet(param: string | null): Set<string> | null {
 
 export async function GET(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const { searchParams } = new URL(req.url);
 
     const from = searchParams.get("from");
@@ -38,8 +41,8 @@ export async function GET(req: Request) {
 
     const typesParam = searchParams.get("types");
     const types = typesParam
-      ? new Set(typesParam.split(",").map((s) => s.trim()) as ("expenses" | "incomes" | "investments")[])
-      : new Set<"expenses" | "incomes" | "investments">(["expenses", "incomes", "investments"]);
+      ? new Set(typesParam.split(",").map((s) => s.trim()) as AnalysisType[])
+      : new Set<AnalysisType>(["expenses", "incomes", "investments", "wishlist", "life_events", "maintenance"]);
 
     const owner: OwnerFilter = searchParams.get("owner") === "me" ? "me" : "all";
     const format = searchParams.get("format") === "csv" ? "csv" : "json";
@@ -57,13 +60,16 @@ export async function GET(req: Request) {
     };
 
     const toExclusive = addDays(to, 1);
-    const [expenseRows, incomeRows, investmentRows, accounts, profiles, requester] = await Promise.all([
+    const [expenseRows, incomeRows, investmentRows, accounts, profiles, requester, wishlistRows, lifeEventRows, maintenanceTaskRows] = await Promise.all([
       getExpensesInRange(from, toExclusive),
       getIncomesInMonthRange(from.slice(0, 7), to.slice(0, 7)),
       getInvestmentsInRange(from, toExclusive),
       getAccounts(),
       getAllProfiles(),
       getProfileById(session.profile_id),
+      getAllWishlistItems(),
+      getLifeEvents(),
+      getMaintenanceTasks(),
     ]);
     const nameOf = makeNameLookup(profiles);
 
@@ -75,6 +81,9 @@ export async function GET(req: Request) {
       expenseRows,
       incomeRows,
       investmentRows,
+      wishlistRows,
+      lifeEventRows,
+      maintenanceTaskRows,
       filters,
     });
 

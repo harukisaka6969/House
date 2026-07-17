@@ -8,6 +8,7 @@ const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 export interface SessionPayload {
   profile_id: string;
   slug: string;
+  role: "owner" | "family";
 }
 
 function secretKey(): Uint8Array {
@@ -29,8 +30,14 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    if (typeof payload.profile_id !== "string" || typeof payload.slug !== "string") return null;
-    return { profile_id: payload.profile_id, slug: payload.slug };
+    if (
+      typeof payload.profile_id !== "string" ||
+      typeof payload.slug !== "string" ||
+      (payload.role !== "owner" && payload.role !== "family")
+    ) {
+      return null;
+    }
+    return { profile_id: payload.profile_id, slug: payload.slug, role: payload.role };
   } catch {
     return null;
   }

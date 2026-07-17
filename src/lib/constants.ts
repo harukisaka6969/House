@@ -17,6 +17,30 @@ export const DEFAULT_ACCOUNTS = [
   { id: "a4", name: "第4口座（投資）", color: "#8B7CF6", budget: 80000, sort: 4 },
 ] as const;
 
+/** よくあるメンテタスクのテンプレ（spec v2 §4.2-4: ワンタップ挿入用）。est_costは目安。 */
+export const MAINTENANCE_TEMPLATES: Record<string, { name: string; intervalMonths: number | null; estCost: number }[]> = {
+  car: [
+    { name: "車検", intervalMonths: 24, estCost: 100000 },
+    { name: "オイル交換", intervalMonths: 6, estCost: 8000 },
+    { name: "タイヤ交換", intervalMonths: 48, estCost: 80000 },
+    { name: "自動車保険更新", intervalMonths: 12, estCost: 60000 },
+  ],
+  house: [
+    { name: "火災保険更新", intervalMonths: 12, estCost: 30000 },
+    { name: "防蟻処理", intervalMonths: 60, estCost: 150000 },
+    { name: "外壁点検", intervalMonths: 60, estCost: 20000 },
+  ],
+  appliance: [{ name: "定期清掃", intervalMonths: 12, estCost: 15000 }],
+  other: [],
+};
+
+export const ASSET_KINDS: { id: string; label: string }[] = [
+  { id: "car", label: "車" },
+  { id: "house", label: "家" },
+  { id: "appliance", label: "機器" },
+  { id: "other", label: "その他" },
+];
+
 export const TONE_COLOR: Record<string, string> = {
   good: "#45C48F",
   ok: "#4C9AFF",

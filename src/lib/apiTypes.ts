@@ -71,13 +71,157 @@ export interface TrendPoint {
 }
 
 export interface MeResponse {
-  profile: { id: string; slug: string; name: string };
+  profile: { id: string; slug: string; name: string; role: "owner" | "family" };
   partner: { name: string; slug: string } | null;
   devices: { id: string; device_name: string; created_at: string }[];
+}
+
+export interface FamilyAccountOut {
+  id: string;
+  slug: string;
+  name: string;
+  created_at: string;
 }
 
 export interface SettingsResponse {
   profile: { id: string; slug: string; name: string };
   customCategories: string[];
   accounts: AccountOut[];
+  familyAccounts: FamilyAccountOut[];
+}
+
+/* ---- v2 ---- */
+
+export interface AssetOut {
+  id: string;
+  name: string;
+  kind: "car" | "house" | "appliance" | "other";
+  acquired_date: string | null;
+  memo: string;
+}
+
+export interface MaintenanceTaskOut {
+  id: string;
+  asset_id: string;
+  name: string;
+  interval_months: number | null;
+  est_cost: number;
+  next_due: string;
+  memo: string;
+  active: boolean;
+  visible_to_family: boolean;
+}
+
+export interface MaintenanceLogOut {
+  id: string;
+  task_id: string;
+  done_date: string;
+  actual_cost: number;
+  memo: string;
+  expense_id: string | null;
+  created_at: string;
+}
+
+export interface WishlistItemOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  is_private: boolean;
+  name: string;
+  category: string | null;
+  price: number;
+  priority: number;
+  target_date: string | null;
+  saved: number;
+  monthly_plan: number;
+  url: string | null;
+  memo: string;
+  status: "planning" | "saving" | "purchased" | "dropped";
+  purchased_date: string | null;
+  purchased_price: number | null;
+  visible_to_family: boolean;
+  created_at: string;
+}
+
+export interface LifeEventOut {
+  id: string;
+  name: string;
+  event_year: number;
+  event_month: number | null;
+  cost_low: number;
+  cost_high: number;
+  cost_basis: string;
+  funded: number;
+  monthly_saving: number;
+  linked: boolean;
+  memo: string;
+  status: "active" | "done" | "cancelled";
+  visible_to_family: boolean;
+  created_at: string;
+}
+
+export interface UpcomingSummary {
+  windowDays: number;
+  maintenanceCount: number;
+  maintenanceCost: number;
+  wishlistCount: number;
+  wishlistMonthlyPlan: number;
+  total: number;
+}
+
+/* ---- family (read-only, whitelisted) ---- */
+
+export interface FamilyWishlistOut {
+  id: string;
+  name: string;
+  category: string | null;
+  price: number;
+  target_date: string | null;
+  priority: number;
+}
+
+export interface FamilyLifeEventOut {
+  id: string;
+  name: string;
+  event_year: number;
+  event_month: number | null;
+  cost_low: number;
+  cost_high: number;
+  memo: string;
+}
+
+export interface FamilyMaintenanceTaskOut {
+  id: string;
+  asset_id: string;
+  asset_name: string;
+  name: string;
+  est_cost: number;
+  next_due: string;
+}
+
+export interface FamilyAssetOut {
+  id: string;
+  name: string;
+  kind: "car" | "house" | "appliance" | "other";
+}
+
+export interface FamilyTimelineItem {
+  type: "maintenance" | "wishlist" | "life_event";
+  id: string;
+  name: string;
+  cost: number;
+}
+
+export interface FamilyTimelineMonth {
+  month: string;
+  items: FamilyTimelineItem[];
+  subtotal: number;
+}
+
+export interface FamilyOverviewResponse {
+  timeline: FamilyTimelineMonth[];
+  wishlist: FamilyWishlistOut[];
+  lifeEvents: FamilyLifeEventOut[];
+  maintenance: FamilyMaintenanceTaskOut[];
+  assets: FamilyAssetOut[];
 }

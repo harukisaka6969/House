@@ -34,8 +34,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "PINが違います" }, { status: 401 });
     }
 
-    await setSessionCookie({ profile_id: profile.id, slug: profile.slug });
-    return NextResponse.json({ profile: { id: profile.id, slug: profile.slug, name: profile.name } });
+    await setSessionCookie({ profile_id: profile.id, slug: profile.slug, role: profile.role });
+    return NextResponse.json({ profile: { id: profile.id, slug: profile.slug, name: profile.name, role: profile.role } });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });
     return errorResponse(e);

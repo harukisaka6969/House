@@ -1,20 +1,26 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { checkPin, changePin, getProfileById } from "@/lib/pinAuth";
 import { getAllCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
+import { listFamilyAccounts } from "@/lib/familyAccounts";
 
 export async function GET() {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const profile = await getProfileById(session.profile_id);
     if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
-    const [customCategories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+    const [customCategories, accounts, familyAccounts] = await Promise.all([
+      getAllCategories(),
+      getAccounts(),
+      listFamilyAccounts(),
+    ]);
     return NextResponse.json({
       profile: { id: profile.id, slug: profile.slug, name: profile.name },
       customCategories,
       accounts,
+      familyAccounts,
     });
   } catch (e) {
     return errorResponse(e);
@@ -28,7 +34,7 @@ const putSchema = z.object({
 
 export async function PUT(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const { current_pin, new_pin } = putSchema.parse(await req.json());
     const profile = await getProfileById(session.profile_id);
     if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });

@@ -8,10 +8,13 @@ export interface Account {
   sort: number;
 }
 
+export type ProfileRole = "owner" | "family";
+
 export interface Profile {
   id: string;
   slug: string;
   name: string;
+  role: ProfileRole;
 }
 
 /** Raw expense row as stored in the DB (owner's own view — never masked). */
@@ -75,4 +78,79 @@ export interface MonthAggregates {
   prev: { income: number; expense: number; invest: number } | null;
   cumInvest: number;
   topCats: { name: string; value: number }[];
+}
+
+/* ---- v2: wishlist / life events / maintenance (kakeibowebspec-v2.md) ---- */
+
+export type WishlistStatus = "planning" | "saving" | "purchased" | "dropped";
+
+export interface WishlistItemRow {
+  id: string;
+  owner: string;
+  is_private: boolean;
+  name: string;
+  category: string | null;
+  price: number;
+  priority: number;
+  target_date: string | null;
+  saved: number;
+  monthly_plan: number;
+  url: string | null;
+  memo: string;
+  status: WishlistStatus;
+  purchased_date: string | null;
+  purchased_price: number | null;
+  visible_to_family: boolean;
+  created_at: string;
+}
+
+export type LifeEventStatus = "active" | "done" | "cancelled";
+
+export interface LifeEventRow {
+  id: string;
+  name: string;
+  event_year: number;
+  event_month: number | null;
+  cost_low: number;
+  cost_high: number;
+  cost_basis: string;
+  funded: number;
+  monthly_saving: number;
+  linked: boolean;
+  memo: string;
+  status: LifeEventStatus;
+  visible_to_family: boolean;
+  created_at: string;
+}
+
+export type AssetKind = "car" | "house" | "appliance" | "other";
+
+export interface AssetRow {
+  id: string;
+  name: string;
+  kind: AssetKind;
+  acquired_date: string | null;
+  memo: string;
+}
+
+export interface MaintenanceTaskRow {
+  id: string;
+  asset_id: string;
+  name: string;
+  interval_months: number | null;
+  est_cost: number;
+  next_due: string;
+  memo: string;
+  active: boolean;
+  visible_to_family: boolean;
+}
+
+export interface MaintenanceLogRow {
+  id: string;
+  task_id: string;
+  done_date: string;
+  actual_cost: number;
+  memo: string;
+  expense_id: string | null;
+  created_at: string;
 }

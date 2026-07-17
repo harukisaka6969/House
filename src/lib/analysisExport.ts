@@ -1,13 +1,15 @@
 import { isMaskedForViewer, sumAmount } from "./aggregate";
-import type { Account, ExpenseRow, IncomeRow, InvestmentRow } from "./types";
+import { visibleWishlistItems } from "./v2Privacy";
+import type { Account, ExpenseRow, IncomeRow, InvestmentRow, WishlistItemRow, LifeEventRow, MaintenanceTaskRow } from "./types";
 
 export type OwnerFilter = "me" | "all";
 export type Granularity = "raw" | "daily" | "monthly";
+export type AnalysisType = "expenses" | "incomes" | "investments" | "wishlist" | "life_events" | "maintenance";
 
 export interface AnalysisFilters {
   from: string;
   to: string;
-  types: Set<"expenses" | "incomes" | "investments">;
+  types: Set<AnalysisType>;
   accountIds: Set<string> | null;
   categories: Set<string> | null;
   owner: OwnerFilter;
@@ -33,6 +35,9 @@ export interface AnalysisExportInput {
   expenseRows: ExpenseRow[]; // already scoped to [from, to)
   incomeRows: IncomeRow[]; // already scoped to months within [from, to)
   investmentRows: InvestmentRow[]; // already scoped to [from, to)
+  wishlistRows?: WishlistItemRow[]; // v2: unscoped by date (wishlist has no date range concept)
+  lifeEventRows?: LifeEventRow[]; // v2
+  maintenanceTaskRows?: MaintenanceTaskRow[]; // v2
   filters: AnalysisFilters;
 }
 
@@ -173,6 +178,51 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
       ? investmentsInScope.map((iv) => ({ date: iv.date, name: iv.name, amount: iv.amount, owner: nameOf(iv.owner) }))
       : [];
 
+  // --- v2: wishlist / life_events / maintenance（is_private=相手のものは含めない。日付範囲を持たないため常に全件対象） ---
+  const wishlistRows = input.wishlistRows ?? [];
+  const lifeEventRows = input.lifeEventRows ?? [];
+  const maintenanceTaskRows = input.maintenanceTaskRows ?? [];
+  const wishlistScoped =
+    filters.owner === "me" ? wishlistRows.filter((w) => w.owner === viewerProfileId) : visibleWishlistItems(wishlistRows, viewerProfileId);
+  const wishlistOut = filters.types.has("wishlist")
+    ? wishlistScoped.map((w) => ({
+        name: w.name,
+        category: w.category,
+        price: w.price,
+        priority: w.priority,
+        target_date: w.target_date,
+        saved: w.saved,
+        monthly_plan: w.monthly_plan,
+        status: w.status,
+        is_private: w.is_private,
+        owner: nameOf(w.owner),
+      }))
+    : [];
+
+  const lifeEventsOut = filters.types.has("life_events")
+    ? lifeEventRows.map((e) => ({
+        name: e.name,
+        event_year: e.event_year,
+        event_month: e.event_month,
+        cost_low: e.cost_low,
+        cost_high: e.cost_high,
+        funded: e.funded,
+        monthly_saving: e.monthly_saving,
+        status: e.status,
+      }))
+    : [];
+
+  const maintenanceOut = filters.types.has("maintenance")
+    ? maintenanceTaskRows.map((t) => ({
+        asset_id: t.asset_id,
+        name: t.name,
+        interval_months: t.interval_months,
+        est_cost: t.est_cost,
+        next_due: t.next_due,
+        active: t.active,
+      }))
+    : [];
+
   return {
     meta: {
       generated_at: new Date().toISOString(),
@@ -188,8 +238,8 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
       currency: "JPY",
       accounts: accounts.map((a) => ({ id: a.id, name: a.name, budget_monthly: a.budget })),
       privacy_note:
-        "第3口座(a3)の相手の明細は amount/date/memo/sub を含まない(masked:true)。集計値のうち total_all のみ相手分を含む。",
-      schema_note: "amounts are integers in JPY. dates are ISO-8601.",
+        "第3口座(a3)の相手の明細は amount/date/memo/sub を含まない(masked:true)。集計値のうち total_all のみ相手分を含む。is_private=trueのウィッシュアイテムは相手のものを一切含まない。",
+      schema_note: "amounts are integers in JPY. dates are ISO-8601. wishlist/life_events/maintenance are point-in-time snapshots, not scoped to the from/to period.",
       truncated,
       truncated_reason: truncated ? `明細行数が${RAW_ROW_LIMIT}件を超えたため granularity=daily にフォールバックしました。` : undefined,
     },
@@ -209,6 +259,9 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
     expenses: expensesOut,
     incomes: incomesOut,
     investments: investmentsOut,
+    wishlist: wishlistOut,
+    life_events: lifeEventsOut,
+    maintenance: maintenanceOut,
   };
 }
 

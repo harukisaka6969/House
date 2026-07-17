@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { addInvestment } from "@/lib/investments";
 
 const bodySchema = z.object({
@@ -12,7 +12,7 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const body = bodySchema.parse(await req.json());
     const investment = await addInvestment(session.profile_id, body);
     return NextResponse.json({ investment });

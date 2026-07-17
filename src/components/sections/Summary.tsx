@@ -1,14 +1,35 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { fmt, monthJudge } from "@/lib/judge";
 import { TONE_COLOR } from "@/lib/constants";
+import { apiGet } from "@/lib/apiClient";
+import type { UpcomingSummary } from "@/lib/apiTypes";
 import { SectionHead, StatCard, TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
 
 function dsub(cur: number, pv: number | null | undefined): string | null {
   if (pv == null) return null;
   return (cur - pv >= 0 ? "+" : "") + fmt(cur - pv) + " 前月比";
+}
+
+function Upcoming30d() {
+  const [data, setData] = useState<UpcomingSummary | null>(null);
+  useEffect(() => {
+    apiGet<UpcomingSummary>("/api/summary/upcoming-30d").then(setData).catch(() => {});
+  }, []);
+  if (!data || data.total === 0) return null;
+  return (
+    <div className="mf-panel">
+      <div className="mf-paneltitle">今後30日の予定支出</div>
+      <div className="mf-num mf-mono">{fmt(data.total)}</div>
+      <div className="mf-numsub">
+        メンテ予定 {data.maintenanceCount}件 {fmt(data.maintenanceCost)}
+        {data.wishlistCount > 0 && ` ／ ウィッシュ積立予定 ${data.wishlistCount}件 ${fmt(data.wishlistMonthlyPlan)}`}
+      </div>
+    </div>
+  );
 }
 
 export default function Summary() {
@@ -38,6 +59,7 @@ export default function Summary() {
         </div>
         <div className="mf-judgenote">{judge.note}</div>
       </div>
+      <Upcoming30d />
       {topCats.length > 0 && (
         <div className="mf-panel">
           <div className="mf-paneltitle">支出トップカテゴリ</div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAccounts, updateAccounts } from "@/lib/accounts";
 
 const putSchema = z.object({
@@ -17,7 +17,7 @@ const putSchema = z.object({
 
 export async function GET() {
   try {
-    await requireSession();
+    await requireOwnerSession();
     return NextResponse.json({ accounts: await getAccounts() });
   } catch (e) {
     return errorResponse(e);
@@ -26,7 +26,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    await requireSession();
+    await requireOwnerSession();
     const { accounts } = putSchema.parse(await req.json());
     return NextResponse.json({ accounts: await updateAccounts(accounts) });
   } catch (e) {

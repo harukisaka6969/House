@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession, errorResponse, ApiError } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { isValidMonthKey, nowMonthKeyJST } from "@/lib/date";
 import { getExpensesInRange, monthRange } from "@/lib/expenses";
 import { getIncomes } from "@/lib/incomes";
@@ -10,7 +10,7 @@ import { maskExpenses, buildPerAccount, buildPerCategory, buildPerDay, buildMont
 
 export async function GET(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const { searchParams } = new URL(req.url);
     const m = searchParams.get("m") ?? nowMonthKeyJST();
     if (!isValidMonthKey(m)) throw new ApiError(400, "invalid month");

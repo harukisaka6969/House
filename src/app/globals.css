@@ -135,6 +135,14 @@ body {
 .mf-numsub { color: #93A0AE; font-size: 12px; }
 .mf-bar { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 8px; overflow: hidden; }
 .mf-barfill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+.mf-badge { display: inline-block; font-size: 10.5px; border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 1px 8px; color: #C4CDD6; }
+.mf-badge.warn { border-color: #F5A524; color: #F5A524; }
+.mf-badge.bad { border-color: #F26D5F; color: #F26D5F; }
+.mf-timeline { display: flex; overflow-x: auto; gap: 18px; padding: 12px 4px 18px; }
+.mf-tlitem { flex: 0 0 auto; min-width: 96px; text-align: center; }
+.mf-tldot { width: 14px; height: 14px; border-radius: 50%; background: #8B7CF6; margin: 0 auto 6px; }
+.mf-tlyear { font-size: 11px; color: #93A0AE; }
+.mf-tlname { font-size: 12.5px; margin-top: 2px; }
 .mf-formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .mf-input { background: #101418; color: #E7ECF2; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 9px 10px; font-size: 14px; font-family: inherit; min-width: 0; width: 100%; box-sizing: border-box; }
 .mf-input:focus { outline: 2px solid #F5A524; outline-offset: 1px; border-color: transparent; }

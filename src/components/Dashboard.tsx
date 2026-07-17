@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { shiftMonth } from "@/lib/date";
+import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
+import FamilyDashboard from "./FamilyDashboard";
 import AgentWidget from "./AgentWidget";
 import Summary from "./sections/Summary";
 import Flow from "./sections/Flow";
@@ -13,6 +15,9 @@ import Accounts from "./sections/Accounts";
 import ExpensePanel from "./sections/ExpensePanel";
 import Invest from "./sections/Invest";
 import Sim from "./sections/SimPanel";
+import Wishlist from "./sections/Wishlist";
+import LifeEvents from "./sections/LifeEvents";
+import Maintenance from "./sections/Maintenance";
 import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
 
@@ -23,10 +28,30 @@ const MENU: [string, string][] = [
   ["expenses", "④ 支出明細"],
   ["invest", "⑤ 投資"],
   ["sim", "⑥ シミュレーション"],
+  ["wishlist", "⑧ 買いたいもの"],
+  ["lifeEvents", "⑨ 将来設計"],
+  ["maintenance", "⑩ メンテナンス"],
   ["settings", "⑦ 設定"],
 ];
 
 export default function Dashboard({ slug }: { slug: string }) {
+  const [role, setRole] = useState<"owner" | "family" | null>(null);
+
+  useEffect(() => {
+    apiGet<MeResponse>("/api/auth/me")
+      .then((r) => setRole(r.profile.role))
+      .catch(() => setRole("owner"));
+  }, []);
+
+  if (role === null) {
+    return (
+      <div className="mf-empty" style={{ padding: 40, textAlign: "center" }}>
+        読み込み中…
+      </div>
+    );
+  }
+  if (role === "family") return <FamilyDashboard slug={slug} />;
+
   return (
     <DashboardProvider slug={slug}>
       <DashboardInner />
@@ -154,6 +179,9 @@ function DashboardInner() {
             )}
             {view === "invest" && <Invest />}
             {view === "sim" && <Sim />}
+            {view === "wishlist" && <Wishlist />}
+            {view === "lifeEvents" && <LifeEvents />}
+            {view === "maintenance" && <Maintenance />}
             {view === "settings" && <Settings />}
           </>
         )}

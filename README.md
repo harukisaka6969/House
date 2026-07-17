@@ -16,6 +16,7 @@ npm install
 
 - `0001_init.sql` — スキーマ全体（profiles, webauthn_credentials, accounts, expenses, incomes, investments, custom_categories, other_counts）と初期4口座の投入
 - `0002_add_expense_entries.sql` — 支出の一括追加＋「その他」カテゴリ自動昇格をトランザクション内で行うDB関数
+- `0003_v2.sql` — v2追加機能（買いたいものリスト・将来設計・メンテナンス管理・家族アカウント）のテーブル・profiles.role列・関連DB関数
 
 ### 3. 環境変数
 
@@ -79,3 +80,8 @@ Vercelを想定。環境変数を設定し、`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN
 - Phase 4: §9の全ビュー（サマリー／お金の流れ／口座・判定／支出明細／投資／シミュレーション／設定）+ AIアドバイザー
 - Phase 5: レシートOCR・自然文解析・アドバイザー・銘柄リサーチの4 AIエンドポイント（レート制限つき）
 - Phase 6: PWA（マニフェスト・アイコン・表示キャッシュのみのService Worker）、データ移行スクリプト、§12分析出力（JSON/CSV、Claude用コピー、アドバイザー連携）
+- v2 Phase 1: メンテナンス管理（資産・タスク・完了処理・支出連携・12ヶ月ビュー・資産別ビュー）
+- v2 Phase 2: 買いたいものリスト（is_private＝相手に存在ごと非公開・購入/積立の支出連携）
+- v2 Phase 3: 将来設計リスト（タイムライン・資金ギャップ表・感度スライダー）
+- v2 Phase 4: 既存機能との連携（①サマリーの30日予定・⑥シミュレーションへのイベント/メンテ/ウィッシュ反映・AIアドバイザー・§12分析出力への統合）
+- v2 Phase 5: 家族アカウント（閲覧専用ロール・ホワイトリスト方式APIレスポンス・家族用3タブ画面・オーナーによるアカウント管理、自動テストあり）

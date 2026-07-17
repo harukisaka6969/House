@@ -16,6 +16,7 @@ export interface ProfileRow {
   pin_hash: string;
   failed_attempts: number;
   locked_until: string | null;
+  role: "owner" | "family";
 }
 
 export async function getProfileBySlug(slug: string): Promise<ProfileRow | null> {

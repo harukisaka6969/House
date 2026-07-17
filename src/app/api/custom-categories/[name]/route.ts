@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireSession, errorResponse } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { db } from "@/lib/db";
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ name: string }> }) {
   try {
-    await requireSession();
+    await requireOwnerSession();
     const { name } = await ctx.params;
     const { error } = await db().from("custom_categories").delete().eq("name", decodeURIComponent(name));
     if (error) throw error;

@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
+import { useEffect, useMemo, useState } from "react";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine } from "recharts";
 import { fmt } from "@/lib/judge";
+import { apiGet } from "@/lib/apiClient";
+import type { LifeEventOut, WishlistItemOut } from "@/lib/apiTypes";
+import { nowMonthKeyJST } from "@/lib/date";
 import { SectionHead, TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
 
@@ -14,6 +17,12 @@ interface SimParams {
   years: number;
   startCash: number;
   startInvested: number;
+}
+
+interface EventDeduction {
+  yearOffset: number;
+  name: string;
+  amount: number;
 }
 
 function SimPanelInner({ defaultIncome, defaultExpense }: { defaultIncome: number; defaultExpense: number }) {
@@ -28,37 +37,84 @@ function SimPanelInner({ defaultIncome, defaultExpense }: { defaultIncome: numbe
   });
   const set = (k: keyof SimParams) => (e: React.ChangeEvent<HTMLInputElement>) => setP({ ...p, [k]: Number(e.target.value) });
 
+  const [lifeEvents, setLifeEvents] = useState<LifeEventOut[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItemOut[]>([]);
+  const [maintenanceMonthly, setMaintenanceMonthly] = useState(0);
+  const [reflectEvents, setReflectEvents] = useState(true);
+  const [includeMaintenance, setIncludeMaintenance] = useState(false);
+  const [includeWishlist, setIncludeWishlist] = useState(false);
+
+  useEffect(() => {
+    apiGet<{ events: LifeEventOut[] }>("/api/life-events").then((r) => setLifeEvents(r.events)).catch(() => {});
+    apiGet<{ items: WishlistItemOut[] }>("/api/wishlist").then((r) => setWishlist(r.items)).catch(() => {});
+    apiGet<{ totalCost: number }>("/api/maintenance/upcoming?months=12").then((r) => setMaintenanceMonthly(Math.round(r.totalCost / 12))).catch(() => {});
+  }, []);
+
+  const wishlistMonthly = useMemo(
+    () => wishlist.filter((w) => w.status === "saving").reduce((s, w) => s + w.monthly_plan, 0),
+    [wishlist]
+  );
+
+  const currentYear = Number(nowMonthKeyJST().slice(0, 4));
+  const eventDeductions: EventDeduction[] = useMemo(() => {
+    if (!reflectEvents) return [];
+    return lifeEvents
+      .filter((e) => e.status === "active" && e.linked)
+      .map((e) => ({
+        yearOffset: e.event_year - currentYear,
+        name: e.name,
+        amount: Math.max(Math.round((e.cost_low + e.cost_high) / 2) - e.funded, 0),
+      }))
+      .filter((d) => d.yearOffset >= 0 && d.yearOffset <= p.years);
+  }, [lifeEvents, reflectEvents, currentYear, p.years]);
+
   const series = useMemo(() => {
-    const run = (retPct: number) => {
+    const extraMonthly = (includeMaintenance ? maintenanceMonthly : 0) + (includeWishlist ? wishlistMonthly : 0);
+    const effectiveExpense = p.expense + extraMonthly;
+
+    const run = (retPct: number, applyEvents: boolean) => {
       let cash = p.startCash;
       let invested = p.startInvested;
+      const dips: { year: number; name: string; total: number }[] = [];
       const pts = [{ cash, invested }];
       const mr = retPct / 100 / 12;
       for (let y = 1; y <= p.years; y++) {
         for (let m = 0; m < 12; m++) {
-          const surplus = p.income - p.expense;
+          const surplus = p.income - effectiveExpense;
           const inv = Math.max(surplus, 0) * (p.investRatio / 100);
           invested = invested * (1 + mr) + inv;
           cash += surplus - inv;
         }
+        if (applyEvents) {
+          for (const d of eventDeductions.filter((d) => d.yearOffset === y)) {
+            let remaining = d.amount;
+            const fromCash = Math.min(cash, remaining);
+            cash -= fromCash;
+            remaining -= fromCash;
+            invested -= remaining;
+            dips.push({ year: y, name: d.name, total: Math.round(cash + invested) });
+          }
+        }
         pts.push({ cash, invested });
       }
-      return pts;
+      return { pts, dips };
     };
-    const base = run(p.annualReturn);
-    const hi = run(p.annualReturn + 2);
-    const lo = run(Math.max(p.annualReturn - 2, 0));
-    return base.map((b, i) => ({
+    const base = run(p.annualReturn, true);
+    const hi = run(p.annualReturn + 2, false);
+    const lo = run(Math.max(p.annualReturn - 2, 0), false);
+    const data = base.pts.map((b, i) => ({
       year: i === 0 ? "現在" : `${i}年後`,
+      yearIdx: i,
       現金: Math.round(b.cash),
       投資資産: Math.round(b.invested),
       合計: Math.round(b.cash + b.invested),
-      "楽観(+2%)": Math.round(hi[i].cash + hi[i].invested),
-      "悲観(-2%)": Math.round(lo[i].cash + lo[i].invested),
+      "楽観(+2%)": Math.round(hi.pts[i].cash + hi.pts[i].invested),
+      "悲観(-2%)": Math.round(lo.pts[i].cash + lo.pts[i].invested),
     }));
-  }, [p]);
+    return { data, dips: base.dips };
+  }, [p, includeMaintenance, includeWishlist, maintenanceMonthly, wishlistMonthly, eventDeductions]);
 
-  const final = series[series.length - 1];
+  const final = series.data[series.data.length - 1];
 
   const fields: [string, keyof SimParams, number, string][] = [
     ["月収（平均）", "income", 1, "円"],
@@ -83,6 +139,19 @@ function SimPanelInner({ defaultIncome, defaultExpense }: { defaultIncome: numbe
           </label>
         ))}
       </div>
+
+      <div className="mf-chips" style={{ marginTop: 10 }}>
+        <button className={"mf-chipbtn" + (reflectEvents ? " on" : "")} onClick={() => setReflectEvents((v) => !v)}>
+          ライフイベントを反映
+        </button>
+        <button className={"mf-chipbtn" + (includeMaintenance ? " on" : "")} onClick={() => setIncludeMaintenance((v) => !v)}>
+          メンテ費を含める（月換算 {fmt(maintenanceMonthly)}）
+        </button>
+        <button className={"mf-chipbtn" + (includeWishlist ? " on" : "")} onClick={() => setIncludeWishlist((v) => !v)}>
+          ウィッシュ積立を含める（{fmt(wishlistMonthly)}/月）
+        </button>
+      </div>
+
       <div className="mf-simresult">
         {p.years}年後の想定資産:{" "}
         <b className="mf-mono" style={{ color: "#45C48F", fontSize: 20 }}>
@@ -92,14 +161,22 @@ function SimPanelInner({ defaultIncome, defaultExpense }: { defaultIncome: numbe
           （現金 {fmt(final.現金)} ＋ 投資 {fmt(final.投資資産)} ／ シナリオ幅 {fmt(final["悲観(-2%)"])} 〜 {fmt(final["楽観(+2%)"])}）
         </span>
       </div>
+      {series.dips.map((d) => (
+        <div key={`${d.year}-${d.name}`} className="mf-hint" style={{ color: "#F5A524" }}>
+          ⚠ {d.year}年後、{d.name}で資産が一時的に{fmt(d.total)}まで減少します。
+        </div>
+      ))}
       <div style={{ height: 260 }}>
         <ResponsiveContainer>
-          <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={series.data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.06)" />
             <XAxis dataKey="year" stroke="#93A0AE" fontSize={11} />
             <YAxis stroke="#93A0AE" fontSize={11} tickFormatter={(v) => (v / 10000).toLocaleString() + "万"} width={60} />
             <Tooltip contentStyle={TT} formatter={fmtTooltip} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
+            {series.dips.map((d) => (
+              <ReferenceLine key={`${d.year}-${d.name}`} x={`${d.year}年後`} stroke="#F5A524" strokeDasharray="3 3" label={{ value: d.name, fontSize: 10, fill: "#F5A524", position: "top" }} />
+            ))}
             <Line type="monotone" dataKey="現金" stroke="#4C9AFF" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="投資資産" stroke="#8B7CF6" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="合計" stroke="#45C48F" strokeWidth={2.5} dot={false} />

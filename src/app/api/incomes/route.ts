@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse, ApiError } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { isValidMonthKey, nowMonthKeyJST } from "@/lib/date";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
@@ -14,7 +14,7 @@ const putSchema = z.object({ incomes: z.array(incomeSchema).max(50) });
 
 export async function GET(req: Request) {
   try {
-    await requireSession();
+    await requireOwnerSession();
     const { searchParams } = new URL(req.url);
     const m = searchParams.get("m") ?? nowMonthKeyJST();
     if (!isValidMonthKey(m)) throw new ApiError(400, "invalid month");
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    await requireSession();
+    await requireOwnerSession();
     const { searchParams } = new URL(req.url);
     const m = searchParams.get("m") ?? nowMonthKeyJST();
     if (!isValidMonthKey(m)) throw new ApiError(400, "invalid month");

@@ -7,6 +7,8 @@ import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AnalysisExport from "./AnalysisExport";
 
+const emptyFamilyForm = { slug: "", name: "", pin: "" };
+
 export default function Settings() {
   const { month, monthKey, settings, refreshMonth, refreshSettings, refreshMe, me } = useDashboard();
   const [incomeDraft, setIncomeDraft] = useState<{ id?: string; name: string; amount: number }[] | null>(null);
@@ -15,6 +17,11 @@ export default function Settings() {
   const [pinMsg, setPinMsg] = useState("");
   const [deviceMsg, setDeviceMsg] = useState("");
   const [regBusy, setRegBusy] = useState(false);
+  const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
+  const [familyMsg, setFamilyMsg] = useState("");
+  const [showFamilyForm, setShowFamilyForm] = useState(false);
+  const [resetPinTargetId, setResetPinTargetId] = useState<string | null>(null);
+  const [resetPinValue, setResetPinValue] = useState("");
 
   if (!month || !settings) return null;
 
@@ -80,6 +87,43 @@ export default function Settings() {
   const removeDevice = async (id: string) => {
     await apiDelete(`/api/auth/webauthn/${id}`);
     refreshMe();
+  };
+
+  const createFamilyAccount = async () => {
+    setFamilyMsg("");
+    if (!/^[a-z0-9-]{3,32}$/.test(familyForm.slug)) {
+      setFamilyMsg("URLは半角英小文字・数字・ハイフンで3〜32文字にしてください。");
+      return;
+    }
+    if (!/^\d{4,8}$/.test(familyForm.pin)) {
+      setFamilyMsg("PINは4〜8桁の数字にしてください。");
+      return;
+    }
+    try {
+      await apiPost("/api/family-accounts", familyForm);
+      setFamilyForm(emptyFamilyForm);
+      setShowFamilyForm(false);
+      setFamilyMsg("✓ 家族アカウントを作成しました。");
+      refreshSettings();
+    } catch (e) {
+      setFamilyMsg(e instanceof Error ? e.message : "作成に失敗しました。");
+    }
+  };
+
+  const deleteFamilyAccount = async (id: string) => {
+    await apiDelete(`/api/family-accounts/${id}`);
+    refreshSettings();
+  };
+
+  const submitResetPin = async (id: string) => {
+    if (!/^\d{4,8}$/.test(resetPinValue)) {
+      setFamilyMsg("PINは4〜8桁の数字にしてください。");
+      return;
+    }
+    await apiPost(`/api/family-accounts/${id}/reset-pin`, { pin: resetPinValue });
+    setResetPinTargetId(null);
+    setResetPinValue("");
+    setFamilyMsg("✓ PINをリセットしました。");
   };
 
   return (
@@ -228,6 +272,76 @@ export default function Settings() {
         <div className="mf-hint" style={{ opacity: 0.7 }}>
           パスキーは端末ごとに登録が必要です。新しい端末では一度PINでログインしてから登録してください。
         </div>
+      </div>
+
+      <div className="mf-panel">
+        <div className="mf-paneltitle">家族アカウント（閲覧専用）</div>
+        <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+          両親などに、予定（買う予定のもの・将来設計・メンテ予定）だけを見せる閲覧専用アカウントです。財務状態（貯蓄・収支・実績）は一切見えません。
+        </div>
+        {(settings.familyAccounts?.length ?? 0) > 0 && (
+          <div className="mf-list" style={{ marginTop: 8 }}>
+            {settings.familyAccounts.map((f) => (
+              <div key={f.id}>
+                <div className="mf-listrow">
+                  <span className="mf-listcat">{f.name}</span>
+                  <span className="mf-listmemo">/{f.slug}</span>
+                  <button className="mf-btn ghost" style={{ padding: "4px 10px" }} onClick={() => { setResetPinTargetId(f.id); setResetPinValue(""); }}>
+                    PINリセット
+                  </button>
+                  <button className="mf-del" onClick={() => deleteFamilyAccount(f.id)}>
+                    削除
+                  </button>
+                </div>
+                {resetPinTargetId === f.id && (
+                  <div className="mf-row" style={{ marginTop: 6 }}>
+                    <input
+                      className="mf-input mf-mono"
+                      type="password"
+                      inputMode="numeric"
+                      placeholder="新しいPIN（4〜8桁）"
+                      value={resetPinValue}
+                      onChange={(e) => setResetPinValue(e.target.value)}
+                    />
+                    <button className="mf-btn primary" onClick={() => submitResetPin(f.id)}>
+                      更新
+                    </button>
+                    <button className="mf-btn ghost" onClick={() => setResetPinTargetId(null)}>
+                      キャンセル
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!showFamilyForm ? (
+          <button className="mf-btn primary" style={{ marginTop: 10 }} onClick={() => setShowFamilyForm(true)}>
+            ＋ 家族アカウントを作成
+          </button>
+        ) : (
+          <div className="mf-formgrid" style={{ marginTop: 8 }}>
+            <input className="mf-input" placeholder="URL（例: family-x7k2）" value={familyForm.slug} onChange={(e) => setFamilyForm({ ...familyForm, slug: e.target.value })} />
+            <input className="mf-input" placeholder="表示名（例: 坂家（家族用）)" value={familyForm.name} onChange={(e) => setFamilyForm({ ...familyForm, name: e.target.value })} />
+            <input
+              className="mf-input mf-mono"
+              type="password"
+              inputMode="numeric"
+              placeholder="PIN（4〜8桁）"
+              value={familyForm.pin}
+              onChange={(e) => setFamilyForm({ ...familyForm, pin: e.target.value })}
+            />
+            <div className="mf-row">
+              <button className="mf-btn primary" onClick={createFamilyAccount}>
+                作成
+              </button>
+              <button className="mf-btn ghost" onClick={() => { setShowFamilyForm(false); setFamilyForm(emptyFamilyForm); }}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+        {familyMsg && <div className="mf-hint">{familyMsg}</div>}
       </div>
 
       <AnalysisExport />

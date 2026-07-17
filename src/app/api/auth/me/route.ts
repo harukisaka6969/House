@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession, errorResponse } from "@/lib/apiAuth";
 import { getProfileById } from "@/lib/pinAuth";
 import { db } from "@/lib/db";
-import { getAllProfiles } from "@/lib/profiles";
+import { getAllProfiles, findPartnerOwner } from "@/lib/profiles";
 
 export async function GET() {
   try {
@@ -18,10 +18,10 @@ export async function GET() {
     if (error) throw error;
 
     const allProfiles = await getAllProfiles();
-    const partner = allProfiles.find((p) => p.id !== profile.id) ?? null;
+    const partner = profile.role === "owner" ? findPartnerOwner(allProfiles, profile.id) : null;
 
     return NextResponse.json({
-      profile: { id: profile.id, slug: profile.slug, name: profile.name },
+      profile: { id: profile.id, slug: profile.slug, name: profile.name, role: profile.role },
       partner: partner ? { name: partner.name, slug: partner.slug } : null,
       devices: devices ?? [],
     });

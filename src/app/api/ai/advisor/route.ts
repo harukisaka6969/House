@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, errorResponse, ApiError } from "@/lib/apiAuth";
+import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
 import { runAdvisor } from "@/lib/anthropic";
 import { buildAdvisorContext } from "@/lib/advisorContext";
@@ -19,7 +19,7 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireOwnerSession();
     const limited = rateLimit(`ai:${session.profile_id}`, 60, 60 * 60 * 1000);
     if (!limited.ok) throw new ApiError(429, "AI機能の利用回数上限に達しました。しばらくしてから再試行してください。");
 
