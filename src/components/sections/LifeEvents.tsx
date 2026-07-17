@@ -222,7 +222,7 @@ export default function LifeEvents() {
               .filter((e) => e.status !== "active")
               .map((e) => (
                 <div key={e.id} className="mf-listrow">
-                  <span className="mf-listcat">{e.name}</span>
+                  <span className="mf-listname" title={e.name}>{e.name}</span>
                   <span className="mf-numsub">{e.status === "done" ? "完了" : "中止"}</span>
                   <button className="mf-del" onClick={() => remove(e.id)}>
                     削除

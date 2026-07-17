@@ -81,7 +81,7 @@ export default function FamilyDashboard({ slug }: { slug: string }) {
                         <div className="mf-list">
                           {m.items.map((it) => (
                             <div key={`${it.type}-${it.id}`} className="mf-listrow">
-                              <span className="mf-listcat">
+                              <span className="mf-listname" title={it.name}>
                                 {ICON[it.type]} {it.name}
                               </span>
                               <span className="mf-mono mf-listamt">{fmt(it.cost)}</span>
@@ -125,7 +125,7 @@ export default function FamilyDashboard({ slug }: { slug: string }) {
                     <div className="mf-list">
                       {data.lifeEvents.map((e) => (
                         <div key={e.id} className="mf-listrow">
-                          <span className="mf-listcat">
+                          <span className="mf-listname" title={e.name}>
                             {e.event_year}年{e.event_month ? `${e.event_month}月` : ""} {e.name}
                           </span>
                           <span className="mf-listmemo">{e.memo}</span>
@@ -145,7 +145,7 @@ export default function FamilyDashboard({ slug }: { slug: string }) {
                     <div className="mf-list">
                       {data.maintenance.map((t) => (
                         <div key={t.id} className="mf-listrow">
-                          <span className="mf-listcat">
+                          <span className="mf-listname" title={`${t.asset_name}: ${t.name}`}>
                             {t.asset_name}: {t.name}
                           </span>
                           <span className="mf-listmemo">{t.next_due}</span>

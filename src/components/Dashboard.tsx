@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { apiGet, apiPost } from "@/lib/apiClient";
@@ -103,6 +103,20 @@ function DashboardInner() {
   const { slug, me, monthKey, setMonthKey, loading } = useDashboard();
   const [view, setView] = useState<string>("summary");
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // メニュー外をタップ/クリックしたら閉じる。開閉はReact stateのみで制御し、
+  // CSSの:hover/:focus-within頼みにはしない — クリックしたdrawitemがフォーカスを
+  // 保持し続けると:focus-withinがメニューを開いたままにしてしまい、
+  // その下の要素（例: メンテナンスの「完了」ボタン）がタップ不能になるため。
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
 
   const logout = async () => {
     await apiPost("/api/auth/logout");
@@ -113,7 +127,7 @@ function DashboardInner() {
     <div className="mf-root">
       <header className="mf-header">
         <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
-          <div className="mf-menuwrap">
+          <div className="mf-menuwrap" ref={menuRef}>
             <button className="mf-menubtn" aria-haspopup="true" aria-expanded={menuOpen} aria-label="メニュー" onClick={() => setMenuOpen((o) => !o)}>
               ☰
             </button>

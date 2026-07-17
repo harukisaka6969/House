@@ -154,11 +154,13 @@ export default function Maintenance() {
                 <div className="mf-list">
                   {mb.tasks.map((t) => (
                     <div key={t.id} className="mf-listrow">
-                      <span className="mf-listcat">{t.asset_name}: {t.name}</span>
+                      <span className="mf-listname" title={`${t.asset_name}: ${t.name}`}>
+                        {t.asset_name}: {t.name}
+                      </span>
                       {badgeFor(t.next_due)}
-                      <span className="mf-listmemo">{t.next_due}</span>
+                      <span className="mf-listdate mf-mono">{t.next_due.slice(5)}</span>
                       <span className="mf-mono mf-listamt">{fmt(t.est_cost)}</span>
-                      <button className="mf-btn ghost" style={{ padding: "4px 10px" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
+                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
                         完了
                       </button>
                     </div>
@@ -199,12 +201,15 @@ export default function Maintenance() {
               <div className="mf-list">
                 {assetTasks.map((t) => (
                   <div key={t.id} className="mf-listrow">
-                    <span className="mf-listcat">{t.name}{!t.active && <span className="mf-numsub"> (完了/停止)</span>}</span>
+                    <span className="mf-listname" title={t.name}>
+                      {t.name}
+                      {!t.active && <span className="mf-numsub"> (完了/停止)</span>}
+                    </span>
                     {t.active && badgeFor(t.next_due)}
-                    <span className="mf-listmemo">{t.active ? `次回: ${t.next_due}` : ""}</span>
+                    {t.active && <span className="mf-listdate mf-mono">{t.next_due.slice(5)}</span>}
                     <span className="mf-mono mf-listamt">{fmt(t.est_cost)}</span>
                     {t.active && (
-                      <button className="mf-btn ghost" style={{ padding: "4px 10px" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
+                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
                         完了
                       </button>
                     )}
