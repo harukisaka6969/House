@@ -169,6 +169,26 @@ export interface UpcomingSummary {
   total: number;
 }
 
+export interface JournalEntryOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  date: string;
+  body: string;
+  updated_at: string;
+}
+
+export interface SportLogOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  date: string;
+  activity: string;
+  duration_minutes: number | null;
+  distance_km: number | null;
+  memo: string;
+}
+
 export interface InventoryItemOut {
   id: string;
   name: string;

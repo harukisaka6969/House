@@ -155,6 +155,28 @@ export interface MaintenanceLogRow {
   created_at: string;
 }
 
+/* ---- 日記・スポーツ記録 ---- */
+
+export interface JournalEntryRow {
+  id: string;
+  owner: string;
+  date: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SportLogRow {
+  id: string;
+  owner: string;
+  date: string;
+  activity: string;
+  duration_minutes: number | null;
+  distance_km: number | null;
+  memo: string;
+  created_at: string;
+}
+
 /* ---- 在庫管理（消耗品）---- */
 
 export interface InventoryItemRow {

@@ -19,6 +19,7 @@ import Wishlist from "./sections/Wishlist";
 import LifeEvents from "./sections/LifeEvents";
 import Maintenance from "./sections/Maintenance";
 import Inventory from "./sections/Inventory";
+import Journal from "./sections/Journal";
 import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
 
@@ -33,6 +34,7 @@ const MENU: [string, string][] = [
   ["lifeEvents", "⑨ 将来設計"],
   ["maintenance", "⑩ メンテナンス"],
   ["inventory", "⑪ 在庫管理"],
+  ["journal", "⑫ 日記"],
   ["settings", "⑦ 設定"],
 ];
 
@@ -225,6 +227,7 @@ function DashboardInner() {
             {view === "lifeEvents" && <LifeEvents />}
             {view === "maintenance" && <Maintenance />}
             {view === "inventory" && <Inventory />}
+            {view === "journal" && <Journal />}
             {view === "settings" && <Settings />}
           </>
         )}

@@ -6,6 +6,7 @@ import type { InventoryItemOut } from "@/lib/apiTypes";
 import { fmt } from "@/lib/judge";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import AiSuggestButton from "../AiSuggestButton";
 
 const emptyForm = { name: "", category: "", unit: "個", quantity: "1", low_stock_threshold: "1", memo: "" };
 
@@ -17,6 +18,7 @@ export default function Inventory() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [restockingId, setRestockingId] = useState<string | null>(null);
   const [restockForm, setRestockForm] = useState({ amount: "1", createExpense: false, account: "", category: "", price: "" });
+  const [restockErr, setRestockErr] = useState("");
 
   const load = () => {
     apiGet<{ items: InventoryItemOut[] }>("/api/inventory").then((r) => setItems(r.items)).catch(() => setItems([]));
@@ -81,17 +83,29 @@ export default function Inventory() {
   };
 
   const submitRestock = async (id: string) => {
-    if (!restockForm.amount) return;
-    await apiPost(`/api/inventory/${id}/restock`, {
-      amount: Number(restockForm.amount),
-      createExpense: restockForm.createExpense,
-      account: restockForm.createExpense ? restockForm.account : undefined,
-      category: restockForm.createExpense ? restockForm.category : undefined,
-      price: restockForm.createExpense ? Number(restockForm.price) : undefined,
-    });
-    setRestockingId(null);
-    setRestockForm({ amount: "1", createExpense: false, account: "", category: "", price: "" });
-    afterChange();
+    setRestockErr("");
+    if (!restockForm.amount) {
+      setRestockErr("補充数を入力してください。");
+      return;
+    }
+    if (restockForm.createExpense && (!restockForm.account || !restockForm.category || !restockForm.price)) {
+      setRestockErr("支出として記録する場合は金額・口座・カテゴリをすべて入力してください。");
+      return;
+    }
+    try {
+      await apiPost(`/api/inventory/${id}/restock`, {
+        amount: Number(restockForm.amount),
+        createExpense: restockForm.createExpense,
+        account: restockForm.createExpense ? restockForm.account : undefined,
+        category: restockForm.createExpense ? restockForm.category : undefined,
+        price: restockForm.createExpense ? Number(restockForm.price) : undefined,
+      });
+      setRestockingId(null);
+      setRestockForm({ amount: "1", createExpense: false, account: "", category: "", price: "" });
+      afterChange();
+    } catch (e) {
+      setRestockErr(e instanceof Error ? e.message : "補充の記録に失敗しました。");
+    }
   };
 
   return (
@@ -172,10 +186,15 @@ export default function Inventory() {
                           <button className="mf-btn primary" onClick={() => submitRestock(i.id)}>
                             補充を記録
                           </button>
-                          <button className="mf-btn ghost" onClick={() => setRestockingId(null)}>
+                          <button className="mf-btn ghost" onClick={() => { setRestockingId(null); setRestockErr(""); }}>
                             キャンセル
                           </button>
                         </div>
+                        {restockErr && (
+                          <div className="mf-hint" style={{ color: "#F26D5F" }}>
+                            {restockErr}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -196,7 +215,10 @@ export default function Inventory() {
             <div className="mf-paneltitle">{editingId ? "アイテムを編集" : "新しいアイテム"}</div>
             <div className="mf-formgrid">
               <input className="mf-input" placeholder="名前（例: お米）" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="mf-input" placeholder="カテゴリ（例: 食品）" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              <span className="mf-row" style={{ gap: 6 }}>
+                <input className="mf-input" style={{ flex: 1 }} placeholder="カテゴリ（例: 食品）" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                <AiSuggestButton text={form.name} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
+              </span>
               <input className="mf-input" placeholder="単位（例: 袋・枚・本）" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
               <input
                 className="mf-input mf-mono"

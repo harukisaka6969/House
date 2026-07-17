@@ -7,6 +7,7 @@ import { PRIVATE_ACCOUNT } from "@/lib/constants";
 import { apiDelete, apiPost } from "@/lib/apiClient";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AgentWidget from "./AgentWidget";
+import AiSuggestButton from "./AiSuggestButton";
 
 type Mode = "manual" | "text" | "photo";
 
@@ -220,8 +221,11 @@ function QuickEntryInner() {
             {form.account === PRIVATE_ACCOUNT && " 🔒 明細は相手に非公開"}
           </div>
 
-          <div className="mf-steplabel">
-            <span className="mf-stepnum">3</span>カテゴリ
+          <div className="mf-steplabel" style={{ justifyContent: "space-between" }}>
+            <span>
+              <span className="mf-stepnum">3</span>カテゴリ
+            </span>
+            <AiSuggestButton text={form.memo} options={allCats} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
           </div>
           <div className="mf-chips">
             {allCats.map((c) => (

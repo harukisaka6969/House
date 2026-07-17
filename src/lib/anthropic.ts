@@ -89,6 +89,30 @@ export async function parseExpenseText(
   return Array.isArray(arr) ? arr : [arr];
 }
 
+/** 入力中の項目（品名・メモ等）からカテゴリを推測する。フォームのどこからでも呼べる軽量な分類専用API。 */
+export async function suggestCategory(text: string, options: string[] | null): Promise<string> {
+  const instruction =
+    options && options.length > 0
+      ? `次の候補の中から最も適切なものを1つだけ選んでください: ${options.join("|")}`
+      : `内容にふさわしい短い日本語のカテゴリ名を1つ考えてください（例: 食品、日用品、ペット用品 など。長い説明は不要）。`;
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 30,
+    messages: [
+      {
+        role: "user",
+        content: `次の内容を分類してください。${instruction}\n回答はカテゴリ名のみを1行で返してください。前置き・記号・引用符・説明は一切不要です。\n内容: ${text}`,
+      },
+    ],
+  });
+  const raw = joinText(res.content).trim();
+  const cleaned = raw.split("\n")[0].replace(/^["「『]+|["」』]+$/g, "").trim();
+  if (options && options.length > 0) {
+    return options.find((o) => o === cleaned) ?? options.find((o) => cleaned.includes(o)) ?? options[options.length - 1];
+  }
+  return cleaned || "その他";
+}
+
 /** 家計アドバイザー。system はサーバーが§5準拠で構築したコンテキスト。 */
 export async function runAdvisor(
   system: string,

@@ -6,6 +6,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { WishlistItemOut } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import AiSuggestButton from "../AiSuggestButton";
 
 type Tab = "saving" | "planning" | "purchased" | "dropped";
 const TABS: [Tab, string][] = [
@@ -38,6 +39,8 @@ export default function Wishlist() {
   const [purchaseForm, setPurchaseForm] = useState({ date: "", price: "", createExpense: false, account: "", category: "" });
   const [contributingId, setContributingId] = useState<string | null>(null);
   const [contributeForm, setContributeForm] = useState({ amount: "", createExpense: false, account: "", category: "" });
+  const [purchaseErr, setPurchaseErr] = useState("");
+  const [contributeErr, setContributeErr] = useState("");
 
   const load = () => {
     apiGet<{ items: WishlistItemOut[] }>("/api/wishlist").then((r) => setItems(r.items)).catch(() => setItems([]));
@@ -113,30 +116,54 @@ export default function Wishlist() {
   };
 
   const submitPurchase = async (id: string) => {
-    if (!purchaseForm.price) return;
-    await apiPost(`/api/wishlist/${id}/purchase`, {
-      date: purchaseForm.date || undefined,
-      price: Number(purchaseForm.price),
-      createExpense: purchaseForm.createExpense,
-      account: purchaseForm.createExpense ? purchaseForm.account : undefined,
-      category: purchaseForm.createExpense ? purchaseForm.category : undefined,
-    });
-    setPurchasingId(null);
-    setPurchaseForm({ date: "", price: "", createExpense: false, account: "", category: "" });
-    load();
+    setPurchaseErr("");
+    if (!purchaseForm.price) {
+      setPurchaseErr("購入価格を入力してください。");
+      return;
+    }
+    if (purchaseForm.createExpense && (!purchaseForm.account || !purchaseForm.category)) {
+      setPurchaseErr("支出として記録する場合は口座とカテゴリを選択してください。");
+      return;
+    }
+    try {
+      await apiPost(`/api/wishlist/${id}/purchase`, {
+        date: purchaseForm.date || undefined,
+        price: Number(purchaseForm.price),
+        createExpense: purchaseForm.createExpense,
+        account: purchaseForm.createExpense ? purchaseForm.account : undefined,
+        category: purchaseForm.createExpense ? purchaseForm.category : undefined,
+      });
+      setPurchasingId(null);
+      setPurchaseForm({ date: "", price: "", createExpense: false, account: "", category: "" });
+      load();
+    } catch (e) {
+      setPurchaseErr(e instanceof Error ? e.message : "購入の記録に失敗しました。");
+    }
   };
 
   const submitContribute = async (id: string) => {
-    if (!contributeForm.amount) return;
-    await apiPost(`/api/wishlist/${id}/contribute`, {
-      amount: Number(contributeForm.amount),
-      createExpense: contributeForm.createExpense,
-      account: contributeForm.createExpense ? contributeForm.account : undefined,
-      category: contributeForm.createExpense ? contributeForm.category : undefined,
-    });
-    setContributingId(null);
-    setContributeForm({ amount: "", createExpense: false, account: "", category: "" });
-    load();
+    setContributeErr("");
+    if (!contributeForm.amount) {
+      setContributeErr("積立額を入力してください。");
+      return;
+    }
+    if (contributeForm.createExpense && (!contributeForm.account || !contributeForm.category)) {
+      setContributeErr("支出として記録する場合は口座とカテゴリを選択してください。");
+      return;
+    }
+    try {
+      await apiPost(`/api/wishlist/${id}/contribute`, {
+        amount: Number(contributeForm.amount),
+        createExpense: contributeForm.createExpense,
+        account: contributeForm.createExpense ? contributeForm.account : undefined,
+        category: contributeForm.createExpense ? contributeForm.category : undefined,
+      });
+      setContributingId(null);
+      setContributeForm({ amount: "", createExpense: false, account: "", category: "" });
+      load();
+    } catch (e) {
+      setContributeErr(e instanceof Error ? e.message : "積立の記録に失敗しました。");
+    }
   };
 
   return (
@@ -278,10 +305,15 @@ export default function Wishlist() {
                       <button className="mf-btn primary" onClick={() => submitContribute(i.id)}>
                         記録する
                       </button>
-                      <button className="mf-btn ghost" onClick={() => setContributingId(null)}>
+                      <button className="mf-btn ghost" onClick={() => { setContributingId(null); setContributeErr(""); }}>
                         キャンセル
                       </button>
                     </div>
+                    {contributeErr && (
+                      <div className="mf-hint" style={{ color: "#F26D5F" }}>
+                        {contributeErr}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -321,10 +353,15 @@ export default function Wishlist() {
                       <button className="mf-btn primary" onClick={() => submitPurchase(i.id)}>
                         購入を確定
                       </button>
-                      <button className="mf-btn ghost" onClick={() => setPurchasingId(null)}>
+                      <button className="mf-btn ghost" onClick={() => { setPurchasingId(null); setPurchaseErr(""); }}>
                         キャンセル
                       </button>
                     </div>
+                    {purchaseErr && (
+                      <div className="mf-hint" style={{ color: "#F26D5F" }}>
+                        {purchaseErr}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -343,7 +380,10 @@ export default function Wishlist() {
             <div className="mf-paneltitle">{editingId ? "アイテムを編集" : "新しいアイテム"}</div>
             <div className="mf-formgrid">
               <input className="mf-input" placeholder="名前（例: ワインセラー）" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              <input className="mf-input" placeholder="カテゴリ（例: 家電）" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              <span className="mf-row" style={{ gap: 6 }}>
+                <input className="mf-input" style={{ flex: 1 }} placeholder="カテゴリ（例: 家電）" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                <AiSuggestButton text={form.name} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
+              </span>
               <input className="mf-input mf-mono" type="number" placeholder="想定価格" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
               <select className="mf-input" value={form.priority} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}>
                 {[1, 2, 3, 4, 5].map((p) => (

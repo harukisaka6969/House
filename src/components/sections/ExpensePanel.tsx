@@ -8,6 +8,7 @@ import { CAT_COLORS } from "@/lib/constants";
 import { apiDelete, apiPost } from "@/lib/apiClient";
 import { TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
+import AiSuggestButton from "../AiSuggestButton";
 
 export default function ExpensePanel() {
   const { month, allCats, refreshMonth, refreshSettings, me } = useDashboard();
@@ -173,13 +174,16 @@ export default function ExpensePanel() {
               </option>
             ))}
           </select>
-          <select className="mf-input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {allCats.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <span className="mf-row" style={{ gap: 6 }}>
+            <select className="mf-input" style={{ flex: 1 }} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              {allCats.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <AiSuggestButton text={form.memo} options={allCats} onSuggest={(c) => setForm((f) => ({ ...f, category: c }))} />
+          </span>
           <input className="mf-input mf-mono" type="number" placeholder="金額" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
           <input className="mf-input" placeholder="メモ（店名など）" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
         </div>

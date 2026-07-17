@@ -22,7 +22,7 @@ const emptyTaskForm = { asset_id: "", name: "", interval_months: "", est_cost: "
 const emptyAssetForm = { name: "", kind: "car", acquired_date: "", memo: "" };
 
 export default function Maintenance() {
-  const { settings } = useDashboard();
+  const { allCats } = useDashboard();
   const [data, setData] = useState<UpcomingResponse | null>(null);
   const [view, setView] = useState<"upcoming" | "byAsset">("upcoming");
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
@@ -31,7 +31,8 @@ export default function Maintenance() {
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [assetForm, setAssetForm] = useState(emptyAssetForm);
   const [completingId, setCompletingId] = useState<string | null>(null);
-  const [completeForm, setCompleteForm] = useState({ done_date: todayStrJST(), actual_cost: "", memo: "", createExpense: false, account: "", category: "" });
+  const [completeForm, setCompleteForm] = useState({ done_date: todayStrJST(), actual_cost: "", memo: "", category: "" });
+  const [completeErr, setCompleteErr] = useState("");
 
   const load = () => {
     apiGet<UpcomingResponse>("/api/maintenance/upcoming?months=12").then(setData).catch(() => {});
@@ -45,9 +46,6 @@ export default function Maintenance() {
   }, [today]);
 
   if (!data) return <div className="mf-empty">読み込み中…</div>;
-
-  const accounts = settings?.accounts ?? [];
-  const allCats = settings?.customCategories ?? [];
 
   const monthlyGrouped = data.monthly.map((mb) => ({
     ...mb,
@@ -89,18 +87,30 @@ export default function Maintenance() {
   };
 
   const submitComplete = async (id: string) => {
-    if (!completeForm.actual_cost) return;
-    await apiPost(`/api/maintenance-tasks/${id}/complete`, {
-      done_date: completeForm.done_date,
-      actual_cost: Number(completeForm.actual_cost),
-      memo: completeForm.memo,
-      createExpense: completeForm.createExpense,
-      account: completeForm.createExpense ? completeForm.account : undefined,
-      category: completeForm.createExpense ? completeForm.category : undefined,
-    });
-    setCompletingId(null);
-    setCompleteForm({ done_date: todayStrJST(), actual_cost: "", memo: "", createExpense: false, account: "", category: "" });
-    load();
+    setCompleteErr("");
+    if (!completeForm.actual_cost) {
+      setCompleteErr("実費を入力してください。");
+      return;
+    }
+    if (!completeForm.category) {
+      setCompleteErr("カテゴリを選択してください。");
+      return;
+    }
+    try {
+      await apiPost(`/api/maintenance-tasks/${id}/complete`, {
+        done_date: completeForm.done_date,
+        actual_cost: Number(completeForm.actual_cost),
+        memo: completeForm.memo,
+        createExpense: true,
+        account: "a1", // メンテ費は必ず第1口座（生活費）からの支出として記録する
+        category: completeForm.category,
+      });
+      setCompletingId(null);
+      setCompleteForm({ done_date: todayStrJST(), actual_cost: "", memo: "", category: "" });
+      load();
+    } catch (e) {
+      setCompleteErr(e instanceof Error ? e.message : "完了の記録に失敗しました。");
+    }
   };
 
   const badgeFor = (nextDue: string) => {
@@ -160,7 +170,7 @@ export default function Maintenance() {
                       {badgeFor(t.next_due)}
                       <span className="mf-listdate mf-mono">{t.next_due.slice(5)}</span>
                       <span className="mf-mono mf-listamt">{fmt(t.est_cost)}</span>
-                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
+                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteErr(""); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
                         完了
                       </button>
                     </div>
@@ -209,7 +219,7 @@ export default function Maintenance() {
                     {t.active && <span className="mf-listdate mf-mono">{t.next_due.slice(5)}</span>}
                     <span className="mf-mono mf-listamt">{fmt(t.est_cost)}</span>
                     {t.active && (
-                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
+                      <button className="mf-btn ghost" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setCompletingId(t.id); setCompleteErr(""); setCompleteForm({ ...completeForm, actual_cost: String(t.est_cost) }); }}>
                         完了
                       </button>
                     )}
@@ -242,41 +252,35 @@ export default function Maintenance() {
       {completingId && (
         <div className="mf-panel">
           <div className="mf-paneltitle">完了処理</div>
+          <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+            メンテ費は必ず第1口座（生活費）からの支出として記録されます。
+          </div>
           <div className="mf-formgrid">
             <input className="mf-input" type="date" value={completeForm.done_date} onChange={(e) => setCompleteForm({ ...completeForm, done_date: e.target.value })} />
             <input className="mf-input mf-mono" type="number" placeholder="実費" value={completeForm.actual_cost} onChange={(e) => setCompleteForm({ ...completeForm, actual_cost: e.target.value })} />
             <input className="mf-input" placeholder="メモ" value={completeForm.memo} onChange={(e) => setCompleteForm({ ...completeForm, memo: e.target.value })} />
           </div>
-          <label className="mf-row" style={{ marginTop: 8, gap: 6 }}>
-            <input type="checkbox" checked={completeForm.createExpense} onChange={(e) => setCompleteForm({ ...completeForm, createExpense: e.target.checked })} />
-            <span className="mf-numsub">支出としても記録する（二重計上防止）</span>
-          </label>
-          {completeForm.createExpense && (
-            <>
-              <div className="mf-chips">
-                {accounts.map((a) => (
-                  <button key={a.id} className={"mf-chipbtn" + (completeForm.account === a.id ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, account: a.id })}>
-                    {a.name.replace(/（.*）/, "")}
-                  </button>
-                ))}
-              </div>
-              <div className="mf-chips">
-                {allCats.map((c) => (
-                  <button key={c} className={"mf-chipbtn" + (completeForm.category === c ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, category: c })}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          <div className="mf-quicklabel">カテゴリ</div>
+          <div className="mf-chips">
+            {allCats.map((c) => (
+              <button key={c} className={"mf-chipbtn" + (completeForm.category === c ? " on" : "")} onClick={() => setCompleteForm({ ...completeForm, category: c })}>
+                {c}
+              </button>
+            ))}
+          </div>
           <div className="mf-row" style={{ marginTop: 10 }}>
             <button className="mf-btn primary" onClick={() => submitComplete(completingId)}>
               完了を記録
             </button>
-            <button className="mf-btn ghost" onClick={() => setCompletingId(null)}>
+            <button className="mf-btn ghost" onClick={() => { setCompletingId(null); setCompleteErr(""); }}>
               キャンセル
             </button>
           </div>
+          {completeErr && (
+            <div className="mf-hint" style={{ color: "#F26D5F" }}>
+              {completeErr}
+            </div>
+          )}
         </div>
       )}
 
