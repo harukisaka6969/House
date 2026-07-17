@@ -11,7 +11,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import argon2 from "argon2";
+import { hashPin } from "../src/lib/pinHash";
 
 interface LegacyIncome {
   id?: string;
@@ -69,7 +69,7 @@ async function main() {
 
     const legacyProfile = data.profiles.find((p) => p.id === legacyId);
     if (legacyProfile?.pin) {
-      const pin_hash = await argon2.hash(legacyProfile.pin);
+      const pin_hash = await hashPin(legacyProfile.pin);
       await supabase.from("profiles").update({ pin_hash, name: legacyProfile.name || undefined }).eq("id", row.id);
       console.log(`updated /${slug} PIN from import (change it after logging in)`);
     }

@@ -8,7 +8,7 @@
  */
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-import argon2 from "argon2";
+import { hashPin } from "../src/lib/pinHash";
 
 async function main() {
   const url = process.env.SUPABASE_URL;
@@ -34,7 +34,7 @@ async function main() {
       console.log(`skip: /${s.slug} already exists`);
       continue;
     }
-    const pin_hash = await argon2.hash(s.pin);
+    const pin_hash = await hashPin(s.pin);
     const { error: insErr } = await supabase.from("profiles").insert({ slug: s.slug, name: s.name, pin_hash });
     if (insErr) throw insErr;
     console.log(`created /${s.slug} (${s.name}) — initial PIN: ${s.pin}`);

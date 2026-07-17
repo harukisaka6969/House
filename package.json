@@ -16,7 +16,6 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "@supabase/supabase-js": "^2.110.6",
-    "argon2": "^0.44.0",
     "jose": "^6.2.3",
     "next": "16.2.10",
     "react": "19.2.4",

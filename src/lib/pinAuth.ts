@@ -1,12 +1,12 @@
 import "server-only";
-import argon2 from "argon2";
 import { db } from "./db";
+import { hashPin as scryptHashPin, verifyPin } from "./pinHash";
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
 export function hashPin(pin: string): Promise<string> {
-  return argon2.hash(pin);
+  return scryptHashPin(pin);
 }
 
 export interface ProfileRow {
@@ -43,7 +43,7 @@ export async function checkPin(profile: ProfileRow, pin: string): Promise<PinChe
     return { ok: false, reason: "locked", lockedUntil: profile.locked_until };
   }
 
-  const valid = await argon2.verify(profile.pin_hash, pin).catch(() => false);
+  const valid = await verifyPin(profile.pin_hash, pin).catch(() => false);
 
   if (valid) {
     await db().from("profiles").update({ failed_attempts: 0, locked_until: null }).eq("id", profile.id);
