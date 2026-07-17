@@ -70,6 +70,32 @@ export interface TrendPoint {
   invest: number;
 }
 
+export interface FlowMonthPoint {
+  month: string;
+  incomeTotal: number;
+  incomeRegular: number;
+  incomeSpecial: number;
+  expenseTotal: number;
+  expenseByCategory: { name: string; value: number }[];
+  investTotal: number;
+  net: number;
+  cumulativeNet: number;
+}
+
+export interface FlowSpecialEvent {
+  type: "income" | "expense";
+  date: string;
+  name: string;
+  amount: number;
+  ownerName: string;
+}
+
+export interface FlowAnalysisResponse {
+  months: FlowMonthPoint[];
+  specialEvents: FlowSpecialEvent[];
+  categories: string[];
+}
+
 export interface MeResponse {
   profile: { id: string; slug: string; name: string; role: "owner" | "family" };
   partner: { name: string; slug: string } | null;
