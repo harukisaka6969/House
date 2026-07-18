@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ date: string }
       mentions = await extractMoneyMentions(text);
     } catch (err) {
       console.error("extractMoneyMentions failed", err);
-      throw new ApiError(502, AI_ERROR_MESSAGE);
+      throw new ApiError(502, `${AI_ERROR_MESSAGE}（詳細: ${err instanceof Error ? err.message : String(err)}）`);
     }
 
     if (mentions.length === 0) {
@@ -48,7 +48,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ date: string }
       extracted = await extractExpensesFromJournal(mentions.join("\n"), accounts, allCats);
     } catch (err) {
       console.error("extractExpensesFromJournal failed", err);
-      throw new ApiError(502, AI_ERROR_MESSAGE);
+      throw new ApiError(502, `${AI_ERROR_MESSAGE}（詳細: ${err instanceof Error ? err.message : String(err)}）`);
     }
 
     const valid = extracted.filter((e) => Number(e.amount) > 0);
