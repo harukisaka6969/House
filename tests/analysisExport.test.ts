@@ -24,6 +24,7 @@ function row(overrides: Partial<ExpenseRow>): ExpenseRow {
     amount: 1000,
     memo: "",
     created_at: "2026-07-01T00:00:00Z",
+    source: "manual",
     ...overrides,
   };
 }

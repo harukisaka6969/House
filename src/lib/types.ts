@@ -28,6 +28,8 @@ export interface ExpenseRow {
   amount: number;
   memo: string;
   created_at: string;
+  /** 'manual'（通常入力・文章解析・OCR含む）| 'journal'（日記本文からAI自動抽出）。 */
+  source: string;
 }
 
 /** Expense as returned by the API — may be masked for the partner's private-account rows. */

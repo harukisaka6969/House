@@ -31,3 +31,10 @@ export function isValidMonthKey(key: string): boolean {
 export function isValidDateStr(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s + "T00:00:00Z").getTime());
 }
+
+/** dateStr（YYYY-MM-DD）の翌日をYYYY-MM-DDで返す。日付範囲クエリの排他的上限に使う。 */
+export function nextDayStr(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 1));
+  return dt.toISOString().slice(0, 10);
+}

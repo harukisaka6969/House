@@ -113,6 +113,63 @@ export async function suggestCategory(text: string, options: string[] | null): P
   return cleaned || "その他";
 }
 
+/** その日の支出一覧から日記の下書き文章を作る。日記が空のときの自動下書き用。 */
+export async function draftJournalFromExpenses(
+  dateStr: string,
+  expenses: { category: string; amount: number; memo: string }[]
+): Promise<string> {
+  const lines = expenses.map((e) => `- ${e.category} ${e.amount}円${e.memo ? `（${e.memo}）` : ""}`).join("\n");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    messages: [
+      {
+        role: "user",
+        content: `次は${dateStr}に記録された支出の一覧です。これをもとに、その日にあったことを想像した自然な日本語の日記文（2〜4文、体言止めや箇条書きではなく普通の文章）を書いてください。金額を文中にそのまま書く必要はありません。前置きや説明、タイトルは不要で、日記本文のみを返してください。\n\n${lines}`,
+      },
+    ],
+  });
+  return joinText(res.content).trim();
+}
+
+export interface ExtractedMoneyEvent {
+  category?: string;
+  account?: string;
+  amount?: number;
+  memo?: string;
+}
+
+/** 日記本文からその日のお金の動き（支出）を推測して抽出する。金額が明示されていない・お金の動きがない場合は空配列を返す。 */
+export async function extractExpensesFromJournal(
+  text: string,
+  accounts: { id: string; name: string }[],
+  categories: string[]
+): Promise<ExtractedMoneyEvent[]> {
+  const acctList = accounts.map((a) => `${a.id}=${a.name}`).join(", ");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1000,
+    messages: [
+      {
+        role: "user",
+        content: `次の日記本文から、その日実際にお金を使った出来事だけを抽出し、JSON配列のみを返してください。前置きやコードブロックは不要です。
+金額がはっきり書かれていない場合は、内容から常識的な金額を推測してください（多少の誤差は許容されます、推測できたら必ず金額を入れてください）。お金の動きが全くない内容なら空配列 [] を返してください。
+口座候補: ${acctList}。内容から最も適切な口座を選ぶこと（日常の生活必需品はa1、ローン返済はa2、趣味・娯楽・交際・レジャーはa3、投資関連はa4。判断がつかなければa1）。
+カテゴリ候補: ${categories.join("|")}
+形式: [{"account":"口座id","category":"カテゴリ","amount":金額の数値,"memo":"内容の要約（10文字程度）"}]
+日記本文: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  try {
+    const arr = JSON.parse(t);
+    return Array.isArray(arr) ? arr : [arr];
+  } catch {
+    return [];
+  }
+}
+
 /** 家計アドバイザー。system はサーバーが§5準拠で構築したコンテキスト。 */
 export async function runAdvisor(
   system: string,

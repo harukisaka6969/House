@@ -26,6 +26,7 @@ export type ExpenseOut =
       created_at: string;
       owner_name: string;
       masked: false;
+      source: string;
     }
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
 
