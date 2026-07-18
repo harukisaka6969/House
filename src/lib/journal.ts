@@ -2,8 +2,15 @@ import "server-only";
 import { db } from "./db";
 import type { JournalEntryRow, SportLogRow } from "./types";
 
-export async function getJournalEntriesInRange(fromDate: string, toDateExclusive: string): Promise<JournalEntryRow[]> {
-  const { data, error } = await db().from("journal_entries").select("*").gte("date", fromDate).lt("date", toDateExclusive).order("date", { ascending: true });
+/** 日記は非公開 — 本人の分しか取得しない（相手の本文はサーバーからも送らない）。 */
+export async function getJournalEntriesInRange(ownerId: string, fromDate: string, toDateExclusive: string): Promise<JournalEntryRow[]> {
+  const { data, error } = await db()
+    .from("journal_entries")
+    .select("*")
+    .eq("owner", ownerId)
+    .gte("date", fromDate)
+    .lt("date", toDateExclusive)
+    .order("date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as JournalEntryRow[];
 }

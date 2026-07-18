@@ -90,7 +90,6 @@ export default function Journal() {
   if (!entries || !sportLogs) return <div className="mf-empty">読み込み中…</div>;
 
   const myEntry = entries.find((e) => e.owner === meId && e.date === date);
-  const partnerEntry = entries.find((e) => e.owner !== meId && e.date === date);
   const dayLogs = sportLogs.filter((l) => l.date === date);
 
   const saveEntry = async () => {
@@ -167,7 +166,7 @@ export default function Journal() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="12" title="日記" sub="その日にやったこと・運動の記録。お互いの記録が見られます（編集は本人のみ）。" />
+      <SectionHead no="12" title="日記" sub="その日にやったこと・運動の記録。日記本文は自分だけに表示されます（運動の記録はお互いに見られます）。" />
 
       <div className="mf-row" style={{ justifyContent: "center", gap: 10, marginBottom: 14 }}>
         <button className="mf-iconbtn" onClick={() => setDate(shiftDate(date, -1))} aria-label="前の日">
@@ -213,15 +212,6 @@ export default function Journal() {
         {extracting && <div className="mf-hint">日記からお金の動きを抽出中…</div>}
         {saveMsg && <div className="mf-hint">{saveMsg}</div>}
       </div>
-
-      {partnerEntry && partnerEntry.body && (
-        <div className="mf-panel">
-          <div className="mf-paneltitle">{partnerEntry.owner_name}の日記</div>
-          <div className="mf-numsub" style={{ whiteSpace: "pre-wrap" }}>
-            {partnerEntry.body}
-          </div>
-        </div>
-      )}
 
       {journalExpenses.length > 0 && (
         <div className="mf-panel">

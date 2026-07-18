@@ -7,14 +7,14 @@ import { monthRange } from "@/lib/expenses";
 
 export async function GET(req: Request) {
   try {
-    await requireOwnerSession();
+    const session = await requireOwnerSession();
     const { searchParams } = new URL(req.url);
     const m = searchParams.get("month") ?? nowMonthKeyJST();
     if (!isValidMonthKey(m)) throw new ApiError(400, "invalid month");
 
     const { from, toExclusive } = monthRange(m);
     const [entryRows, logRows, profiles] = await Promise.all([
-      getJournalEntriesInRange(from, toExclusive),
+      getJournalEntriesInRange(session.profile_id, from, toExclusive),
       getSportLogsInRange(from, toExclusive),
       getAllProfiles(),
     ]);
