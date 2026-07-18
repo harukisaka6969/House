@@ -127,8 +127,8 @@ export default function Journal() {
           ? `✓ 日記からお金の動きを${r.expenses.length}件、支出明細にインポートしました（内容を確認してください）。`
           : "この日記からはお金の動きが見つかりませんでした。"
       );
-    } catch {
-      setSaveMsg("インポートに失敗しました。");
+    } catch (e) {
+      setSaveMsg(`インポートに失敗しました。${e instanceof Error ? e.message : ""}`);
     } finally {
       setExtracting(false);
     }
