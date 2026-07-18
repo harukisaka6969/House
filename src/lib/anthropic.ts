@@ -132,6 +132,29 @@ export async function draftJournalFromExpenses(
   return joinText(res.content).trim();
 }
 
+/** 日記本文から、お金を使った・受け取ったことに関係する記述だけを短く抜き出す（分類の前段）。関係する記述がなければ空配列。 */
+export async function extractMoneyMentions(text: string): Promise<string[]> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `次の日記本文から、その日お金を使った・受け取ったことに関係する記述だけを、元の文をもとに1件ずつ短く抜き出してください。世間話・感想・天気・体調などお金に無関係な部分は含めないでください。該当する記述が一つもなければ空配列を返してください。
+JSON配列のみを返してください（例: ["カフェで800円払った", "友達に3000円貸した"]）。前置きやコードブロックは不要です。
+日記本文: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  try {
+    const arr = JSON.parse(t);
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface ExtractedMoneyEvent {
   category?: string;
   account?: string;
@@ -139,7 +162,7 @@ export interface ExtractedMoneyEvent {
   memo?: string;
 }
 
-/** 日記本文からその日のお金の動き（支出）を推測して抽出する。金額が明示されていない・お金の動きがない場合は空配列を返す。 */
+/** お金に関係する記述（extractMoneyMentionsの抜き出し結果など）を、口座・カテゴリ・金額に分類する。 */
 export async function extractExpensesFromJournal(
   text: string,
   accounts: { id: string; name: string }[],
