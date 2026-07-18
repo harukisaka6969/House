@@ -38,6 +38,10 @@ export default function Journal() {
     memo: "",
   });
   const draftedForDate = useRef<string | null>(null);
+  const dateRef = useRef(date);
+  dateRef.current = date;
+  const bodyDraftRef = useRef(bodyDraft);
+  bodyDraftRef.current = bodyDraft;
 
   const monthKey = date.slice(0, 7);
   const meId = me?.profile.id;
@@ -73,11 +77,13 @@ export default function Journal() {
 
     // 日記が空でまだこの日を下書きしていなければ、その日の支出からAIで自動下書きする。
     if (!mine?.body && draftedForDate.current !== date) {
+      const requestDate = date;
       draftedForDate.current = date;
       setDrafting(true);
-      apiPost<{ draft: string; hasExpenses: boolean }>(`/api/journal/${date}/auto-draft`)
+      apiPost<{ draft: string; hasExpenses: boolean }>(`/api/journal/${requestDate}/auto-draft`)
         .then((r) => {
-          if (r.hasExpenses && r.draft) {
+          // 取得中に別の日へ移動した・すでに入力を始めていた場合は上書きしない。
+          if (r.hasExpenses && r.draft && dateRef.current === requestDate && bodyDraftRef.current === "") {
             setBodyDraft(r.draft);
             setIsAiDraft(true);
           }
@@ -98,18 +104,6 @@ export default function Journal() {
       setIsAiDraft(false);
       setSaveMsg("✓ 保存しました。");
       load();
-      setExtracting(true);
-      apiPost<{ expenses: ExpenseOut[] }>(`/api/journal/${date}/extract-money`, { text: bodyDraft })
-        .then((r) => {
-          setJournalExpenses(r.expenses);
-          setSaveMsg(
-            r.expenses.length > 0
-              ? `✓ 保存しました。日記からお金の動きを${r.expenses.length}件記録しました（内容を確認してください）。`
-              : "✓ 保存しました。"
-          );
-        })
-        .catch(() => {})
-        .finally(() => setExtracting(false));
     } catch {
       setSaveMsg("保存に失敗しました。");
     }
@@ -120,6 +114,24 @@ export default function Journal() {
     await apiDelete(`/api/journal/${date}`);
     setBodyDraft("");
     load();
+  };
+
+  const importMoneyFromDiary = async () => {
+    if (!bodyDraft.trim()) return;
+    setExtracting(true);
+    try {
+      const r = await apiPost<{ expenses: ExpenseOut[] }>(`/api/journal/${date}/extract-money`, { text: bodyDraft });
+      setJournalExpenses(r.expenses);
+      setSaveMsg(
+        r.expenses.length > 0
+          ? `✓ 日記からお金の動きを${r.expenses.length}件、支出明細にインポートしました（内容を確認してください）。`
+          : "この日記からはお金の動きが見つかりませんでした。"
+      );
+    } catch {
+      setSaveMsg("インポートに失敗しました。");
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const startEditExpense = (e: ExpenseOut) => {
@@ -192,7 +204,7 @@ export default function Journal() {
         <textarea
           className="mf-input"
           style={{ width: "100%", minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
-          placeholder="今日あったこと・やったことを書く…（保存すると、内容からお金の動きも自動で記録されます）"
+          placeholder="今日あったこと・やったことを書く…"
           value={bodyDraft}
           onChange={(e) => {
             setBodyDraft(e.target.value);
@@ -208,8 +220,13 @@ export default function Journal() {
               削除
             </button>
           )}
+          <button className="mf-btn ghost" disabled={!bodyDraft.trim() || extracting} onClick={importMoneyFromDiary}>
+            {extracting ? "インポート中…" : "📥 支出明細にインポート"}
+          </button>
         </div>
-        {extracting && <div className="mf-hint">日記からお金の動きを抽出中…</div>}
+        <div className="mf-hint" style={{ opacity: 0.7 }}>
+          日記の内容からAIがお金の動きを推測し、支出として記録します。押すたびに、この日の日記由来の記録を最新の内容で上書きします。
+        </div>
         {saveMsg && <div className="mf-hint">{saveMsg}</div>}
       </div>
 
