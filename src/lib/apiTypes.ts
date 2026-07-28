@@ -228,6 +228,34 @@ export interface RehabLogOut {
   created_at: string;
 }
 
+export interface GymSetEntry {
+  weight: number;
+  reps: number;
+}
+
+export interface GymSplitOut {
+  id: string;
+  code: string;
+  label: string;
+  sort: number;
+}
+
+export interface GymExerciseOut {
+  id: string;
+  split_id: string;
+  name: string;
+  sort: number;
+}
+
+export interface GymLogOut {
+  id: string;
+  exercise_id: string;
+  date: string;
+  sets: GymSetEntry[];
+  note: string;
+  created_at: string;
+}
+
 export interface InventoryItemOut {
   id: string;
   name: string;

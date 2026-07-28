@@ -191,6 +191,41 @@ export interface RehabLogRow {
   created_at: string;
 }
 
+/* ---- 筋トレログ ---- */
+
+export interface GymSetEntry {
+  weight: number;
+  reps: number;
+}
+
+export interface GymSplitRow {
+  id: string;
+  owner: string;
+  code: string;
+  label: string;
+  sort: number;
+  created_at: string;
+}
+
+export interface GymExerciseRow {
+  id: string;
+  split_id: string;
+  owner: string;
+  name: string;
+  sort: number;
+  created_at: string;
+}
+
+export interface GymLogRow {
+  id: string;
+  owner: string;
+  exercise_id: string;
+  date: string;
+  sets: GymSetEntry[];
+  note: string;
+  created_at: string;
+}
+
 /* ---- 在庫管理（消耗品）---- */
 
 export interface InventoryItemRow {
