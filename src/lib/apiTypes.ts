@@ -240,10 +240,13 @@ export interface GymSplitOut {
   sort: number;
 }
 
+export type GymExerciseType = "strength" | "cardio";
+
 export interface GymExerciseOut {
   id: string;
   split_id: string;
   name: string;
+  type: GymExerciseType;
   sort: number;
 }
 
@@ -252,6 +255,8 @@ export interface GymLogOut {
   exercise_id: string;
   date: string;
   sets: GymSetEntry[];
+  duration_minutes: number | null;
+  distance_km: number | null;
   note: string;
   created_at: string;
 }

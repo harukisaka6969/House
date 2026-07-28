@@ -28,3 +28,26 @@ export function suggestNext(logsDesc: { date: string; sets: GymSetEntry[] }[]): 
 
   return `前回 ${weightLabel} × ${lastSummary}。同じ重量で回数の維持〜微増を狙いましょう。`;
 }
+
+/** 有酸素種目の次回の目安。時間・距離の伸びから単純に判断する。 */
+export function suggestCardioNext(
+  logsDesc: { date: string; duration_minutes: number | null; distance_km: number | null }[]
+): string {
+  const withData = logsDesc.filter((l) => l.duration_minutes || l.distance_km);
+  if (withData.length === 0) return "まだ記録がありません。無理のない時間・距離から始めましょう。";
+
+  const last = withData[0];
+  const lastLabel = [last.duration_minutes ? `${last.duration_minutes}分` : null, last.distance_km ? `${last.distance_km}km` : null]
+    .filter(Boolean)
+    .join(" ／ ");
+
+  const prev = withData[1];
+  if (prev && last.distance_km && prev.distance_km && last.duration_minutes && prev.duration_minutes) {
+    const lastPace = last.duration_minutes / last.distance_km;
+    const prevPace = prev.duration_minutes / prev.distance_km;
+    if (lastPace < prevPace) {
+      return `前回 ${lastLabel}。ペースが上がっています。同じ距離でこのペースを維持してみましょう。`;
+    }
+  }
+  return `前回 ${lastLabel}。時間か距離を少しずつ伸ばしてみましょう。`;
+}

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiDelete } from "@/lib/apiClient";
-import type { GymSplitOut, GymExerciseOut, GymLogOut, GymSetEntry } from "@/lib/apiTypes";
-import { suggestNext } from "@/lib/gymSuggestion";
+import type { GymSplitOut, GymExerciseOut, GymExerciseType, GymLogOut, GymSetEntry } from "@/lib/apiTypes";
+import { suggestNext, suggestCardioNext } from "@/lib/gymSuggestion";
 import { todayStrJST } from "@/lib/date";
 import { SectionHead } from "../common";
 
@@ -12,7 +12,13 @@ interface SetInput {
   reps: string;
 }
 
+interface CardioInput {
+  duration: string;
+  distance: string;
+}
+
 const emptySetInput: SetInput = { weight: "", reps: "" };
+const emptyCardioInput: CardioInput = { duration: "", distance: "" };
 
 function fmtWeight(w: number): string {
   return w > 0 ? `${w}kg` : "自重";
@@ -28,9 +34,11 @@ export default function GymLog() {
   const [showAddSplit, setShowAddSplit] = useState(false);
 
   const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseType, setNewExerciseType] = useState<GymExerciseType>("strength");
   const [showAddExercise, setShowAddExercise] = useState(false);
 
   const [setInputs, setSetInputs] = useState<Record<string, SetInput[]>>({});
+  const [cardioInputs, setCardioInputs] = useState<Record<string, CardioInput>>({});
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
 
   const load = () => {
@@ -53,6 +61,8 @@ export default function GymLog() {
 
   const getSetInputs = (exerciseId: string): SetInput[] => setInputs[exerciseId] ?? [{ ...emptySetInput }];
   const setExerciseInputs = (exerciseId: string, sets: SetInput[]) => setSetInputs((m) => ({ ...m, [exerciseId]: sets }));
+  const getCardioInput = (exerciseId: string): CardioInput => cardioInputs[exerciseId] ?? { ...emptyCardioInput };
+  const setCardioInput = (exerciseId: string, input: CardioInput) => setCardioInputs((m) => ({ ...m, [exerciseId]: input }));
 
   const addSplit = async () => {
     if (!newSplitCode.trim() || !newSplitLabel.trim()) return;
@@ -77,8 +87,14 @@ export default function GymLog() {
 
   const addExercise = async () => {
     if (!newExerciseName.trim() || !splitId) return;
-    await apiPost("/api/gym-log/exercises", { split_id: splitId, name: newExerciseName.trim(), sort: splitExercises.length });
+    await apiPost("/api/gym-log/exercises", {
+      split_id: splitId,
+      name: newExerciseName.trim(),
+      sort: splitExercises.length,
+      type: newExerciseType,
+    });
     setNewExerciseName("");
+    setNewExerciseType("strength");
     setShowAddExercise(false);
     load();
   };
@@ -89,7 +105,7 @@ export default function GymLog() {
     load();
   };
 
-  const submitLog = async (exerciseId: string) => {
+  const submitStrengthLog = async (exerciseId: string) => {
     const inputs = getSetInputs(exerciseId);
     const sets: GymSetEntry[] = inputs
       .filter((s) => s.reps.trim() !== "")
@@ -116,6 +132,33 @@ export default function GymLog() {
     }
   };
 
+  const submitCardioLog = async (exerciseId: string) => {
+    const input = getCardioInput(exerciseId);
+    const duration = input.duration.trim() ? Number(input.duration) : null;
+    const distance = input.distance.trim() ? Number(input.distance) : null;
+    if (!duration && !distance) {
+      setMsg("時間か距離のどちらかは入力してください。");
+      return;
+    }
+    setMsg("");
+    try {
+      await apiPost("/api/gym-log/logs", {
+        exercise_id: exerciseId,
+        date: todayStrJST(),
+        duration_minutes: duration,
+        distance_km: distance,
+        note: noteInputs[exerciseId] ?? "",
+        splitLabel: split?.label,
+      });
+      setCardioInput(exerciseId, { ...emptyCardioInput });
+      setNoteInputs((m) => ({ ...m, [exerciseId]: "" }));
+      setMsg("✓ 記録しました。");
+      load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "記録に失敗しました。");
+    }
+  };
+
   const deleteLog = async (id: string) => {
     await apiDelete(`/api/gym-log/logs/${id}`);
     load();
@@ -123,7 +166,7 @@ export default function GymLog() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="14" title="筋トレログ" sub="今日はどの部位をやるか選んで、前回の記録と提案を見ながら記録します。" />
+      <SectionHead no="14" title="筋トレログ" sub="今日はどの部位をやるか選んで、前回の記録と提案を見ながら記録します。有酸素はどのスプリットでも記録できます。" />
 
       {splits.length === 0 && !showAddSplit && (
         <div className="mf-panel">
@@ -150,11 +193,11 @@ export default function GymLog() {
       {showAddSplit && (
         <div className="mf-panel">
           <label className="mf-fieldlabel" htmlFor="gym-split-code">
-            コード（例: A）
+            コード（例: F）
           </label>
           <input id="gym-split-code" className="mf-input" value={newSplitCode} onChange={(e) => setNewSplitCode(e.target.value)} />
           <label className="mf-fieldlabel" htmlFor="gym-split-label">
-            名前（例: Chest &amp; Back）
+            名前（例: Cardio）
           </label>
           <input id="gym-split-label" className="mf-input" value={newSplitLabel} onChange={(e) => setNewSplitLabel(e.target.value)} />
           <div className="mf-row" style={{ marginTop: 10 }}>
@@ -183,13 +226,21 @@ export default function GymLog() {
 
           {splitExercises.map((ex) => {
             const exLogs = logsForExercise(ex.id);
-            const suggestion = suggestNext(exLogs.map((l) => ({ date: l.date, sets: l.sets })));
-            const inputs = getSetInputs(ex.id);
+            const isCardio = ex.type === "cardio";
+            const suggestion = isCardio
+              ? suggestCardioNext(exLogs.map((l) => ({ date: l.date, duration_minutes: l.duration_minutes, distance_km: l.distance_km })))
+              : suggestNext(exLogs.map((l) => ({ date: l.date, sets: l.sets })));
+
             return (
               <div key={ex.id} className="mf-panel">
                 <div className="mf-row" style={{ justifyContent: "space-between" }}>
                   <div className="mf-paneltitle" style={{ marginBottom: 0 }}>
                     {ex.name}
+                    {isCardio && (
+                      <span className="mf-chip" style={{ marginLeft: 6, fontSize: 10 }}>
+                        有酸素
+                      </span>
+                    )}
                   </div>
                   <button className="mf-del" onClick={() => removeExercise(ex.id)}>
                     ×
@@ -206,7 +257,12 @@ export default function GymLog() {
                     {exLogs.slice(0, 3).map((l, i) => (
                       <span key={l.id}>
                         {i > 0 && " ／ "}
-                        {l.date.slice(5)}: {fmtWeight(l.sets[0]?.weight ?? 0)} × {l.sets.map((s) => s.reps).join("/")}
+                        {l.date.slice(5)}:{" "}
+                        {isCardio
+                          ? [l.duration_minutes ? `${l.duration_minutes}分` : null, l.distance_km ? `${l.distance_km}km` : null]
+                              .filter(Boolean)
+                              .join(" ")
+                          : `${fmtWeight(l.sets[0]?.weight ?? 0)} × ${l.sets.map((s) => s.reps).join("/")}`}
                         <button
                           className="mf-del"
                           style={{ padding: "0 2px", marginLeft: 2 }}
@@ -221,46 +277,75 @@ export default function GymLog() {
                 )}
 
                 <div style={{ marginTop: 10 }}>
-                  {inputs.map((s, i) => (
-                    <div key={i} className="mf-row" style={{ marginBottom: 6 }}>
+                  {isCardio ? (
+                    <div className="mf-row" style={{ marginBottom: 6 }}>
                       <input
                         className="mf-input mf-mono"
-                        style={{ maxWidth: 100 }}
+                        style={{ maxWidth: 120 }}
                         type="number"
-                        placeholder="kg"
-                        value={s.weight}
-                        onChange={(e) => {
-                          const next = [...inputs];
-                          next[i] = { ...next[i], weight: e.target.value };
-                          setExerciseInputs(ex.id, next);
-                        }}
+                        placeholder="時間（分）"
+                        value={getCardioInput(ex.id).duration}
+                        onChange={(e) => setCardioInput(ex.id, { ...getCardioInput(ex.id), duration: e.target.value })}
                       />
                       <input
                         className="mf-input mf-mono"
-                        style={{ maxWidth: 100 }}
+                        style={{ maxWidth: 120 }}
                         type="number"
-                        placeholder="回数"
-                        value={s.reps}
-                        onChange={(e) => {
-                          const next = [...inputs];
-                          next[i] = { ...next[i], reps: e.target.value };
-                          setExerciseInputs(ex.id, next);
-                        }}
+                        placeholder="距離（km）"
+                        value={getCardioInput(ex.id).distance}
+                        onChange={(e) => setCardioInput(ex.id, { ...getCardioInput(ex.id), distance: e.target.value })}
                       />
-                      {inputs.length > 1 && (
-                        <button className="mf-del" onClick={() => setExerciseInputs(ex.id, inputs.filter((_, j) => j !== i))}>
-                          ×
-                        </button>
-                      )}
                     </div>
-                  ))}
-                  <button
-                    className="mf-btn ghost"
-                    style={{ padding: "4px 10px" }}
-                    onClick={() => setExerciseInputs(ex.id, [...inputs, { weight: inputs[inputs.length - 1]?.weight ?? "", reps: "" }])}
-                  >
-                    ＋ セット追加
-                  </button>
+                  ) : (
+                    getSetInputs(ex.id).map((s, i) => {
+                      const inputs = getSetInputs(ex.id);
+                      return (
+                        <div key={i} className="mf-row" style={{ marginBottom: 6 }}>
+                          <input
+                            className="mf-input mf-mono"
+                            style={{ maxWidth: 100 }}
+                            type="number"
+                            placeholder="kg"
+                            value={s.weight}
+                            onChange={(e) => {
+                              const next = [...inputs];
+                              next[i] = { ...next[i], weight: e.target.value };
+                              setExerciseInputs(ex.id, next);
+                            }}
+                          />
+                          <input
+                            className="mf-input mf-mono"
+                            style={{ maxWidth: 100 }}
+                            type="number"
+                            placeholder="回数"
+                            value={s.reps}
+                            onChange={(e) => {
+                              const next = [...inputs];
+                              next[i] = { ...next[i], reps: e.target.value };
+                              setExerciseInputs(ex.id, next);
+                            }}
+                          />
+                          {inputs.length > 1 && (
+                            <button className="mf-del" onClick={() => setExerciseInputs(ex.id, inputs.filter((_, j) => j !== i))}>
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                  {!isCardio && (
+                    <button
+                      className="mf-btn ghost"
+                      style={{ padding: "4px 10px" }}
+                      onClick={() => {
+                        const inputs = getSetInputs(ex.id);
+                        setExerciseInputs(ex.id, [...inputs, { weight: inputs[inputs.length - 1]?.weight ?? "", reps: "" }]);
+                      }}
+                    >
+                      ＋ セット追加
+                    </button>
+                  )}
                   <input
                     className="mf-input"
                     style={{ marginTop: 8 }}
@@ -269,7 +354,7 @@ export default function GymLog() {
                     onChange={(e) => setNoteInputs((m) => ({ ...m, [ex.id]: e.target.value }))}
                   />
                   <div className="mf-row" style={{ marginTop: 8 }}>
-                    <button className="mf-btn primary" onClick={() => submitLog(ex.id)}>
+                    <button className="mf-btn primary" onClick={() => (isCardio ? submitCardioLog(ex.id) : submitStrengthLog(ex.id))}>
                       記録する
                     </button>
                   </div>
@@ -290,6 +375,17 @@ export default function GymLog() {
                 value={newExerciseName}
                 onChange={(e) => setNewExerciseName(e.target.value)}
               />
+              <div className="mf-chips" style={{ marginTop: 8 }}>
+                <button
+                  className={"mf-chipbtn" + (newExerciseType === "strength" ? " on" : "")}
+                  onClick={() => setNewExerciseType("strength")}
+                >
+                  筋トレ（重量×回数）
+                </button>
+                <button className={"mf-chipbtn" + (newExerciseType === "cardio" ? " on" : "")} onClick={() => setNewExerciseType("cardio")}>
+                  有酸素（時間・距離）
+                </button>
+              </div>
               <div className="mf-row" style={{ marginTop: 8 }}>
                 <button className="mf-btn primary" onClick={addExercise}>
                   追加する

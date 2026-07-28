@@ -9,7 +9,9 @@ const setSchema = z.object({ weight: z.number().min(0), reps: z.number().int().m
 const bodySchema = z.object({
   exercise_id: z.string(),
   date: z.string(),
-  sets: z.array(setSchema).max(20),
+  sets: z.array(setSchema).max(20).optional(),
+  duration_minutes: z.number().min(0).max(1000).nullable().optional(),
+  distance_km: z.number().min(0).max(500).nullable().optional(),
   note: z.string().max(500).optional(),
   splitLabel: z.string().max(60).optional(),
 });
@@ -18,10 +20,15 @@ const bodySchema = z.object({
 export async function POST(req: Request) {
   try {
     const session = await requireOwnerSession();
-    const { exercise_id, date, sets, note, splitLabel } = bodySchema.parse(await req.json());
+    const { exercise_id, date, sets, duration_minutes, distance_km, note, splitLabel } = bodySchema.parse(await req.json());
     if (!isValidDateStr(date)) throw new ApiError(400, "invalid date");
 
-    const log = await createLog(session.profile_id, exercise_id, date, sets, note ?? "");
+    const log = await createLog(session.profile_id, exercise_id, date, {
+      sets: sets ?? [],
+      durationMinutes: duration_minutes ?? null,
+      distanceKm: distance_km ?? null,
+      note: note ?? "",
+    });
 
     const existingSportLogs = await getSportLogsInRange(date, nextDayStr(date));
     const hasGymLog = existingSportLogs.some((l) => l.owner === session.profile_id && l.activity.includes("ジム"));

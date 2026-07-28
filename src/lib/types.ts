@@ -207,11 +207,14 @@ export interface GymSplitRow {
   created_at: string;
 }
 
+export type GymExerciseType = "strength" | "cardio";
+
 export interface GymExerciseRow {
   id: string;
   split_id: string;
   owner: string;
   name: string;
+  type: GymExerciseType;
   sort: number;
   created_at: string;
 }
@@ -222,6 +225,8 @@ export interface GymLogRow {
   exercise_id: string;
   date: string;
   sets: GymSetEntry[];
+  duration_minutes: number | null;
+  distance_km: number | null;
   note: string;
   created_at: string;
 }

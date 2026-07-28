@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import type { GymSplitRow, GymExerciseRow, GymLogRow, GymSetEntry } from "./types";
+import type { GymSplitRow, GymExerciseRow, GymExerciseType, GymLogRow, GymSetEntry } from "./types";
 
 export async function getSplits(ownerId: string): Promise<GymSplitRow[]> {
   const { data, error } = await db().from("gym_splits").select("*").eq("owner", ownerId).order("sort", { ascending: true });
@@ -26,10 +26,16 @@ export async function getExercises(ownerId: string): Promise<GymExerciseRow[]> {
   return (data ?? []) as GymExerciseRow[];
 }
 
-export async function createExercise(ownerId: string, splitId: string, name: string, sort: number): Promise<GymExerciseRow> {
+export async function createExercise(
+  ownerId: string,
+  splitId: string,
+  name: string,
+  sort: number,
+  type: GymExerciseType = "strength"
+): Promise<GymExerciseRow> {
   const { data, error } = await db()
     .from("gym_exercises")
-    .insert({ owner: ownerId, split_id: splitId, name, sort })
+    .insert({ owner: ownerId, split_id: splitId, name, sort, type })
     .select("*")
     .single();
   if (error) throw error;
@@ -55,16 +61,25 @@ export async function getRecentLogs(ownerId: string, limit = 800): Promise<GymLo
   return (data ?? []) as GymLogRow[];
 }
 
-export async function createLog(
-  ownerId: string,
-  exerciseId: string,
-  date: string,
-  sets: GymSetEntry[],
-  note: string
-): Promise<GymLogRow> {
+export interface NewGymLogInput {
+  sets: GymSetEntry[];
+  durationMinutes: number | null;
+  distanceKm: number | null;
+  note: string;
+}
+
+export async function createLog(ownerId: string, exerciseId: string, date: string, input: NewGymLogInput): Promise<GymLogRow> {
   const { data, error } = await db()
     .from("gym_logs")
-    .insert({ owner: ownerId, exercise_id: exerciseId, date, sets, note })
+    .insert({
+      owner: ownerId,
+      exercise_id: exerciseId,
+      date,
+      sets: input.sets,
+      duration_minutes: input.durationMinutes,
+      distance_km: input.distanceKm,
+      note: input.note,
+    })
     .select("*")
     .single();
   if (error) throw error;
