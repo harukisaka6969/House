@@ -27,3 +27,8 @@ export function makeNameLookup(profiles: Profile[]): (profileId: string) => stri
   const map = new Map(profiles.map((p) => [p.id, p.name]));
   return (id: string) => map.get(id) ?? "？";
 }
+
+export async function findProfileBySlug(slug: string): Promise<Profile | null> {
+  const profiles = await getAllProfiles();
+  return profiles.find((p) => p.slug === slug) ?? null;
+}

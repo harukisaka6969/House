@@ -15,6 +15,18 @@ export async function getRehabLogsInRange(ownerId: string, fromDate: string, toD
   return (data ?? []) as RehabLogRow[];
 }
 
+/** 記録の有無（日付）だけを返す。中身（data）は一切含めない — カレンダーの印用に相手にも公開してよい情報。 */
+export async function getRehabLogDatesInRange(ownerId: string, fromDate: string, toDateExclusive: string): Promise<string[]> {
+  const { data, error } = await db()
+    .from("rehab_logs")
+    .select("date")
+    .eq("owner", ownerId)
+    .gte("date", fromDate)
+    .lt("date", toDateExclusive);
+  if (error) throw error;
+  return [...new Set((data ?? []).map((r) => r.date as string))];
+}
+
 export async function createRehabLog(
   ownerId: string,
   date: string,

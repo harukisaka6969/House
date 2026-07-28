@@ -9,6 +9,7 @@ import { categoriesForAccount } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import RehabPractice from "./RehabPractice";
+import RehabCalendarBadge from "./RehabCalendarBadge";
 
 const emptySportForm = { activity: "", duration_minutes: "", distance_km: "", memo: "" };
 
@@ -355,7 +356,11 @@ export default function Journal() {
         )}
       </div>
 
-      {me?.profile.slug === "haruki" && <RehabPractice date={date} onSelectDate={setDate} />}
+      {me?.profile.slug === "haruki" ? (
+        <RehabPractice date={date} onSelectDate={setDate} />
+      ) : (
+        <RehabCalendarBadge date={date} onSelectDate={setDate} />
+      )}
     </section>
   );
 }
