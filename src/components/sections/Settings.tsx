@@ -1,23 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
+import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
-import { describeWebAuthnError } from "@/lib/webauthnErrors";
 import AnalysisExport from "./AnalysisExport";
 
 const emptyFamilyForm = { slug: "", name: "", pin: "" };
 
 export default function Settings() {
-  const { month, monthKey, settings, refreshMonth, refreshSettings, refreshMe, me } = useDashboard();
+  const { month, monthKey, settings, refreshMonth, refreshSettings } = useDashboard();
   const [incomeDraft, setIncomeDraft] = useState<{ id?: string; name: string; amount: number }[] | null>(null);
   const [acctDraft, setAcctDraft] = useState<Record<string, { name: string; budget: number }> | null>(null);
   const [pinForm, setPinForm] = useState({ current: "", next: "", confirm: "" });
   const [pinMsg, setPinMsg] = useState("");
-  const [deviceMsg, setDeviceMsg] = useState("");
-  const [regBusy, setRegBusy] = useState(false);
   const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
   const [familyMsg, setFamilyMsg] = useState("");
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -65,34 +61,6 @@ export default function Settings() {
     } catch (e) {
       setPinMsg(e instanceof Error ? e.message : "PINの変更に失敗しました。");
     }
-  };
-
-  const registerPasskey = async () => {
-    setDeviceMsg("");
-    setRegBusy(true);
-    try {
-      if (!browserSupportsWebAuthn()) throw new Error("このブラウザ（またはアプリ内ブラウザ）はパスキーに対応していません。Safariで直接開いてお試しください。");
-      const options = await apiGet<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/webauthn/register-options");
-      let response;
-      try {
-        response = await startRegistration({ optionsJSON: options });
-      } catch (ceremonyErr) {
-        throw new Error(describeWebAuthnError(ceremonyErr));
-      }
-      const deviceName = typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 40) : "このデバイス";
-      await apiPost("/api/auth/webauthn/register-verify", { response, deviceName });
-      setDeviceMsg("✓ このデバイスをFace ID / Touch IDに登録しました。");
-      refreshMe();
-    } catch (e) {
-      setDeviceMsg(e instanceof Error ? e.message : "登録に失敗しました。");
-    } finally {
-      setRegBusy(false);
-    }
-  };
-
-  const removeDevice = async (id: string) => {
-    await apiDelete(`/api/auth/webauthn/${id}`);
-    refreshMe();
   };
 
   const createFamilyAccount = async () => {
@@ -254,30 +222,6 @@ export default function Settings() {
           </button>
         </div>
         {pinMsg && <div className="mf-hint">{pinMsg}</div>}
-      </div>
-
-      <div className="mf-panel">
-        <div className="mf-paneltitle">パスキー（Face ID / Touch ID）</div>
-        <button className="mf-btn primary" disabled={regBusy} onClick={registerPasskey}>
-          {regBusy ? "登録中…" : "このデバイスを登録する"}
-        </button>
-        {deviceMsg && <div className="mf-hint">{deviceMsg}</div>}
-        {(me?.devices.length ?? 0) > 0 && (
-          <div className="mf-list" style={{ marginTop: 10 }}>
-            {me!.devices.map((d) => (
-              <div key={d.id} className="mf-listrow">
-                <span className="mf-listcat">{d.device_name || "デバイス"}</span>
-                <span className="mf-listmemo">{new Date(d.created_at).toLocaleDateString("ja-JP")} 登録</span>
-                <button className="mf-del" onClick={() => removeDevice(d.id)}>
-                  削除
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="mf-hint" style={{ opacity: 0.7 }}>
-          パスキーは端末ごとに登録が必要です。新しい端末では一度PINでログインしてから登録してください。
-        </div>
       </div>
 
       <div className="mf-panel">

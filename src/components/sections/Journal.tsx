@@ -12,6 +12,7 @@ import RehabPractice from "./RehabPractice";
 import RehabCalendarBadge from "./RehabCalendarBadge";
 
 const emptySportForm = { activity: "", duration_minutes: "", distance_km: "", memo: "" };
+const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
 function shiftDate(dateStr: string, delta: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -99,6 +100,14 @@ export default function Journal() {
 
   const myEntry = entries.find((e) => e.owner === meId && e.date === date);
   const dayLogs = sportLogs.filter((l) => l.date === date);
+  const gymDays = new Set(sportLogs.filter((l) => l.activity.includes("ジム")).map((l) => l.date));
+
+  const today = todayStrJST();
+  const [calY, calM] = monthKey.split("-").map(Number);
+  const daysInMonth = new Date(calY, calM, 0).getDate();
+  const startDow = new Date(calY, calM - 1, 1).getDay();
+  const calKey = (d: number) => `${monthKey}-${String(d).padStart(2, "0")}`;
+  const calCells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   const saveEntry = async () => {
     try {
@@ -300,6 +309,34 @@ export default function Journal() {
 
       <div className="mf-panel">
         <div className="mf-paneltitle">この日のスポーツ記録</div>
+        {gymDays.size > 0 && (
+          <div className="mf-calgrid" style={{ marginBottom: 10 }}>
+            {DOW.map((d, i) => (
+              <div key={d} className={"mf-calhead" + (i === 0 ? " sun" : i === 6 ? " sat" : "")}>
+                {d}
+              </div>
+            ))}
+            {calCells.map((d, i) => {
+              if (d === null) return <div key={"e" + i} />;
+              const key = calKey(d);
+              return (
+                <button
+                  key={key}
+                  className={"mf-rehabcell" + (date === key ? " sel" : "") + (key === today ? " today" : "")}
+                  onClick={() => setDate(key)}
+                >
+                  {d}
+                  {gymDays.has(key) && <span className="mf-rehabmark blue" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {gymDays.size > 0 && (
+          <div className="mf-hint" style={{ opacity: 0.7, marginBottom: 10 }}>
+            青丸はジムに行った日です（種目に「ジム」を含む記録）。
+          </div>
+        )}
         {dayLogs.length === 0 ? (
           <div className="mf-empty">記録はまだありません。</div>
         ) : (

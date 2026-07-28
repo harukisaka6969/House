@@ -100,7 +100,6 @@ export interface FlowAnalysisResponse {
 export interface MeResponse {
   profile: { id: string; slug: string; name: string; role: "owner" | "family" };
   partner: { name: string; slug: string } | null;
-  devices: { id: string; device_name: string; created_at: string }[];
 }
 
 export interface FamilyAccountOut {

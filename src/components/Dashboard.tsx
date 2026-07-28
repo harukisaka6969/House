@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { shiftMonth } from "@/lib/date";
-import { describeWebAuthnError } from "@/lib/webauthnErrors";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import FamilyDashboard from "./FamilyDashboard";
@@ -63,50 +61,6 @@ export default function Dashboard({ slug }: { slug: string }) {
     <DashboardProvider slug={slug}>
       <DashboardInner />
     </DashboardProvider>
-  );
-}
-
-function PasskeyBanner() {
-  const { me, refreshMe } = useDashboard();
-  const [dismissed, setDismissed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  if (!me || me.devices.length > 0 || dismissed || !browserSupportsWebAuthn()) return null;
-
-  const register = async () => {
-    setBusy(true);
-    setErr("");
-    try {
-      const options = await apiGet<Parameters<typeof startRegistration>[0]["optionsJSON"]>("/api/auth/webauthn/register-options");
-      let response;
-      try {
-        response = await startRegistration({ optionsJSON: options });
-      } catch (ceremonyErr) {
-        throw new Error(describeWebAuthnError(ceremonyErr));
-      }
-      const deviceName = typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 40) : "このデバイス";
-      await apiPost("/api/auth/webauthn/register-verify", { response, deviceName });
-      refreshMe();
-      setDismissed(true);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "登録に失敗しました。");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mf-pinbar" style={{ background: "#181E25", border: "1px solid rgba(245,165,36,0.3)", borderRadius: 10, padding: "10px 14px" }}>
-      <span>このiPhoneのFace IDを登録しますか？次回からワンタップで解錠できます。</span>
-      <button className="mf-btn primary" disabled={busy} onClick={register}>
-        {busy ? "登録中…" : "登録する"}
-      </button>
-      <button className="mf-btn ghost" onClick={() => setDismissed(true)}>
-        あとで
-      </button>
-      {err && <span style={{ color: "#F26D5F", fontSize: 12 }}>{err}</span>}
-    </div>
   );
 }
 
@@ -209,7 +163,6 @@ function DashboardInner() {
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
-        <PasskeyBanner />
         <LowStockBanner onOpenInventory={() => setView("inventory")} />
       </div>
 
