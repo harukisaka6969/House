@@ -10,7 +10,7 @@ const emptyFamilyForm = { slug: "", name: "", pin: "" };
 
 export default function Settings() {
   const { month, monthKey, settings, refreshMonth, refreshSettings } = useDashboard();
-  const [incomeDraft, setIncomeDraft] = useState<{ id?: string; name: string; amount: number }[] | null>(null);
+  const [incomeDraft, setIncomeDraft] = useState<{ id?: string; name: string; amount: number; owner: string | null }[] | null>(null);
   const [acctDraft, setAcctDraft] = useState<Record<string, { name: string; budget: number }> | null>(null);
   const [pinForm, setPinForm] = useState({ current: "", next: "", confirm: "" });
   const [pinMsg, setPinMsg] = useState("");
@@ -22,13 +22,14 @@ export default function Settings() {
 
   if (!month || !settings) return null;
 
-  const incomes: { id?: string; name: string; amount: number }[] = incomeDraft ?? month.incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount }));
+  const incomes: { id?: string; name: string; amount: number; owner: string | null }[] =
+    incomeDraft ?? month.incomes.map((i) => ({ id: i.id, name: i.name, amount: i.amount, owner: i.owner }));
   const accounts = settings.accounts;
   const acctValues = acctDraft ?? Object.fromEntries(accounts.map((a) => [a.id, { name: a.name, budget: a.budget }]));
 
-  const saveIncomes = async (next: { id?: string; name: string; amount: number }[]) => {
+  const saveIncomes = async (next: { id?: string; name: string; amount: number; owner: string | null }[]) => {
     setIncomeDraft(next);
-    await apiPut(`/api/incomes?m=${monthKey}`, { incomes: next.map((i) => ({ name: i.name, amount: i.amount })) });
+    await apiPut(`/api/incomes?m=${monthKey}`, { incomes: next.map((i) => ({ name: i.name, amount: i.amount, owner: i.owner })) });
     refreshMonth();
   };
 
@@ -136,7 +137,7 @@ export default function Settings() {
             </button>
           </div>
         ))}
-        <button className="mf-btn ghost" onClick={() => saveIncomes([...incomes, { name: "", amount: 0 }])}>
+        <button className="mf-btn ghost" onClick={() => saveIncomes([...incomes, { name: "", amount: 0, owner: null }])}>
           ＋ 収入源を追加
         </button>
       </div>

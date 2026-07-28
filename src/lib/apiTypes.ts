@@ -261,6 +261,17 @@ export interface GymLogOut {
   created_at: string;
 }
 
+export interface RecurringExpenseOut {
+  id: string;
+  account_id: AccountId;
+  category: string;
+  amount: number;
+  memo: string;
+  day_of_month: number;
+  active: boolean;
+  last_generated_month: string | null;
+}
+
 export interface MealLogOut {
   id: string;
   date: string;

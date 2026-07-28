@@ -5,15 +5,17 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recha
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import { CAT_COLORS, categoriesForAccount } from "@/lib/constants";
-import { apiDelete, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
 import { TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
+import RecurringExpenses from "./RecurringExpenses";
 
 export default function ExpensePanel() {
-  const { month, allCats, refreshMonth, refreshSettings, me } = useDashboard();
+  const { month, monthKey, allCats, refreshMonth, refreshSettings, me } = useDashboard();
   const meName = me?.profile.name ?? "";
   const accounts = month?.aggregates.perAccount ?? [];
+  const [entryMode, setEntryMode] = useState<"expense" | "income">("expense");
   const [form, setForm] = useState<{ date: string; account: string; category: string; amount: string; memo: string; sub: string }>({
     date: "",
     account: accounts[0]?.id ?? "a1",
@@ -22,6 +24,7 @@ export default function ExpensePanel() {
     memo: "",
     sub: "",
   });
+  const [incomeForm, setIncomeForm] = useState({ name: "", amount: "" });
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -58,6 +61,27 @@ export default function ExpensePanel() {
       setMsg("✓ 追加しました。" + promoMsg(promoted));
       refreshMonth();
       if (promoted.length) refreshSettings();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "追加に失敗しました。");
+    }
+    setBusy(false);
+  };
+
+  const addIncome = async () => {
+    if (!incomeForm.amount || Number(incomeForm.amount) <= 0) {
+      setMsg("金額を入力してください。");
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = [
+        ...month.incomes.map((i) => ({ name: i.name, amount: i.amount, owner: i.owner })),
+        { name: incomeForm.name.trim() || "収入", amount: Number(incomeForm.amount), owner: me?.profile.id ?? null },
+      ];
+      await apiPut(`/api/incomes?m=${monthKey}`, { incomes: next });
+      setIncomeForm({ name: "", amount: "" });
+      setMsg("✓ 収入を追加しました。");
+      refreshMonth();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "追加に失敗しました。");
     }
@@ -151,7 +175,53 @@ export default function ExpensePanel() {
   return (
     <>
       <div className="mf-panel">
-        <div className="mf-paneltitle">支出を追加</div>
+        <div className="mf-paneltitle">{entryMode === "expense" ? "支出を追加" : "収入を追加"}</div>
+        <div className="mf-chips" style={{ marginBottom: 10 }}>
+          <button className={"mf-chipbtn" + (entryMode === "expense" ? " on" : "")} onClick={() => setEntryMode("expense")}>
+            支出
+          </button>
+          <button className={"mf-chipbtn" + (entryMode === "income" ? " on" : "")} onClick={() => setEntryMode("income")}>
+            収入
+          </button>
+        </div>
+
+        {entryMode === "income" ? (
+          <>
+            <div className="mf-formgrid">
+              <div>
+                <label className="mf-fieldlabel" htmlFor="mf-inc-name">収入源</label>
+                <input
+                  id="mf-inc-name"
+                  className="mf-input"
+                  placeholder="例: 給与、副業"
+                  value={incomeForm.name}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mf-fieldlabel required" htmlFor="mf-inc-amount">金額（円）</label>
+                <input
+                  id="mf-inc-amount"
+                  className="mf-input mf-mono"
+                  type="number"
+                  placeholder="例: 250000"
+                  value={incomeForm.amount}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="mf-hint" style={{ opacity: 0.6 }}>
+              {monthKey.replace("-", "年")}月の収入として登録されます。今月の収入は「設定」からも編集できます。
+            </div>
+            <div className="mf-row" style={{ marginTop: 10 }}>
+              <button className="mf-btn primary" disabled={busy} onClick={addIncome}>
+                追加する
+              </button>
+            </div>
+            {msg && <div className="mf-hint">{msg}</div>}
+          </>
+        ) : (
+          <>
         <div className="mf-row" style={{ marginTop: 0, marginBottom: 10 }}>
           <input
             className="mf-input"
@@ -243,7 +313,11 @@ export default function ExpensePanel() {
           />
         </div>
         {msg && <div className="mf-hint">{msg}</div>}
+          </>
+        )}
       </div>
+
+      <RecurringExpenses />
 
       {month.aggregates.perCategory.length > 0 && (
         <div className="mf-panel">

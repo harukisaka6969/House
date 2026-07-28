@@ -231,6 +231,20 @@ export interface GymLogRow {
   created_at: string;
 }
 
+/** 定期支払（サブスク・保険など）。毎月day_of_monthにexpensesへ自動生成される（source='recurring'）。 */
+export interface RecurringExpenseRow {
+  id: string;
+  owner: string;
+  account_id: AccountId;
+  category: string;
+  amount: number;
+  memo: string;
+  day_of_month: number;
+  active: boolean;
+  last_generated_month: string | null;
+  created_at: string;
+}
+
 /* ---- 食事記録・PFC目標 ---- */
 
 export interface MealLogRow {

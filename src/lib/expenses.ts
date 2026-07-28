@@ -141,6 +141,21 @@ export async function replaceJournalExpenses(
   return (data ?? []) as ExpenseRow[];
 }
 
+/** cron専用: 定期支払（recurring_expenses）から、その支払日のexpensesを1件生成する（source='recurring'）。 */
+export async function createExpenseFromRecurring(
+  ownerId: string,
+  date: string,
+  input: { account_id: string; category: string; amount: number; memo: string }
+): Promise<ExpenseRow> {
+  const { data, error } = await db()
+    .from("expenses")
+    .insert({ owner: ownerId, date, account_id: input.account_id, category: input.category, sub: null, amount: input.amount, memo: input.memo, source: "recurring" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as ExpenseRow;
+}
+
 /** その日の、日記から自動抽出された支出のみ（レビュー・編集UI用）。 */
 export async function getJournalExpensesForDate(ownerId: string, date: string): Promise<ExpenseRow[]> {
   const { data, error } = await db()
