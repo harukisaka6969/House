@@ -23,6 +23,7 @@ export default function FamilyDashboard({ slug }: { slug: string }) {
 
   const logout = async () => {
     await apiPost("/api/auth/logout");
+    sessionStorage.removeItem(`unlocked:${slug}`);
     router.push(`/${slug}`);
   };
 

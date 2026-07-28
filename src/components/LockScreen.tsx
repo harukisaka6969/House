@@ -13,7 +13,19 @@ export default function LockScreen({ slug, name }: { slug: string; name: string 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const goApp = () => router.push(`/${slug}/app`);
+  // このタブ/プロセスで既にPINを通していれば（バックグラウンド→復帰など）再度聞かない。
+  // アプリが完全に終了して再起動された場合はsessionStorageが消えているので、この効果はスキップされ通常通りPIN画面が出る。
+  useEffect(() => {
+    if (sessionStorage.getItem(`unlocked:${slug}`) === "1") {
+      router.replace(`/${slug}/app`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  const goApp = () => {
+    sessionStorage.setItem(`unlocked:${slug}`, "1");
+    router.push(`/${slug}/app`);
+  };
 
   const submitPin = async (value: string) => {
     setBusy(true);
