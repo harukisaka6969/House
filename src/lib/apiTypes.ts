@@ -261,6 +261,24 @@ export interface GymLogOut {
   created_at: string;
 }
 
+export interface MealLogOut {
+  id: string;
+  date: string;
+  description: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  created_at: string;
+}
+
+export interface PfcTargetOut {
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+}
+
 export interface InventoryItemOut {
   id: string;
   name: string;

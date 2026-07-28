@@ -231,6 +231,29 @@ export interface GymLogRow {
   created_at: string;
 }
 
+/* ---- 食事記録・PFC目標 ---- */
+
+export interface MealLogRow {
+  id: string;
+  owner: string;
+  date: string;
+  description: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  created_at: string;
+}
+
+export interface PfcTargetRow {
+  owner: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  updated_at: string;
+}
+
 /* ---- 在庫管理（消耗品）---- */
 
 export interface InventoryItemRow {

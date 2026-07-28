@@ -193,6 +193,37 @@ export async function extractExpensesFromJournal(
   }
 }
 
+export interface MealEstimate {
+  description: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+}
+
+/** 食事写真 → {description, calories, protein_g, fat_g, carb_g}。大まかな推定であることを前提とする。 */
+export async function estimateMealNutrition(base64: string, mediaType: string): Promise<MealEstimate> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: `この食事の写真から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"description":"料理名や内容の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}`,
+          },
+        ],
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  return JSON.parse(text) as MealEstimate;
+}
+
 /** 家計アドバイザー。system はサーバーが§5準拠で構築したコンテキスト。 */
 export async function runAdvisor(
   system: string,
