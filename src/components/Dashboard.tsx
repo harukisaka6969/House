@@ -25,22 +25,40 @@ import MealLog from "./sections/MealLog";
 import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
 
-const MENU: [string, string][] = [
-  ["summary", "① サマリー"],
-  ["flow", "② お金の流れ"],
-  ["accounts", "③ 口座・判定"],
-  ["expenses", "④ 支出明細"],
-  ["invest", "⑤ 投資"],
-  ["sim", "⑥ シミュレーション"],
-  ["wishlist", "⑧ 買いたいもの"],
-  ["lifeEvents", "⑨ 将来設計"],
-  ["maintenance", "⑩ メンテナンス"],
-  ["inventory", "⑪ 在庫管理"],
-  ["journal", "⑫ 日記"],
-  ["flowAnalysis", "⑬ 資産フロー分析"],
-  ["gymLog", "⑭ 筋トレログ"],
-  ["mealLog", "⑮ 食事ログ"],
-  ["settings", "⑦ 設定"],
+const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
+  {
+    label: "💰 お金",
+    items: [
+      ["summary", "① サマリー"],
+      ["flow", "② お金の流れ"],
+      ["accounts", "③ 口座・判定"],
+      ["expenses", "④ 支出明細"],
+      ["invest", "⑤ 投資"],
+      ["sim", "⑥ シミュレーション"],
+      ["wishlist", "⑧ 買いたいもの"],
+      ["lifeEvents", "⑨ 将来設計"],
+      ["flowAnalysis", "⑬ 資産フロー分析"],
+    ],
+  },
+  {
+    label: "🏃 健康",
+    items: [
+      ["journal", "⑫ 日記"],
+      ["gymLog", "⑭ 筋トレログ"],
+      ["mealLog", "⑮ 食事ログ"],
+    ],
+  },
+  {
+    label: "🏠 くらし",
+    items: [
+      ["maintenance", "⑩ メンテナンス"],
+      ["inventory", "⑪ 在庫管理"],
+    ],
+  },
+  {
+    label: "⚙️ 設定",
+    items: [["settings", "⑦ 設定"]],
+  },
 ];
 
 export default function Dashboard({ slug }: { slug: string }) {
@@ -128,10 +146,16 @@ function DashboardInner() {
               ☰
             </button>
             <div className={"mf-drawer" + (menuOpen ? " open" : "")}>
-              {MENU.map(([id, label]) => (
-                <button key={id} className={"mf-drawitem" + (view === id ? " active" : "")} onClick={() => { setView(id); setMenuOpen(false); }}>
-                  {label}
-                </button>
+              {MENU_GROUPS.map((group, gi) => (
+                <div key={group.label}>
+                  {gi > 0 && <div className="mf-drawsep" />}
+                  <div className="mf-drawgroup">{group.label}</div>
+                  {group.items.map(([id, label]) => (
+                    <button key={id} className={"mf-drawitem" + (view === id ? " active" : "")} onClick={() => { setView(id); setMenuOpen(false); }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               ))}
               <div className="mf-drawsep" />
               <button className="mf-drawitem" onClick={() => router.push(`/${slug}/quick`)}>

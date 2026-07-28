@@ -87,6 +87,7 @@ body {
 .mf-drawitem:hover { background: rgba(245,165,36,0.1); color: #F5A524; }
 .mf-drawitem.active { color: #F5A524; background: rgba(245,165,36,0.08); font-weight: 700; }
 .mf-drawsep { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 6px; }
+.mf-drawgroup { font-size: 11px; letter-spacing: 0.04em; color: #7A8492; padding: 6px 12px 2px; }
 .mf-statsub { font-size: 10.5px; color: #93A0AE; margin-top: 3px; }
 .mf-catbar { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .mf-catbarname { flex: 0 0 72px; font-size: 13px; }
