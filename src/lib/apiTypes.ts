@@ -219,6 +219,16 @@ export interface SportLogOut {
   memo: string;
 }
 
+export type RehabLogKind = "impulse" | "dignity" | "reframe" | "love_check";
+
+export interface RehabLogOut {
+  id: string;
+  date: string;
+  kind: RehabLogKind;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface InventoryItemOut {
   id: string;
   name: string;

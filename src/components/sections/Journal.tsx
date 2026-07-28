@@ -8,6 +8,7 @@ import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import RehabPractice from "./RehabPractice";
 
 const emptySportForm = { activity: "", duration_minutes: "", distance_km: "", memo: "" };
 
@@ -353,6 +354,8 @@ export default function Journal() {
           </div>
         )}
       </div>
+
+      {me?.profile.slug === "haruki" && <RehabPractice date={date} onSelectDate={setDate} />}
     </section>
   );
 }

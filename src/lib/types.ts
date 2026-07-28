@@ -179,6 +179,18 @@ export interface SportLogRow {
   created_at: string;
 }
 
+export type RehabLogKind = "impulse" | "dignity" | "reframe" | "love_check";
+
+/** 個人の振り返り記録（本人のみ閲覧・入力可）。kindごとにdataの中身が異なる。 */
+export interface RehabLogRow {
+  id: string;
+  owner: string;
+  date: string;
+  kind: RehabLogKind;
+  data: Record<string, unknown>;
+  created_at: string;
+}
+
 /* ---- 在庫管理（消耗品）---- */
 
 export interface InventoryItemRow {
