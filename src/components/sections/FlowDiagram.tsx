@@ -3,26 +3,35 @@
 import { fmt } from "@/lib/judge";
 import type { AccountAggregateOut } from "@/lib/apiTypes";
 
-export default function FlowDiagram({ income, accounts }: { income: number; accounts: AccountAggregateOut[] }) {
-  const totalBudget = accounts.reduce((s, a) => s + (a.budget || 0), 0);
-  if (income <= 0 && totalBudget <= 0) {
-    return <div className="mf-panel mf-empty">収入（⑦設定）と口座予算を入力すると、ここに配分の流れが表示されます。</div>;
-  }
-  const base = Math.max(income, totalBudget, 1);
-  const ROW = 82;
-  const H = 24 + accounts.length * ROW;
-  const leftH = Math.max((income / base) * (H - 60), 10);
-  const leftY = 24 + (H - 60 - leftH) / 2;
+const MIN_ROW = 82;
+const TOP_PAD = 24;
+const NODE_PAD = 12;
 
-  const divisor = Math.max(income, totalBudget, 1);
-  const rows = accounts.reduce<Array<AccountAggregateOut & { y: number; nodeH: number; srcY: number; srcH: number }>>((acc, a, i) => {
-    const nodeH = Math.max(((a.budget || 0) / base) * (H - 80), 8);
-    const srcH = income > 0 ? Math.max(leftH * ((a.budget || 0) / divisor), 3) : 0;
-    const srcY = acc.length ? acc[acc.length - 1].srcY + acc[acc.length - 1].srcH : leftY;
-    acc.push({ ...a, y: 20 + i * ROW, nodeH: Math.min(nodeH, 56), srcY, srcH });
-    return acc;
-  }, []);
+export default function FlowDiagram({ income, accounts }: { income: number; accounts: AccountAggregateOut[] }) {
   const totalSpent = accounts.reduce((s, a) => s + (a.spent || 0), 0);
+  if (income <= 0 && totalSpent <= 0) {
+    return <div className="mf-panel mf-empty">収入（⑦設定）と支出を入力すると、ここに配分の流れが表示されます。</div>;
+  }
+  // 帯・ノードの縦の長さは実際の支出額に1:1で比例させる（予算額ではない、上限で潰さない）。
+  // 行の高さは必要な分だけ伸び、隣の行と重ならないようにする。
+  const base = Math.max(income, totalSpent, 1);
+  const pxPerYen = (accounts.length * MIN_ROW) / base;
+
+  let cursorY = TOP_PAD;
+  let srcCursor = 0;
+  const rows = accounts.map((a) => {
+    const nodeH = Math.max((a.spent || 0) * pxPerYen, 8);
+    const rowH = Math.max(nodeH + NODE_PAD * 2, MIN_ROW);
+    const y = cursorY;
+    const srcY0 = srcCursor;
+    cursorY += rowH;
+    srcCursor += nodeH;
+    return { ...a, y, nodeH, srcH: nodeH, srcY0 };
+  });
+  const H = cursorY + 4;
+
+  const leftH = Math.max(income * pxPerYen, 10);
+  const leftY = Math.max(TOP_PAD, (H - leftH) / 2);
   const unalloc = income - totalSpent;
 
   return (
@@ -47,9 +56,10 @@ export default function FlowDiagram({ income, accounts }: { income: number; acco
           {rows.map((r) => {
             const x0 = 38,
               x1 = 250;
-            const nodeY = r.y + 6;
-            const path = `M ${x0} ${r.srcY} C ${x0 + 95} ${r.srcY}, ${x1 - 95} ${nodeY}, ${x1} ${nodeY}
-                          L ${x1} ${nodeY + r.nodeH} C ${x1 - 95} ${nodeY + r.nodeH}, ${x0 + 95} ${r.srcY + r.srcH}, ${x0} ${r.srcY + r.srcH} Z`;
+            const nodeY = r.y + NODE_PAD;
+            const srcY = leftY + r.srcY0;
+            const path = `M ${x0} ${srcY} C ${x0 + 95} ${srcY}, ${x1 - 95} ${nodeY}, ${x1} ${nodeY}
+                          L ${x1} ${nodeY + r.nodeH} C ${x1 - 95} ${nodeY + r.nodeH}, ${x0 + 95} ${srcY + r.srcH}, ${x0} ${srcY + r.srcH} Z`;
             const usedRate = r.budget ? Math.min(r.spent / r.budget, 1) : 0;
             return (
               <g key={r.id}>
