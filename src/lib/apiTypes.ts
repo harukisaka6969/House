@@ -97,6 +97,21 @@ export interface FlowAnalysisResponse {
   categories: string[];
 }
 
+export type ShoppingStore = "seiyu" | "amazon" | "conveni" | "other";
+
+export interface ShoppingItemOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  name: string;
+  store: ShoppingStore;
+  needs_approval: boolean;
+  approved: boolean;
+  approved_by_name: string | null;
+  bought: boolean;
+  created_at: string;
+}
+
 export interface MeResponse {
   profile: { id: string; slug: string; name: string; role: "owner" | "family" };
   partner: { name: string; slug: string } | null;

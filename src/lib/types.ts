@@ -106,6 +106,22 @@ export interface WishlistItemRow {
   created_at: string;
 }
 
+export type ShoppingStore = "seiyu" | "amazon" | "conveni" | "other";
+
+/** 買い物リスト（夫婦で共有）。Amazon・その他はパートナーの承認が必要（needs_approval）。 */
+export interface ShoppingItemRow {
+  id: string;
+  owner: string;
+  name: string;
+  store: ShoppingStore;
+  needs_approval: boolean;
+  approved: boolean;
+  approved_by: string | null;
+  bought: boolean;
+  bought_at: string | null;
+  created_at: string;
+}
+
 export type LifeEventStatus = "active" | "done" | "cancelled";
 
 export interface LifeEventRow {
