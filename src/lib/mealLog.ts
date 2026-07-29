@@ -34,6 +34,20 @@ export async function createMealLog(ownerId: string, input: NewMealLogInput): Pr
   return data as MealLogRow;
 }
 
+export interface MealLogPatch {
+  description?: string;
+  calories?: number;
+  protein_g?: number;
+  fat_g?: number;
+  carb_g?: number;
+}
+
+export async function updateMealLog(id: string, ownerId: string, patch: MealLogPatch): Promise<MealLogRow> {
+  const { data, error } = await db().from("meal_logs").update(patch).eq("id", id).eq("owner", ownerId).select("*").single();
+  if (error) throw error;
+  return data as MealLogRow;
+}
+
 export async function deleteMealLog(id: string, ownerId: string): Promise<boolean> {
   const { data, error } = await db().from("meal_logs").delete().eq("id", id).eq("owner", ownerId).select("id");
   if (error) throw error;

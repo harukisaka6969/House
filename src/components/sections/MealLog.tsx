@@ -40,6 +40,8 @@ export default function MealLog() {
   const [msg, setMsg] = useState("");
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetForm, setTargetForm] = useState(DEFAULT_TARGET);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [logEditForm, setLogEditForm] = useState({ description: "", calories: "", protein_g: "", fat_g: "", carb_g: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const monthKey = date.slice(0, 7);
@@ -98,6 +100,34 @@ export default function MealLog() {
   const remove = async (id: string) => {
     await apiDelete(`/api/meal-logs/${id}`);
     loadLogs();
+  };
+
+  const startEditLog = (l: MealLogOut) => {
+    setEditingLogId(l.id);
+    setLogEditForm({
+      description: l.description,
+      calories: String(Math.round(l.calories)),
+      protein_g: String(Math.round(l.protein_g)),
+      fat_g: String(Math.round(l.fat_g)),
+      carb_g: String(Math.round(l.carb_g)),
+    });
+  };
+
+  const saveEditLog = async () => {
+    if (!editingLogId) return;
+    try {
+      await apiPut(`/api/meal-logs/${editingLogId}`, {
+        description: logEditForm.description,
+        calories: Number(logEditForm.calories) || 0,
+        protein_g: Number(logEditForm.protein_g) || 0,
+        fat_g: Number(logEditForm.fat_g) || 0,
+        carb_g: Number(logEditForm.carb_g) || 0,
+      });
+      setEditingLogId(null);
+      loadLogs();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "更新に失敗しました。");
+    }
   };
 
   const saveTarget = async () => {
@@ -213,17 +243,92 @@ export default function MealLog() {
 
       {dayLogs.length > 0 ? (
         <div className="mf-list" style={{ maxHeight: "none" }}>
-          {dayLogs.map((l) => (
-            <div key={l.id} className="mf-listrow">
-              <span className="mf-listmemo">{l.description || "（内容不明）"}</span>
-              <span className="mf-mono" style={{ flex: "0 0 auto" }}>
-                {Math.round(l.calories)}kcal（P{Math.round(l.protein_g)} F{Math.round(l.fat_g)} C{Math.round(l.carb_g)}）
-              </span>
-              <button className="mf-del" onClick={() => remove(l.id)}>
-                ×
-              </button>
-            </div>
-          ))}
+          {dayLogs.map((l) =>
+            editingLogId === l.id ? (
+              <div key={l.id} className="mf-panel" style={{ margin: "6px 0" }}>
+                <label className="mf-fieldlabel" htmlFor="mf-meal-desc">
+                  内容
+                </label>
+                <input
+                  id="mf-meal-desc"
+                  className="mf-input"
+                  value={logEditForm.description}
+                  onChange={(e) => setLogEditForm({ ...logEditForm, description: e.target.value })}
+                />
+                <div className="mf-formgrid" style={{ marginTop: 8 }}>
+                  <div>
+                    <label className="mf-fieldlabel" htmlFor="mf-meal-cal">
+                      カロリー(kcal)
+                    </label>
+                    <input
+                      id="mf-meal-cal"
+                      className="mf-input mf-mono"
+                      type="number"
+                      value={logEditForm.calories}
+                      onChange={(e) => setLogEditForm({ ...logEditForm, calories: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="mf-fieldlabel" htmlFor="mf-meal-p">
+                      P(g)
+                    </label>
+                    <input
+                      id="mf-meal-p"
+                      className="mf-input mf-mono"
+                      type="number"
+                      value={logEditForm.protein_g}
+                      onChange={(e) => setLogEditForm({ ...logEditForm, protein_g: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="mf-fieldlabel" htmlFor="mf-meal-f">
+                      F(g)
+                    </label>
+                    <input
+                      id="mf-meal-f"
+                      className="mf-input mf-mono"
+                      type="number"
+                      value={logEditForm.fat_g}
+                      onChange={(e) => setLogEditForm({ ...logEditForm, fat_g: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="mf-fieldlabel" htmlFor="mf-meal-c">
+                      C(g)
+                    </label>
+                    <input
+                      id="mf-meal-c"
+                      className="mf-input mf-mono"
+                      type="number"
+                      value={logEditForm.carb_g}
+                      onChange={(e) => setLogEditForm({ ...logEditForm, carb_g: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="mf-row" style={{ marginTop: 10 }}>
+                  <button className="mf-btn primary" onClick={saveEditLog}>
+                    保存する
+                  </button>
+                  <button className="mf-btn ghost" onClick={() => setEditingLogId(null)}>
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={l.id} className="mf-listrow">
+                <span className="mf-listmemo">{l.description || "（内容不明）"}</span>
+                <span className="mf-mono" style={{ flex: "0 0 auto" }}>
+                  {Math.round(l.calories)}kcal（P{Math.round(l.protein_g)} F{Math.round(l.fat_g)} C{Math.round(l.carb_g)}）
+                </span>
+                <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => startEditLog(l)}>
+                  編集
+                </button>
+                <button className="mf-del" onClick={() => remove(l.id)}>
+                  ×
+                </button>
+              </div>
+            )
+          )}
         </div>
       ) : (
         <div className="mf-empty">この日の記録はまだありません。</div>
