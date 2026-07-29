@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiDelete } from "@/lib/apiClient";
 import type { GymSplitOut, GymExerciseOut, GymExerciseType, GymLogOut, GymSetEntry } from "@/lib/apiTypes";
-import { suggestNext, suggestCardioNext } from "@/lib/gymSuggestion";
+import { suggestNext, suggestCardioNext, formatSets } from "@/lib/gymSuggestion";
 import { todayStrJST } from "@/lib/date";
 import { SectionHead } from "../common";
 
@@ -19,10 +19,6 @@ interface CardioInput {
 
 const emptySetInput: SetInput = { weight: "", reps: "" };
 const emptyCardioInput: CardioInput = { duration: "", distance: "" };
-
-function fmtWeight(w: number): string {
-  return w > 0 ? `${w}kg` : "自重";
-}
 
 export default function GymLog() {
   const [data, setData] = useState<{ splits: GymSplitOut[]; exercises: GymExerciseOut[]; logs: GymLogOut[] } | null>(null);
@@ -262,7 +258,7 @@ export default function GymLog() {
                           ? [l.duration_minutes ? `${l.duration_minutes}分` : null, l.distance_km ? `${l.distance_km}km` : null]
                               .filter(Boolean)
                               .join(" ")
-                          : `${fmtWeight(l.sets[0]?.weight ?? 0)} × ${l.sets.map((s) => s.reps).join("/")}`}
+                          : formatSets(l.sets)}
                         <button
                           className="mf-del"
                           style={{ padding: "0 2px", marginLeft: 2 }}
