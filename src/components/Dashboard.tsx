@@ -8,6 +8,7 @@ import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import FamilyDashboard from "./FamilyDashboard";
 import AgentWidget from "./AgentWidget";
+import AppBadgeSync from "./AppBadgeSync";
 import Summary from "./sections/Summary";
 import Flow from "./sections/Flow";
 import Accounts from "./sections/Accounts";
@@ -230,6 +231,7 @@ function DashboardInner() {
         <footer className="mf-footer">データはこのアプリのサーバーに保存されます。投資に関する情報は参考情報であり、投資判断はご自身の責任で。</footer>
       </main>
       <AgentWidget />
+      <AppBadgeSync />
     </div>
   );
 }

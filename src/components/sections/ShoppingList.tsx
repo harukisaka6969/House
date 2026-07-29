@@ -25,6 +25,9 @@ export default function ShoppingList() {
       .catch(() => setItems([]));
   };
   useEffect(load, []);
+  useEffect(() => {
+    apiPost("/api/notifications/mark-seen", { kind: "shopping" }).catch(() => {});
+  }, []);
 
   if (!items) return <div className="mf-empty">読み込み中…</div>;
 

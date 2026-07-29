@@ -117,9 +117,18 @@ export interface ShoppingItemRow {
   needs_approval: boolean;
   approved: boolean;
   approved_by: string | null;
+  approved_at: string | null;
   bought: boolean;
   bought_at: string | null;
   created_at: string;
+}
+
+/** アプリアイコンのバッジ通知用に「いつ見たか」を記録する。 */
+export interface NotificationReadRow {
+  owner: string;
+  shopping_seen_at: string;
+  meals_seen_at: string;
+  updated_at: string;
 }
 
 export type LifeEventStatus = "active" | "done" | "cancelled";

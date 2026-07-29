@@ -43,7 +43,7 @@ export async function approveShoppingItem(id: string, approverId: string): Promi
   if (!existing || existing.owner === approverId) return null;
   const { data, error } = await db()
     .from("shopping_items")
-    .update({ approved: true, approved_by: approverId })
+    .update({ approved: true, approved_by: approverId, approved_at: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();

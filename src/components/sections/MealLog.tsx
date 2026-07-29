@@ -52,6 +52,9 @@ export default function MealLog() {
       .catch(() => setLogs([]));
   };
   useEffect(loadLogs, [monthKey]);
+  useEffect(() => {
+    apiPost("/api/notifications/mark-seen", { kind: "meals" }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     apiGet<{ target: PfcTargetOut | null }>("/api/pfc-target")
