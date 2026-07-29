@@ -2,11 +2,19 @@ import "server-only";
 import { db } from "./db";
 import type { NotificationReadRow } from "./types";
 
+// 初回作成時は「今」ではなくエポックを既読時刻にする — "now"だとその瞬間より前の
+// 承認・食事ログがすべて既読扱いになり、本来届くはずの通知が届かなくなるため。
+const EPOCH = "1970-01-01T00:00:00.000Z";
+
 async function getOrCreateSeen(ownerId: string): Promise<NotificationReadRow> {
   const { data, error } = await db().from("notification_reads").select("*").eq("owner", ownerId).maybeSingle();
   if (error) throw error;
   if (data) return data as NotificationReadRow;
-  const { data: created, error: insErr } = await db().from("notification_reads").insert({ owner: ownerId }).select("*").single();
+  const { data: created, error: insErr } = await db()
+    .from("notification_reads")
+    .insert({ owner: ownerId, shopping_seen_at: EPOCH, meals_seen_at: EPOCH })
+    .select("*")
+    .single();
   if (insErr) throw insErr;
   return created as NotificationReadRow;
 }

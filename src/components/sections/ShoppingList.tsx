@@ -146,25 +146,27 @@ export default function ShoppingList() {
         ) : (
           <div className="mf-list" style={{ maxHeight: "none" }}>
             {pending.map((i) => (
-              <div key={i.id} className="mf-listrow">
-                {canBuy(i) ? (
-                  <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleSelect(i.id)} />
-                ) : (
-                  <span className="mf-hint" style={{ opacity: 0.8, flex: "0 0 auto" }}>
-                    承認待ち
-                  </span>
-                )}
-                <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
-                <span className="mf-listmemo">{i.name}</span>
-                {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
-                {i.needs_approval && !i.approved && i.owner !== myId && (
-                  <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => approve(i.id)}>
-                    承認する
+              <div key={i.id} className="mf-shopitem">
+                <div className="mf-row" style={{ gap: 10 }}>
+                  {canBuy(i) ? (
+                    <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleSelect(i.id)} />
+                  ) : (
+                    <span style={{ width: 16, flex: "0 0 auto" }} />
+                  )}
+                  <span className="mf-shopname">{i.name}</span>
+                  <button className="mf-del" onClick={() => remove(i.id)}>
+                    ×
                   </button>
-                )}
-                <button className="mf-del" onClick={() => remove(i.id)}>
-                  ×
-                </button>
+                </div>
+                <div className="mf-row" style={{ gap: 6, marginTop: 4, marginLeft: 26 }}>
+                  <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
+                  {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
+                  {i.needs_approval && !i.approved && i.owner !== myId && (
+                    <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => approve(i.id)}>
+                      承認する
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -176,18 +178,22 @@ export default function ShoppingList() {
           <div className="mf-paneltitle">購入済み（{bought.length}件）</div>
           <div className="mf-list" style={{ maxHeight: "none" }}>
             {bought.map((i) => (
-              <div key={i.id} className="mf-listrow" style={{ opacity: 0.55 }}>
-                <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
-                <span className="mf-listmemo" style={{ textDecoration: "line-through" }}>
-                  {i.name}
-                </span>
-                {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
-                <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => revert(i.id)}>
-                  戻す
-                </button>
-                <button className="mf-del" onClick={() => remove(i.id)}>
-                  ×
-                </button>
+              <div key={i.id} className="mf-shopitem" style={{ opacity: 0.55 }}>
+                <div className="mf-row" style={{ gap: 10 }}>
+                  <span className="mf-shopname" style={{ textDecoration: "line-through" }}>
+                    {i.name}
+                  </span>
+                  <button className="mf-del" onClick={() => remove(i.id)}>
+                    ×
+                  </button>
+                </div>
+                <div className="mf-row" style={{ gap: 6, marginTop: 4 }}>
+                  <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
+                  {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
+                  <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => revert(i.id)}>
+                    戻す
+                  </button>
+                </div>
               </div>
             ))}
           </div>
