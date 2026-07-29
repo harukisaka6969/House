@@ -22,7 +22,8 @@ export default function FlowDiagram({ income, accounts }: { income: number; acco
     acc.push({ ...a, y: 20 + i * ROW, nodeH: Math.min(nodeH, 56), srcY, srcH });
     return acc;
   }, []);
-  const unalloc = income - totalBudget;
+  const totalSpent = accounts.reduce((s, a) => s + (a.spent || 0), 0);
+  const unalloc = income - totalSpent;
 
   return (
     <div className="mf-panel">
@@ -78,7 +79,7 @@ export default function FlowDiagram({ income, accounts }: { income: number; acco
             未配分（自由に使える余力）: <b className="mf-mono" style={{ color: "#45C48F" }}>{fmt(unalloc)}</b>
           </span>
         )}
-        {unalloc < 0 && <span style={{ color: "#F5A524" }}>予算合計が収入を {fmt(-unalloc)} 上回っています。予算か収入を見直してください。</span>}
+        {unalloc < 0 && <span style={{ color: "#F5A524" }}>支出合計が収入を {fmt(-unalloc)} 上回っています。使いすぎの口座を見直してください。</span>}
       </div>
     </div>
   );
