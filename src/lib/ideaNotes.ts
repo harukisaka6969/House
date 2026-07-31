@@ -9,15 +9,30 @@ export async function getIdeaNotesForBoard(boardId: string, ownerId: string): Pr
   return (data ?? []) as IdeaNoteRow[];
 }
 
-/** 共有(shared)ビュー: 自分・パートナーどちらが共有したメモも、ボードをまたいで1箇所に集約する。 */
+/** 共有(shared)ビュー: 個別に共有したメモ + ボードごと共有にしたボードの全メモを、ボードをまたいで1箇所に集約する。 */
 export async function getSharedIdeaNotes(ownerId: string, partnerId: string | null): Promise<IdeaNoteRow[]> {
   const ownerIds = partnerId ? [ownerId, partnerId] : [ownerId];
-  const { data, error } = await db().from("idea_notes").select("*").in("owner", ownerIds).eq("visibility", "shared");
-  if (error) throw error;
-  return (data ?? []) as IdeaNoteRow[];
+
+  const individual = await db().from("idea_notes").select("*").in("owner", ownerIds).eq("visibility", "shared");
+  if (individual.error) throw individual.error;
+
+  const sharedBoards = await db().from("idea_boards").select("id").in("owner", ownerIds).eq("shared", true);
+  if (sharedBoards.error) throw sharedBoards.error;
+  const sharedBoardIds = (sharedBoards.data ?? []).map((b) => b.id as string);
+
+  let viaBoard: IdeaNoteRow[] = [];
+  if (sharedBoardIds.length > 0) {
+    const r = await db().from("idea_notes").select("*").in("board_id", sharedBoardIds);
+    if (r.error) throw r.error;
+    viaBoard = (r.data ?? []) as IdeaNoteRow[];
+  }
+
+  const merged = new Map<string, IdeaNoteRow>();
+  for (const n of [...((individual.data ?? []) as IdeaNoteRow[]), ...viaBoard]) merged.set(n.id, n);
+  return Array.from(merged.values());
 }
 
-/** タイトル・本文をボード横断で検索する（自分の全メモ + 相手の共有メモ）。 */
+/** タイトル・本文をボード横断で検索する（自分の全メモ + 相手の実質共有メモ＝個別共有 or ボード共有）。 */
 export async function searchIdeaNotes(ownerId: string, partnerId: string | null, query: string): Promise<IdeaNoteRow[]> {
   const pattern = `%${query}%`;
   const ownerIds = partnerId ? [ownerId, partnerId] : [ownerId];
@@ -30,7 +45,14 @@ export async function searchIdeaNotes(ownerId: string, partnerId: string | null,
   const merged = new Map<string, IdeaNoteRow>();
   for (const n of [...(titleHits.data ?? []), ...(contentHits.data ?? [])] as IdeaNoteRow[]) merged.set(n.id, n);
 
-  return Array.from(merged.values()).filter((n) => n.owner === ownerId || n.visibility === "shared");
+  let sharedBoardIds = new Set<string>();
+  if (partnerId) {
+    const r = await db().from("idea_boards").select("id").eq("owner", partnerId).eq("shared", true);
+    if (r.error) throw r.error;
+    sharedBoardIds = new Set((r.data ?? []).map((b) => b.id as string));
+  }
+
+  return Array.from(merged.values()).filter((n) => n.owner === ownerId || n.visibility === "shared" || sharedBoardIds.has(n.board_id));
 }
 
 /** 両端が閲覧可能な接続のみ返す。 */
@@ -77,9 +99,18 @@ async function getNote(id: string): Promise<IdeaNoteRow | null> {
   return (data as IdeaNoteRow | null) ?? null;
 }
 
-/** ownerか、shared化されたメモならパートナーも編集・移動可能。 */
-function canEdit(note: IdeaNoteRow, userId: string): boolean {
-  return note.owner === userId || note.visibility === "shared";
+/** ボードがshared化されているか（存在しなければfalse扱い）。 */
+async function isBoardShared(boardId: string): Promise<boolean> {
+  const { data, error } = await db().from("idea_boards").select("shared").eq("id", boardId).maybeSingle();
+  if (error) throw error;
+  return data?.shared === true;
+}
+
+/** owner本人か、メモ個別が共有中か、メモが属するボードごと共有中なら、パートナーも編集・移動可能。 */
+async function canEdit(note: IdeaNoteRow, userId: string): Promise<boolean> {
+  if (note.owner === userId) return true;
+  if (note.visibility === "shared") return true;
+  return isBoardShared(note.board_id);
 }
 
 export interface IdeaNotePatch {
@@ -92,7 +123,7 @@ export interface IdeaNotePatch {
 
 export async function updateIdeaNote(id: string, userId: string, patch: IdeaNotePatch): Promise<IdeaNoteRow | null> {
   const note = await getNote(id);
-  if (!note || !canEdit(note, userId)) return null;
+  if (!note || !(await canEdit(note, userId))) return null;
 
   const update: Record<string, unknown> = {};
   if (patch.title !== undefined) update.title = patch.title.trim();
@@ -122,7 +153,9 @@ export async function deleteIdeaNote(id: string, ownerId: string): Promise<boole
 
 export async function createIdeaNoteLink(fromId: string, toId: string, userId: string): Promise<IdeaNoteLinkRow | null> {
   const [a, b] = await Promise.all([getNote(fromId), getNote(toId)]);
-  if (!a || !b || !canEdit(a, userId) || !canEdit(b, userId)) return null;
+  if (!a || !b) return null;
+  const [aOk, bOk] = await Promise.all([canEdit(a, userId), canEdit(b, userId)]);
+  if (!aOk || !bOk) return null;
   const { data, error } = await db().from("idea_note_links").insert({ from_note: fromId, to_note: toId }).select("*").single();
   if (error) throw error;
   return data as IdeaNoteLinkRow;
@@ -133,7 +166,9 @@ export async function deleteIdeaNoteLink(id: string, userId: string): Promise<bo
   if (getErr) throw getErr;
   if (!link) return false;
   const [a, b] = await Promise.all([getNote(link.from_note), getNote(link.to_note)]);
-  if (!a || !b || !canEdit(a, userId) || !canEdit(b, userId)) return false;
+  if (!a || !b) return false;
+  const [aOk, bOk] = await Promise.all([canEdit(a, userId), canEdit(b, userId)]);
+  if (!aOk || !bOk) return false;
   const { error } = await db().from("idea_note_links").delete().eq("id", id);
   if (error) throw error;
   return true;

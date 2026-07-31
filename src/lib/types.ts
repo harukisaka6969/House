@@ -134,11 +134,12 @@ export interface NotificationReadRow {
 export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
 export type IdeaNoteVisibility = "private" | "shared";
 
-/** アイデアボード（複数持てるマインドマップ群）の1枚。 */
+/** アイデアボード（複数持てるマインドマップ群）の1枚。sharedがtrueだと中の全メモが自動的に共有扱いになる。 */
 export interface IdeaBoardRow {
   id: string;
   owner: string;
   name: string;
+  shared: boolean;
   created_at: string;
 }
 

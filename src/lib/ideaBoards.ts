@@ -36,6 +36,13 @@ export async function renameIdeaBoard(id: string, ownerId: string, name: string)
   return (data as IdeaBoardRow | null) ?? null;
 }
 
+/** ボード共有プリセットの切り替え。owner本人のみ。 */
+export async function setIdeaBoardShared(id: string, ownerId: string, shared: boolean): Promise<IdeaBoardRow | null> {
+  const { data, error } = await db().from("idea_boards").update({ shared }).eq("id", id).eq("owner", ownerId).select("*").maybeSingle();
+  if (error) throw error;
+  return (data as IdeaBoardRow | null) ?? null;
+}
+
 export async function deleteIdeaBoard(id: string, ownerId: string): Promise<boolean> {
   const { data, error } = await db().from("idea_boards").delete().eq("id", id).eq("owner", ownerId).select("id");
   if (error) throw error;

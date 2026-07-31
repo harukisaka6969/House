@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     const nameOf = makeNameLookup(profiles);
     const myBoards = await getIdeaBoards(session.profile_id);
     const boardNameOf = new Map(myBoards.map((b) => [b.id, b.name]));
+    const boardSharedOf = new Map(myBoards.map((b) => [b.id, b.shared]));
 
     let rows: IdeaNoteRow[];
     if (q) {
@@ -35,22 +36,29 @@ export async function GET(req: Request) {
 
     const links = await getIdeaNoteLinks(rows.map((n) => n.id));
 
-    const notes = rows.map((n) => ({
-      id: n.id,
-      owner: n.owner,
-      owner_name: nameOf(n.owner),
-      board_id: n.board_id,
-      board_name: n.owner === session.profile_id ? boardNameOf.get(n.board_id) ?? null : null,
-      title: n.title,
-      content: n.content,
-      photo_data_url: n.photo_data_url,
-      color: n.color,
-      x: n.x,
-      y: n.y,
-      visibility: n.visibility,
-      mine: n.owner === session.profile_id,
-      created_at: n.created_at,
-    }));
+    const notes = rows.map((n) => {
+      const mine = n.owner === session.profile_id;
+      // 相手のメモがここに含まれているのは getSharedIdeaNotes / searchIdeaNotes が
+      // 既に「実質共有」判定を済ませた後なので、その場合は常にtrue扱いでよい。
+      const effectivelyShared = mine ? n.visibility === "shared" || boardSharedOf.get(n.board_id) === true : true;
+      return {
+        id: n.id,
+        owner: n.owner,
+        owner_name: nameOf(n.owner),
+        board_id: n.board_id,
+        board_name: mine ? boardNameOf.get(n.board_id) ?? null : null,
+        title: n.title,
+        content: n.content,
+        photo_data_url: n.photo_data_url,
+        color: n.color,
+        x: n.x,
+        y: n.y,
+        visibility: n.visibility,
+        effectively_shared: effectivelyShared,
+        mine,
+        created_at: n.created_at,
+      };
+    });
 
     return NextResponse.json({ notes, links: links.map((l) => ({ id: l.id, from_note: l.from_note, to_note: l.to_note })) });
   } catch (e) {

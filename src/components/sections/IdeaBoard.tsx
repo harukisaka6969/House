@@ -127,7 +127,7 @@ export default function IdeaBoard() {
   if (!boards) return <div className="mf-empty">読み込み中…</div>;
 
   const activeBoard = boards.find((b) => b.id === activeBoardId) ?? null;
-  const canEditNote = (n: IdeaNoteOut) => n.mine || n.visibility === "shared";
+  const canEditNote = (n: IdeaNoteOut) => n.mine || n.effectively_shared;
   const linkCountFor = (id: string) => links.filter((l) => l.from_note === id || l.to_note === id).length;
 
   const onPickPhoto = (f: File) => {
@@ -256,6 +256,13 @@ export default function IdeaBoard() {
     loadBoards();
   };
 
+  const toggleBoardShare = async () => {
+    if (!activeBoardId || activeBoardId === SHARED_ID) return;
+    const r = await apiPost<{ board: IdeaBoardOut }>(`/api/idea-boards/${activeBoardId}/share`, { shared: !activeBoard?.shared });
+    setBoards((prev) => (prev ?? []).map((b) => (b.id === r.board.id ? r.board : b)));
+    load();
+  };
+
   const onNotePointerDown = (e: React.PointerEvent<HTMLDivElement>, n: IdeaNoteOut) => {
     if (connectMode || !canEditNote(n)) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -331,6 +338,7 @@ export default function IdeaBoard() {
               setViewMode("map");
             }}
           >
+            {b.shared ? "🔗 " : ""}
             {b.name}
           </button>
         ))}
@@ -501,6 +509,9 @@ export default function IdeaBoard() {
                     <button className="mf-btn ghost" style={{ padding: "4px 8px" }} onClick={deleteBoard}>
                       🗑
                     </button>
+                    <button className={"mf-btn" + (activeBoard?.shared ? " primary" : " ghost")} onClick={toggleBoardShare}>
+                      {activeBoard?.shared ? "🔗 ボード共有中" : "ボードを共有する"}
+                    </button>
                   </>
                 )}
                 {activeBoardId !== SHARED_ID && (
@@ -522,6 +533,11 @@ export default function IdeaBoard() {
             {connectMode && (
               <div className="mf-hint" style={{ marginTop: 6 }}>
                 {connectFrom ? "つなげたいもう1つのメモをタップしてください。1つのメモから複数につなげられます。" : "つなげたい1つ目のメモをタップしてください。"}
+              </div>
+            )}
+            {activeBoard?.shared && activeBoardId !== SHARED_ID && (
+              <div className="mf-hint" style={{ marginTop: 6 }}>
+                このボードは共有中です。中のメモは新しく作ったものも含めて自動的にアリサと共有されます。
               </div>
             )}
 
@@ -633,7 +649,7 @@ export default function IdeaBoard() {
                                   {n.owner_name}
                                 </span>
                               )}
-                              {n.visibility === "shared" && (
+                              {n.effectively_shared && (
                                 <span className="mf-chip" style={{ fontSize: 9, padding: "1px 5px" }}>
                                   共有中
                                 </span>
@@ -649,7 +665,7 @@ export default function IdeaBoard() {
                                 <button className="mf-btn ghost" style={{ padding: "1px 5px", fontSize: 10 }} onClick={() => startEdit(n)}>
                                   編集
                                 </button>
-                                {n.mine && (
+                                {n.mine && !(activeBoardId !== SHARED_ID && activeBoard?.shared) && (
                                   <button className="mf-btn ghost" style={{ padding: "1px 5px", fontSize: 10 }} onClick={() => toggleShare(n)}>
                                     {n.visibility === "shared" ? "非公開に戻す" : "共有する"}
                                   </button>

@@ -103,6 +103,7 @@ export type IdeaNoteVisibility = "private" | "shared";
 export interface IdeaBoardOut {
   id: string;
   name: string;
+  shared: boolean;
   created_at: string;
 }
 
@@ -119,6 +120,7 @@ export interface IdeaNoteOut {
   x: number;
   y: number;
   visibility: IdeaNoteVisibility;
+  effectively_shared: boolean;
   mine: boolean;
   created_at: string;
 }
