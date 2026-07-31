@@ -1,24 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { updateIdeaNote, deleteIdeaNote } from "@/lib/ideaNotes";
+import { renameIdeaBoard, deleteIdeaBoard } from "@/lib/ideaBoards";
 
-const patchSchema = z.object({
-  title: z.string().max(100).optional(),
-  content: z.string().max(4000).optional(),
-  color: z.enum(["yellow", "blue", "green", "pink", "purple"]).optional(),
-  x: z.number().optional(),
-  y: z.number().optional(),
-});
+const patchSchema = z.object({ name: z.string().min(1).max(60) });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireOwnerSession();
     const { id } = await ctx.params;
-    const patch = patchSchema.parse(await req.json());
-    const note = await updateIdeaNote(id, session.profile_id, patch);
-    if (!note) return NextResponse.json({ error: "not found" }, { status: 404 });
-    return NextResponse.json({ note });
+    const { name } = patchSchema.parse(await req.json());
+    const board = await renameIdeaBoard(id, session.profile_id, name);
+    if (!board) return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json({ board });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });
     return errorResponse(e);
@@ -29,7 +23,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   try {
     const session = await requireOwnerSession();
     const { id } = await ctx.params;
-    const ok = await deleteIdeaNote(id, session.profile_id);
+    const ok = await deleteIdeaBoard(id, session.profile_id);
     if (!ok) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {

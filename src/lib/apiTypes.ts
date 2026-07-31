@@ -100,10 +100,19 @@ export interface FlowAnalysisResponse {
 export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
 export type IdeaNoteVisibility = "private" | "shared";
 
+export interface IdeaBoardOut {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface IdeaNoteOut {
   id: string;
   owner: string;
   owner_name: string;
+  board_id: string;
+  board_name: string | null;
+  title: string;
   content: string;
   photo_data_url: string | null;
   color: IdeaNoteColor;

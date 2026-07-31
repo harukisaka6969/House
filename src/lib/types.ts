@@ -134,11 +134,21 @@ export interface NotificationReadRow {
 export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
 export type IdeaNoteVisibility = "private" | "shared";
 
+/** アイデアボード（複数持てるマインドマップ群）の1枚。 */
+export interface IdeaBoardRow {
+  id: string;
+  owner: string;
+  name: string;
+  created_at: string;
+}
+
 /** アイデアボード（マインドマップ）: 思いついたこと・ブレインストーム・写真を自由に残す。
  * デフォルトは本人のみ閲覧可（private）。visibility='shared'にするとパートナーも閲覧・編集・移動・接続できる。 */
 export interface IdeaNoteRow {
   id: string;
   owner: string;
+  board_id: string;
+  title: string;
   content: string;
   photo_data_url: string | null;
   color: IdeaNoteColor;

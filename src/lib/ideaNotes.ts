@@ -2,20 +2,35 @@ import "server-only";
 import { db } from "./db";
 import type { IdeaNoteRow, IdeaNoteColor, IdeaNoteVisibility, IdeaNoteLinkRow } from "./types";
 
-/** 自分のメモ全部 + パートナーが共有(shared)にしたメモ。 */
-export async function getIdeaNotes(ownerId: string, partnerId: string | null): Promise<IdeaNoteRow[]> {
-  const mine = await db().from("idea_notes").select("*").eq("owner", ownerId);
-  if (mine.error) throw mine.error;
+/** 指定ボードの自分のメモのみ（ボードは共有されないので相手のは含まれない）。 */
+export async function getIdeaNotesForBoard(boardId: string, ownerId: string): Promise<IdeaNoteRow[]> {
+  const { data, error } = await db().from("idea_notes").select("*").eq("board_id", boardId).eq("owner", ownerId);
+  if (error) throw error;
+  return (data ?? []) as IdeaNoteRow[];
+}
 
-  let shared: IdeaNoteRow[] = [];
-  if (partnerId) {
-    const r = await db().from("idea_notes").select("*").eq("owner", partnerId).eq("visibility", "shared");
-    if (r.error) throw r.error;
-    shared = (r.data ?? []) as IdeaNoteRow[];
-  }
+/** 共有(shared)ビュー: 自分・パートナーどちらが共有したメモも、ボードをまたいで1箇所に集約する。 */
+export async function getSharedIdeaNotes(ownerId: string, partnerId: string | null): Promise<IdeaNoteRow[]> {
+  const ownerIds = partnerId ? [ownerId, partnerId] : [ownerId];
+  const { data, error } = await db().from("idea_notes").select("*").in("owner", ownerIds).eq("visibility", "shared");
+  if (error) throw error;
+  return (data ?? []) as IdeaNoteRow[];
+}
 
-  const all = [...((mine.data ?? []) as IdeaNoteRow[]), ...shared];
-  return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
+/** タイトル・本文をボード横断で検索する（自分の全メモ + 相手の共有メモ）。 */
+export async function searchIdeaNotes(ownerId: string, partnerId: string | null, query: string): Promise<IdeaNoteRow[]> {
+  const pattern = `%${query}%`;
+  const ownerIds = partnerId ? [ownerId, partnerId] : [ownerId];
+
+  const titleHits = await db().from("idea_notes").select("*").in("owner", ownerIds).ilike("title", pattern);
+  if (titleHits.error) throw titleHits.error;
+  const contentHits = await db().from("idea_notes").select("*").in("owner", ownerIds).ilike("content", pattern);
+  if (contentHits.error) throw contentHits.error;
+
+  const merged = new Map<string, IdeaNoteRow>();
+  for (const n of [...(titleHits.data ?? []), ...(contentHits.data ?? [])] as IdeaNoteRow[]) merged.set(n.id, n);
+
+  return Array.from(merged.values()).filter((n) => n.owner === ownerId || n.visibility === "shared");
 }
 
 /** 両端が閲覧可能な接続のみ返す。 */
@@ -27,6 +42,8 @@ export async function getIdeaNoteLinks(visibleNoteIds: string[]): Promise<IdeaNo
 }
 
 export interface NewIdeaNoteInput {
+  board_id: string;
+  title: string;
   content: string;
   photo_data_url?: string | null;
   color: IdeaNoteColor;
@@ -39,6 +56,8 @@ export async function createIdeaNote(ownerId: string, input: NewIdeaNoteInput): 
     .from("idea_notes")
     .insert({
       owner: ownerId,
+      board_id: input.board_id,
+      title: input.title.trim(),
       content: input.content.trim(),
       photo_data_url: input.photo_data_url ?? null,
       color: input.color,
@@ -64,6 +83,7 @@ function canEdit(note: IdeaNoteRow, userId: string): boolean {
 }
 
 export interface IdeaNotePatch {
+  title?: string;
   content?: string;
   color?: IdeaNoteColor;
   x?: number;
@@ -75,6 +95,7 @@ export async function updateIdeaNote(id: string, userId: string, patch: IdeaNote
   if (!note || !canEdit(note, userId)) return null;
 
   const update: Record<string, unknown> = {};
+  if (patch.title !== undefined) update.title = patch.title.trim();
   if (patch.content !== undefined) update.content = patch.content.trim();
   if (patch.color !== undefined) update.color = patch.color;
   if (patch.x !== undefined) update.x = patch.x;
