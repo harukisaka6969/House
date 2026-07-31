@@ -242,6 +242,13 @@ export default function Wishlist() {
                   </div>
                 )}
                 {i.memo && <div className="mf-numsub" style={{ marginTop: 4 }}>{i.memo}</div>}
+                {i.url && (
+                  <div style={{ marginTop: 4 }}>
+                    <a href={i.url} target="_blank" rel="noopener noreferrer" className="mf-numsub" style={{ color: "#F5A524" }}>
+                      🔗 リンクを開く
+                    </a>
+                  </div>
+                )}
 
                 {mine && (tab === "planning" || tab === "saving") && (
                   <div className="mf-row" style={{ marginTop: 10, flexWrap: "wrap" }}>

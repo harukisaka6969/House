@@ -24,6 +24,7 @@ import FlowAnalysis from "./sections/FlowAnalysis";
 import GymLog from "./sections/GymLog";
 import MealLog from "./sections/MealLog";
 import ShoppingList from "./sections/ShoppingList";
+import IdeaBoard from "./sections/IdeaBoard";
 import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
 
@@ -46,6 +47,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
     label: "🏃 健康",
     items: [
       ["journal", "⑫ 日記"],
+      ["ideaBoard", "⑰ アイデアボード"],
       ["gymLog", "⑭ 筋トレログ"],
       ["mealLog", "⑮ 食事ログ"],
     ],
@@ -221,6 +223,7 @@ function DashboardInner() {
             {view === "maintenance" && <Maintenance />}
             {view === "inventory" && <Inventory />}
             {view === "journal" && <Journal />}
+            {view === "ideaBoard" && <IdeaBoard />}
             {view === "flowAnalysis" && <FlowAnalysis />}
             {view === "gymLog" && <GymLog />}
             {view === "mealLog" && <MealLog />}

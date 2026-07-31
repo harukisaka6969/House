@@ -131,6 +131,18 @@ export interface NotificationReadRow {
   updated_at: string;
 }
 
+export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
+
+/** アイデアボード: 思いついたこと・ブレインストーム・写真を自由に残す（本人のみ閲覧可）。 */
+export interface IdeaNoteRow {
+  id: string;
+  owner: string;
+  content: string;
+  photo_data_url: string | null;
+  color: IdeaNoteColor;
+  created_at: string;
+}
+
 export type LifeEventStatus = "active" | "done" | "cancelled";
 
 export interface LifeEventRow {

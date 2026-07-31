@@ -97,6 +97,16 @@ export interface FlowAnalysisResponse {
   categories: string[];
 }
 
+export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
+
+export interface IdeaNoteOut {
+  id: string;
+  content: string;
+  photo_data_url: string | null;
+  color: IdeaNoteColor;
+  created_at: string;
+}
+
 export type ShoppingStore = "seiyu" | "amazon" | "conveni" | "other";
 
 export interface ShoppingItemOut {
