@@ -46,6 +46,22 @@ export default function IdeaBoard() {
   };
   useEffect(load, []);
 
+  // 数秒ごとに自動更新し、パートナーが共有メモを動かしたり編集したりした内容が反映されるようにする。
+  // ドラッグ中・編集中は取りに行かない（自分の操作が上書きされるのを防ぐため）。
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (dragState.current === null && editingId === null) load();
+    }, 4000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && dragState.current === null && editingId === null) load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [editingId]);
+
   if (!notes) return <div className="mf-empty">読み込み中…</div>;
 
   const canEdit = (n: IdeaNoteOut) => n.mine || n.visibility === "shared";
@@ -178,7 +194,7 @@ export default function IdeaBoard() {
       <SectionHead
         no="17"
         title="アイデアボード"
-        sub="思いついたことをマインドマップ形式で自由に配置・接続できます。共有すると、その1件だけアリサも見て一緒に編集できます。"
+        sub="思いついたことをマインドマップ形式で自由に配置・接続できます。共有すると、その1件だけアリサも見て一緒に編集でき、数秒ごとに自動で最新の状態に更新されます。"
       />
 
       <div className="mf-panel">
