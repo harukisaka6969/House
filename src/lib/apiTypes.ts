@@ -98,13 +98,26 @@ export interface FlowAnalysisResponse {
 }
 
 export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
+export type IdeaNoteVisibility = "private" | "shared";
 
 export interface IdeaNoteOut {
   id: string;
+  owner: string;
+  owner_name: string;
   content: string;
   photo_data_url: string | null;
   color: IdeaNoteColor;
+  x: number;
+  y: number;
+  visibility: IdeaNoteVisibility;
+  mine: boolean;
   created_at: string;
+}
+
+export interface IdeaNoteLinkOut {
+  id: string;
+  from_note: string;
+  to_note: string;
 }
 
 export type ShoppingStore = "seiyu" | "amazon" | "conveni" | "other";

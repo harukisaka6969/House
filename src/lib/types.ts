@@ -132,14 +132,26 @@ export interface NotificationReadRow {
 }
 
 export type IdeaNoteColor = "yellow" | "blue" | "green" | "pink" | "purple";
+export type IdeaNoteVisibility = "private" | "shared";
 
-/** アイデアボード: 思いついたこと・ブレインストーム・写真を自由に残す（本人のみ閲覧可）。 */
+/** アイデアボード（マインドマップ）: 思いついたこと・ブレインストーム・写真を自由に残す。
+ * デフォルトは本人のみ閲覧可（private）。visibility='shared'にするとパートナーも閲覧・編集・移動・接続できる。 */
 export interface IdeaNoteRow {
   id: string;
   owner: string;
   content: string;
   photo_data_url: string | null;
   color: IdeaNoteColor;
+  x: number;
+  y: number;
+  visibility: IdeaNoteVisibility;
+  created_at: string;
+}
+
+export interface IdeaNoteLinkRow {
+  id: string;
+  from_note: string;
+  to_note: string;
   created_at: string;
 }
 

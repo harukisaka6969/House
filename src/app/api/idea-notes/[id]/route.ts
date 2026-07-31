@@ -6,6 +6,8 @@ import { updateIdeaNote, deleteIdeaNote } from "@/lib/ideaNotes";
 const patchSchema = z.object({
   content: z.string().max(4000).optional(),
   color: z.enum(["yellow", "blue", "green", "pink", "purple"]).optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
 });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
