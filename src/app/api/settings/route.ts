@@ -9,14 +9,14 @@ import { listFamilyAccounts } from "@/lib/familyAccounts";
 export async function GET() {
   try {
     const session = await requireOwnerSession();
-    const profile = await getProfileById(session.profile_id);
-    if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
-    const [allCategories, customCategories, accounts, familyAccounts] = await Promise.all([
+    const [profile, allCategories, customCategories, accounts, familyAccounts] = await Promise.all([
+      getProfileById(session.profile_id),
       getAllCategories(),
       getCustomCategories(),
       getAccounts(),
       listFamilyAccounts(),
     ]);
+    if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({
       profile: { id: profile.id, slug: profile.slug, name: profile.name },
       allCategories,

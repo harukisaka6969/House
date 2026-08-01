@@ -2,31 +2,42 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { shiftMonth } from "@/lib/date";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
-import FamilyDashboard from "./FamilyDashboard";
-import AgentWidget from "./AgentWidget";
 import AppBadgeSync from "./AppBadgeSync";
-import Summary from "./sections/Summary";
-import Flow from "./sections/Flow";
-import Accounts from "./sections/Accounts";
-import ExpensePanel from "./sections/ExpensePanel";
-import Invest from "./sections/Invest";
-import Sim from "./sections/SimPanel";
-import Wishlist from "./sections/Wishlist";
-import LifeEvents from "./sections/LifeEvents";
-import Maintenance from "./sections/Maintenance";
-import Inventory from "./sections/Inventory";
-import Journal from "./sections/Journal";
-import FlowAnalysis from "./sections/FlowAnalysis";
-import GymLog from "./sections/GymLog";
-import MealLog from "./sections/MealLog";
-import ShoppingList from "./sections/ShoppingList";
-import IdeaBoard from "./sections/IdeaBoard";
-import Settings from "./sections/Settings";
 import { SectionHead } from "./common";
+
+// 各セクションは実際に開いたときだけ読み込む（初回起動時のJSバンドルを最小限にするため）。
+const SECTION_LOADING = (
+  <div className="mf-empty" style={{ padding: 40, textAlign: "center" }}>
+    読み込み中…
+  </div>
+);
+const dyn = <P extends object>(loader: () => Promise<{ default: React.ComponentType<P> }>) =>
+  dynamic(loader, { loading: () => SECTION_LOADING });
+
+const FamilyDashboard = dyn<{ slug: string }>(() => import("./FamilyDashboard"));
+const AgentWidget = dynamic(() => import("./AgentWidget"), { ssr: false });
+const Summary = dyn(() => import("./sections/Summary"));
+const Flow = dyn(() => import("./sections/Flow"));
+const Accounts = dyn(() => import("./sections/Accounts"));
+const ExpensePanel = dyn(() => import("./sections/ExpensePanel"));
+const Invest = dyn(() => import("./sections/Invest"));
+const Sim = dyn(() => import("./sections/SimPanel"));
+const Wishlist = dyn(() => import("./sections/Wishlist"));
+const LifeEvents = dyn(() => import("./sections/LifeEvents"));
+const Maintenance = dyn(() => import("./sections/Maintenance"));
+const Inventory = dyn(() => import("./sections/Inventory"));
+const Journal = dyn(() => import("./sections/Journal"));
+const FlowAnalysis = dyn(() => import("./sections/FlowAnalysis"));
+const GymLog = dyn(() => import("./sections/GymLog"));
+const MealLog = dyn(() => import("./sections/MealLog"));
+const ShoppingList = dyn(() => import("./sections/ShoppingList"));
+const IdeaBoard = dyn(() => import("./sections/IdeaBoard"));
+const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
   {
@@ -67,25 +78,23 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
 ];
 
 export default function Dashboard({ slug }: { slug: string }) {
-  const [role, setRole] = useState<"owner" | "family" | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
 
   useEffect(() => {
-    apiGet<MeResponse>("/api/auth/me")
-      .then((r) => setRole(r.profile.role))
-      .catch(() => setRole("owner"));
+    apiGet<MeResponse>("/api/auth/me").then(setMe).catch(() => {});
   }, []);
 
-  if (role === null) {
+  if (me === null) {
     return (
       <div className="mf-empty" style={{ padding: 40, textAlign: "center" }}>
         読み込み中…
       </div>
     );
   }
-  if (role === "family") return <FamilyDashboard slug={slug} />;
+  if (me.profile.role === "family") return <FamilyDashboard slug={slug} />;
 
   return (
-    <DashboardProvider slug={slug}>
+    <DashboardProvider slug={slug} initialMe={me}>
       <DashboardInner />
     </DashboardProvider>
   );

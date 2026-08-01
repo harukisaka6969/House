@@ -28,38 +28,30 @@ export interface NotificationCounts {
 
 /** アプリアイコンバッジ用の通知件数。承認待ちは常に生きた件数、承認済み・新着食事ログは前回見た時刻より後の件数。 */
 export async function getNotificationCounts(ownerId: string, partnerId: string | null): Promise<NotificationCounts> {
-  const seen = await getOrCreateSeen(ownerId);
+  const [seen, pending] = await Promise.all([
+    getOrCreateSeen(ownerId),
+    db().from("shopping_items").select("id", { count: "exact", head: true }).eq("needs_approval", true).eq("approved", false).neq("owner", ownerId),
+  ]);
+  if (pending.error) throw pending.error;
 
-  const { count: pendingApprovals, error: e1 } = await db()
-    .from("shopping_items")
-    .select("id", { count: "exact", head: true })
-    .eq("needs_approval", true)
-    .eq("approved", false)
-    .neq("owner", ownerId);
-  if (e1) throw e1;
-
-  const { count: approvedMine, error: e2 } = await db()
-    .from("shopping_items")
-    .select("id", { count: "exact", head: true })
-    .eq("owner", ownerId)
-    .eq("needs_approval", true)
-    .eq("approved", true)
-    .gt("approved_at", seen.shopping_seen_at);
-  if (e2) throw e2;
-
-  let newMeals = 0;
-  if (partnerId) {
-    const { count, error: e3 } = await db()
-      .from("meal_logs")
+  const [approved, meals] = await Promise.all([
+    db()
+      .from("shopping_items")
       .select("id", { count: "exact", head: true })
-      .eq("owner", partnerId)
-      .gt("created_at", seen.meals_seen_at);
-    if (e3) throw e3;
-    newMeals = count ?? 0;
-  }
+      .eq("owner", ownerId)
+      .eq("needs_approval", true)
+      .eq("approved", true)
+      .gt("approved_at", seen.shopping_seen_at),
+    partnerId
+      ? db().from("meal_logs").select("id", { count: "exact", head: true }).eq("owner", partnerId).gt("created_at", seen.meals_seen_at)
+      : Promise.resolve({ count: 0, error: null }),
+  ]);
+  if (approved.error) throw approved.error;
+  if (meals.error) throw meals.error;
 
-  const p = pendingApprovals ?? 0;
-  const a = approvedMine ?? 0;
+  const p = pending.count ?? 0;
+  const a = approved.count ?? 0;
+  const newMeals = meals.count ?? 0;
   return { pendingApprovals: p, approvedMine: a, newMeals, total: p + a + newMeals };
 }
 

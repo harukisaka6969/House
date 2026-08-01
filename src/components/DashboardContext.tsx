@@ -31,8 +31,16 @@ interface DashboardState {
 
 const Ctx = createContext<DashboardState | null>(null);
 
-export function DashboardProvider({ slug, children }: { slug: string; children: React.ReactNode }) {
-  const [me, setMe] = useState<MeResponse | null>(null);
+export function DashboardProvider({
+  slug,
+  initialMe,
+  children,
+}: {
+  slug: string;
+  initialMe?: MeResponse | null;
+  children: React.ReactNode;
+}) {
+  const [me, setMe] = useState<MeResponse | null>(initialMe ?? null);
   const [monthKey, setMonthKey] = useState(nowMonthKeyJST());
   const [month, setMonth] = useState<MonthResponse | null>(null);
   const [prevMonth, setPrevMonth] = useState<MonthResponse | null>(null);
@@ -46,7 +54,9 @@ export function DashboardProvider({ slug, children }: { slug: string; children: 
   const [lowStockTick, setLowStockTick] = useState(0);
 
   useEffect(() => {
+    if (initialMe) return;
     apiGet<MeResponse>("/api/auth/me").then(setMe).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
