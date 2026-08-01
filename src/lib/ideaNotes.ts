@@ -9,6 +9,18 @@ export async function getIdeaNotesForBoard(boardId: string, ownerId: string): Pr
   return (data ?? []) as IdeaNoteRow[];
 }
 
+/** 指定期間に作成された自分のメモ（ボード横断・ダイジェスト用）。 */
+export async function getIdeaNotesCreatedInRange(ownerId: string, fromDate: string, toDateExclusive: string): Promise<IdeaNoteRow[]> {
+  const { data, error } = await db()
+    .from("idea_notes")
+    .select("*")
+    .eq("owner", ownerId)
+    .gte("created_at", `${fromDate}T00:00:00.000Z`)
+    .lt("created_at", `${toDateExclusive}T00:00:00.000Z`);
+  if (error) throw error;
+  return (data ?? []) as IdeaNoteRow[];
+}
+
 /** 共有(shared)ビュー: 個別に共有したメモ + ボードごと共有にしたボードの全メモを、ボードをまたいで1箇所に集約する。 */
 export async function getSharedIdeaNotes(ownerId: string, partnerId: string | null): Promise<IdeaNoteRow[]> {
   const ownerIds = partnerId ? [ownerId, partnerId] : [ownerId];

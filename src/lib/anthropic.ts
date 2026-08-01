@@ -238,6 +238,16 @@ export async function runAdvisor(
   return joinText(res.content) || "回答を生成できませんでした。";
 }
 
+/** 日次・週次ダイジェスト（前日/先週のまとめ）を生成する。promptはlib/digestContext.tsで構築したもの。 */
+export async function generateDigest(prompt: string, maxTokens: number): Promise<string> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+  return joinText(res.content).trim() || "まとめを生成できませんでした。";
+}
+
 /** 銘柄・テーマのリサーチ（web_search有効）。現行版 runResearch を移植。 */
 export async function runResearch(query: string): Promise<string> {
   const res = await anthropic().messages.create({

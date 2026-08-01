@@ -407,3 +407,17 @@ export interface FamilyOverviewResponse {
   maintenance: FamilyMaintenanceTaskOut[];
   assets: FamilyAssetOut[];
 }
+
+export type DigestKind = "daily" | "weekly";
+
+export interface DigestOut {
+  kind: DigestKind;
+  period_key: string;
+  body: string;
+  created_at: string;
+}
+
+export interface DigestsResponse {
+  daily: DigestOut | null;
+  weekly: DigestOut | null;
+}

@@ -328,6 +328,19 @@ export interface PfcTargetRow {
   updated_at: string;
 }
 
+/* ---- ダイジェスト（AIによる日次・週次の振り返り）---- */
+
+export type DigestKind = "daily" | "weekly";
+
+export interface DigestRow {
+  id: string;
+  owner: string;
+  kind: DigestKind;
+  period_key: string;
+  body: string;
+  created_at: string;
+}
+
 /* ---- 在庫管理（消耗品）---- */
 
 export interface InventoryItemRow {

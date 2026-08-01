@@ -21,6 +21,7 @@ const dyn = <P extends object>(loader: () => Promise<{ default: React.ComponentT
 
 const FamilyDashboard = dyn<{ slug: string }>(() => import("./FamilyDashboard"));
 const AgentWidget = dynamic(() => import("./AgentWidget"), { ssr: false });
+const DigestBanner = dyn(() => import("./DigestBanner"));
 const Summary = dyn(() => import("./sections/Summary"));
 const Flow = dyn(() => import("./sections/Flow"));
 const Accounts = dyn(() => import("./sections/Accounts"));
@@ -206,6 +207,7 @@ function DashboardInner() {
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
+        <DigestBanner />
         <LowStockBanner onOpenInventory={() => setView("inventory")} />
       </div>
 

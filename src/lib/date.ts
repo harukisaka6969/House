@@ -52,7 +52,23 @@ export function isValidDateStr(s: string): boolean {
 
 /** dateStr（YYYY-MM-DD）の翌日をYYYY-MM-DDで返す。日付範囲クエリの排他的上限に使う。 */
 export function nextDayStr(dateStr: string): string {
+  return addDaysStr(dateStr, 1);
+}
+
+/** dateStr（YYYY-MM-DD）のdays日後（負数で前）をYYYY-MM-DDで返す。 */
+export function addDaysStr(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + 1));
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
   return dt.toISOString().slice(0, 10);
+}
+
+/** dateStr（YYYY-MM-DD）の前日をYYYY-MM-DDで返す。 */
+export function prevDayStr(dateStr: string): string {
+  return addDaysStr(dateStr, -1);
+}
+
+/** dateStr（YYYY-MM-DD）の曜日（0=日〜6=土）。 */
+export function dayOfWeek(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
