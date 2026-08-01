@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
-import { isValidDateStr } from "@/lib/date";
+import { isValidDateStr, periodKeyOfDate } from "@/lib/date";
 import { getExpensesInRange } from "@/lib/expenses";
 import { getIncomesInMonthRange } from "@/lib/incomes";
 import { getInvestmentsInRange } from "@/lib/investments";
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
     const toExclusive = addDays(to, 1);
     const [expenseRows, incomeRows, investmentRows, accounts, profiles, requester, wishlistRows, lifeEventRows, maintenanceTaskRows] = await Promise.all([
       getExpensesInRange(from, toExclusive),
-      getIncomesInMonthRange(from.slice(0, 7), to.slice(0, 7)),
+      getIncomesInMonthRange(periodKeyOfDate(from), periodKeyOfDate(to)),
       getInvestmentsInRange(from, toExclusive),
       getAccounts(),
       getAllProfiles(),

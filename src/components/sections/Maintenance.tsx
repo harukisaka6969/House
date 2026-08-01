@@ -8,7 +8,7 @@ import { MAINTENANCE_TEMPLATES, ASSET_KINDS, categoriesForAccount } from "@/lib/
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 
 type UpcomingResponse = {
   assets: AssetOut[];
@@ -52,7 +52,7 @@ export default function Maintenance() {
 
   const monthlyGrouped = data.monthly.map((mb) => ({
     ...mb,
-    tasks: data.upcoming.filter((t) => t.next_due.slice(0, 7) === mb.month),
+    tasks: data.upcoming.filter((t) => periodKeyOfDate(t.next_due) === mb.month),
   }));
 
   const submitTask = async () => {

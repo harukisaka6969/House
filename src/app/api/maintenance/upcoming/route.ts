@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAssets } from "@/lib/assets";
 import { getMaintenanceTasks, getUpcomingTasks, getRecentLogsWithAsset } from "@/lib/maintenance";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 
 export async function GET(req: Request) {
   try {
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
     const monthlyMap = new Map<string, number>();
     for (const t of upcomingTasks) {
-      const key = t.next_due.slice(0, 7);
+      const key = periodKeyOfDate(t.next_due);
       monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + t.est_cost);
     }
     const monthly = [...monthlyMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, cost]) => ({ month, cost }));

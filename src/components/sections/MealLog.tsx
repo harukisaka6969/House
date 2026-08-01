@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { MealLogOut, PfcTargetOut } from "@/lib/apiTypes";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 import { SectionHead } from "../common";
 
 function shiftDate(dateStr: string, delta: number): string {
@@ -44,7 +44,7 @@ export default function MealLog() {
   const [logEditForm, setLogEditForm] = useState({ description: "", calories: "", protein_g: "", fat_g: "", carb_g: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const monthKey = date.slice(0, 7);
+  const monthKey = periodKeyOfDate(date);
 
   const loadLogs = () => {
     apiGet<{ logs: MealLogOut[] }>(`/api/meal-logs?month=${monthKey}`)

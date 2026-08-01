@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { todayStrJST } from "./date";
+import { todayStrJST, periodRange } from "./date";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -180,11 +180,7 @@ export async function getExpensesInRange(fromDate: string, toDateExclusive: stri
   return (data ?? []) as ExpenseRow[];
 }
 
+/** 家計上の「月」(25日始まり・翌月24日締め)の日付範囲。lib/date.tsのperiodRangeが正。 */
 export function monthRange(monthKey: string): { from: string; toExclusive: string } {
-  const [y, m] = monthKey.split("-").map(Number);
-  const from = `${monthKey}-01`;
-  const nextM = m === 12 ? 1 : m + 1;
-  const nextY = m === 12 ? y + 1 : y;
-  const toExclusive = `${nextY}-${String(nextM).padStart(2, "0")}-01`;
-  return { from, toExclusive };
+  return periodRange(monthKey);
 }

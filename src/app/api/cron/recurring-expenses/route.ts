@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getActiveRecurringExpensesForDay, markRecurringExpenseGenerated } from "@/lib/recurringExpenses";
 import { createExpenseFromRecurring } from "@/lib/expenses";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 
 /** Vercel Cronから毎日呼ばれる。今日が支払日の定期支払をexpensesへ生成する（同月に生成済みならスキップ、冪等）。 */
 export async function GET(req: Request) {
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
 
   const today = todayStrJST();
   const day = Number(today.slice(8, 10));
-  const monthKey = today.slice(0, 7);
+  const monthKey = periodKeyOfDate(today);
 
   const due = await getActiveRecurringExpensesForDay(day);
   let created = 0;

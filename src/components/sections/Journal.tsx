@@ -3,16 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut, apiPost, apiDelete } from "@/lib/apiClient";
 import type { JournalEntryOut, SportLogOut, ExpenseOut } from "@/lib/apiTypes";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
+import PeriodCalendar from "../PeriodCalendar";
 import RehabPractice from "./RehabPractice";
 import RehabCalendarBadge from "./RehabCalendarBadge";
 
 const emptySportForm = { activity: "", duration_minutes: "", distance_km: "", memo: "" };
-const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
 function shiftDate(dateStr: string, delta: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -46,7 +46,7 @@ export default function Journal() {
   const bodyDraftRef = useRef(bodyDraft);
   bodyDraftRef.current = bodyDraft;
 
-  const monthKey = date.slice(0, 7);
+  const monthKey = periodKeyOfDate(date);
   const meId = me?.profile.id;
   const meName = me?.profile.name ?? "";
   const accounts = month?.aggregates.perAccount ?? [];
@@ -103,11 +103,6 @@ export default function Journal() {
   const gymDays = new Set(sportLogs.filter((l) => l.activity.includes("ジム")).map((l) => l.date));
 
   const today = todayStrJST();
-  const [calY, calM] = monthKey.split("-").map(Number);
-  const daysInMonth = new Date(calY, calM, 0).getDate();
-  const startDow = new Date(calY, calM - 1, 1).getDay();
-  const calKey = (d: number) => `${monthKey}-${String(d).padStart(2, "0")}`;
-  const calCells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   const saveEntry = async () => {
     try {
@@ -310,27 +305,17 @@ export default function Journal() {
       <div className="mf-panel">
         <div className="mf-paneltitle">この日のスポーツ記録</div>
         {gymDays.size > 0 && (
-          <div className="mf-calgrid" style={{ marginBottom: 10 }}>
-            {DOW.map((d, i) => (
-              <div key={d} className={"mf-calhead" + (i === 0 ? " sun" : i === 6 ? " sat" : "")}>
+          <PeriodCalendar
+            monthKey={monthKey}
+            onSelectDate={setDate}
+            cellClassName={(key) => "mf-rehabcell" + (date === key ? " sel" : "") + (key === today ? " today" : "")}
+            renderCell={(key, d) => (
+              <>
                 {d}
-              </div>
-            ))}
-            {calCells.map((d, i) => {
-              if (d === null) return <div key={"e" + i} />;
-              const key = calKey(d);
-              return (
-                <button
-                  key={key}
-                  className={"mf-rehabcell" + (date === key ? " sel" : "") + (key === today ? " today" : "")}
-                  onClick={() => setDate(key)}
-                >
-                  {d}
-                  {gymDays.has(key) && <span className="mf-rehabmark blue" />}
-                </button>
-              );
-            })}
-          </div>
+                {gymDays.has(key) && <span className="mf-rehabmark blue" />}
+              </>
+            )}
+          />
         )}
         {gymDays.size > 0 && (
           <div className="mf-hint" style={{ opacity: 0.7, marginBottom: 10 }}>

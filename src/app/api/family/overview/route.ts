@@ -4,7 +4,7 @@ import { getAllWishlistItems, toFamilyWishlist } from "@/lib/wishlist";
 import { getLifeEvents, toFamilyLifeEvents } from "@/lib/lifeEvents";
 import { getAssets, toFamilyAssets } from "@/lib/assets";
 import { getMaintenanceTasks, toFamilyMaintenance } from "@/lib/maintenance";
-import { nowMonthKeyJST, shiftMonth } from "@/lib/date";
+import { nowMonthKeyJST, shiftMonth, periodKeyOfDate } from "@/lib/date";
 
 const WINDOW_MONTHS = 18;
 
@@ -42,12 +42,12 @@ export async function GET() {
     for (const m of months) buckets.set(m, []);
 
     for (const t of maintenance) {
-      const m = t.next_due.slice(0, 7);
+      const m = periodKeyOfDate(t.next_due);
       if (monthSet.has(m)) buckets.get(m)!.push({ type: "maintenance", id: t.id, name: `${t.asset_name}: ${t.name}`, cost: t.est_cost });
     }
     for (const w of wishlist) {
       if (!w.target_date) continue;
-      const m = w.target_date.slice(0, 7);
+      const m = periodKeyOfDate(w.target_date);
       if (monthSet.has(m)) buckets.get(m)!.push({ type: "wishlist", id: w.id, name: w.name, cost: w.price });
     }
     for (const ev of lifeEvents) {

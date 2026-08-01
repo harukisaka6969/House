@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { RehabLogOut, RehabLogKind } from "@/lib/apiTypes";
-import { todayStrJST } from "@/lib/date";
-
-const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+import { todayStrJST, periodKeyOfDate } from "@/lib/date";
+import PeriodCalendar from "../PeriodCalendar";
 
 const KIND_LABEL: Record<RehabLogKind, string> = {
   impulse: "① 衝動ログ",
@@ -56,7 +55,7 @@ function summarize(log: RehabLogOut): string {
 }
 
 export default function RehabPractice({ date, onSelectDate }: { date: string; onSelectDate: (d: string) => void }) {
-  const monthKey = date.slice(0, 7);
+  const monthKey = periodKeyOfDate(date);
   const [logs, setLogs] = useState<RehabLogOut[] | null>(null);
   const [kind, setKind] = useState<RehabLogKind>("impulse");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,12 +77,6 @@ export default function RehabPractice({ date, onSelectDate }: { date: string; on
   const markedDays = new Set(logs.map((l) => l.date));
   const dayLogs = logs.filter((l) => l.date === date).sort((a, b) => a.created_at.localeCompare(b.created_at));
   const today = todayStrJST();
-
-  const [y, m] = monthKey.split("-").map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const startDow = new Date(y, m - 1, 1).getDay();
-  const dkey = (d: number) => `${monthKey}-${String(d).padStart(2, "0")}`;
-  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   const resetForms = () => {
     setImpulseForm(emptyImpulse);
@@ -132,27 +125,17 @@ export default function RehabPractice({ date, onSelectDate }: { date: string; on
         毎日15〜20分。自分の思考を客観視する能力を作るための記録です。
       </div>
 
-      <div className="mf-calgrid" style={{ marginBottom: 10 }}>
-        {DOW.map((d, i) => (
-          <div key={d} className={"mf-calhead" + (i === 0 ? " sun" : i === 6 ? " sat" : "")}>
+      <PeriodCalendar
+        monthKey={monthKey}
+        onSelectDate={onSelectDate}
+        cellClassName={(key) => "mf-rehabcell" + (date === key ? " sel" : "") + (key === today ? " today" : "")}
+        renderCell={(key, d) => (
+          <>
             {d}
-          </div>
-        ))}
-        {cells.map((d, i) => {
-          if (d === null) return <div key={"e" + i} />;
-          const key = dkey(d);
-          return (
-            <button
-              key={key}
-              className={"mf-rehabcell" + (date === key ? " sel" : "") + (key === today ? " today" : "")}
-              onClick={() => onSelectDate(key)}
-            >
-              {d}
-              {markedDays.has(key) && <span className="mf-rehabmark" />}
-            </button>
-          );
-        })}
-      </div>
+            {markedDays.has(key) && <span className="mf-rehabmark" />}
+          </>
+        )}
+      />
 
       <div className="mf-chips" style={{ marginBottom: 10 }}>
         {(Object.keys(KIND_LABEL) as RehabLogKind[]).map((k) => (

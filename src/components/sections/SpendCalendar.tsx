@@ -5,8 +5,7 @@ import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import type { AccountOut, ExpenseOut } from "@/lib/apiTypes";
 import { useDashboard } from "../DashboardContext";
-
-const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+import PeriodCalendar from "../PeriodCalendar";
 
 function fmtShort(n: number): string {
   const v = Math.round(Number(n) || 0);
@@ -31,16 +30,10 @@ export default function SpendCalendar({
   const { me } = useDashboard();
   const meName = me?.profile.name ?? "";
   const [selDay, setSelDay] = useState<string | null>(null);
-  const [y, m] = monthKey.split("-").map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const startDow = new Date(y, m - 1, 1).getDay();
   const today = todayStrJST();
 
   const maxDay = Math.max(1, ...Object.values(perDay));
   const monthVisibleTotal = Object.values(perDay).reduce((s, v) => s + v, 0);
-
-  const dkey = (d: number) => `${monthKey}-${String(d).padStart(2, "0")}`;
-  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
   const acctColor = (id: string) => accounts.find((a) => a.id === id)?.color ?? "#93A0AE";
 
@@ -54,29 +47,24 @@ export default function SpendCalendar({
   return (
     <div className="mf-panel">
       <div className="mf-paneltitle">日別カレンダー（濃いほど支出が多い日）</div>
-      <div className="mf-calgrid">
-        {DOW.map((d, i) => (
-          <div key={d} className={"mf-calhead" + (i === 0 ? " sun" : i === 6 ? " sat" : "")}>
-            {d}
-          </div>
-        ))}
-        {cells.map((d, i) => {
-          if (d === null) return <div key={"e" + i} />;
-          const key = dkey(d);
+      <PeriodCalendar
+        monthKey={monthKey}
+        onSelectDate={(key) => setSelDay(selDay === key ? null : key)}
+        cellClassName={(key) => "mf-calcell" + (selDay === key ? " sel" : "") + (key === today ? " today" : "")}
+        cellStyle={(key) => {
+          const t = perDay[key] || 0;
+          return t > 0 ? { background: `rgba(245,165,36,${(0.07 + 0.4 * (t / maxDay)).toFixed(2)})` } : undefined;
+        }}
+        renderCell={(key, d) => {
           const t = perDay[key] || 0;
           return (
-            <button
-              key={key}
-              className={"mf-calcell" + (selDay === key ? " sel" : "") + (key === today ? " today" : "")}
-              style={t > 0 ? { background: `rgba(245,165,36,${(0.07 + 0.4 * (t / maxDay)).toFixed(2)})` } : undefined}
-              onClick={() => setSelDay(selDay === key ? null : key)}
-            >
+            <>
               <span className="mf-calday">{d}</span>
               {t > 0 && <span className="mf-calamt mf-mono">{fmtShort(t)}</span>}
-            </button>
+            </>
           );
-        })}
-      </div>
+        }}
+      />
       <div className="mf-hint" style={{ opacity: 0.65 }}>
         表示合計 {fmt(monthVisibleTotal)}。相手の第3口座分は金額非公開のため含まれません。日をタップすると明細が見られます。
       </div>

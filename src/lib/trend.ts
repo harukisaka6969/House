@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { nowMonthKeyJST, shiftMonth } from "./date";
+import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate } from "./date";
 import { sumAmount } from "./aggregate";
 
 export interface TrendPoint {
@@ -18,7 +18,7 @@ export async function getTrend(): Promise<TrendPoint[]> {
     months.unshift(cursor);
     cursor = shiftMonth(cursor, -1);
   }
-  const fromDate = `${months[0]}-01`;
+  const fromDate = periodRange(months[0]).from;
 
   const [{ data: incomeRows, error: incErr }, { data: expenseRows, error: expErr }, { data: investRows, error: invErr }] =
     await Promise.all([
@@ -33,7 +33,7 @@ export async function getTrend(): Promise<TrendPoint[]> {
   return months.map((month) => ({
     month,
     income: sumAmount((incomeRows ?? []).filter((r) => r.month === month)),
-    expense: sumAmount((expenseRows ?? []).filter((r) => (r.date as string).startsWith(month))),
-    invest: sumAmount((investRows ?? []).filter((r) => (r.date as string).startsWith(month))),
+    expense: sumAmount((expenseRows ?? []).filter((r) => periodKeyOfDate(r.date as string) === month)),
+    invest: sumAmount((investRows ?? []).filter((r) => periodKeyOfDate(r.date as string) === month)),
   }));
 }

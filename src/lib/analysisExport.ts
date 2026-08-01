@@ -1,4 +1,5 @@
 import { isMaskedForViewer, sumAmount } from "./aggregate";
+import { periodKeyOfDate } from "./date";
 import { visibleWishlistItems } from "./v2Privacy";
 import type { Account, ExpenseRow, IncomeRow, InvestmentRow, WishlistItemRow, LifeEventRow, MaintenanceTaskRow } from "./types";
 
@@ -65,19 +66,19 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
   const expenseTotalAll = sumAmount(rowsInScope); // household truth (both owners, a3 included) for the filtered scope
   const expenseTotalVisible = sumAmount(visibleRows);
   const investTotal = sumAmount(investmentsInScope);
-  const monthsCovered = new Set([...rowsInScope.map((e) => e.date.slice(0, 7)), ...incomesInScope.map((i) => i.month)]).size;
+  const monthsCovered = new Set([...rowsInScope.map((e) => periodKeyOfDate(e.date)), ...incomesInScope.map((i) => i.month)]).size;
   const savingsRate = incomeTotal > 0 ? (incomeTotal - expenseTotalAll) / incomeTotal : 0;
 
   // --- monthly ---
   const monthKeys = new Set<string>();
-  rowsInScope.forEach((e) => monthKeys.add(e.date.slice(0, 7)));
-  investmentsInScope.forEach((iv) => monthKeys.add(iv.date.slice(0, 7)));
+  rowsInScope.forEach((e) => monthKeys.add(periodKeyOfDate(e.date)));
+  investmentsInScope.forEach((iv) => monthKeys.add(periodKeyOfDate(iv.date)));
   incomesInScope.forEach((i) => monthKeys.add(i.month));
   const monthly = [...monthKeys].sort().map((month) => {
-    const monthExpensesAll = rowsInScope.filter((e) => e.date.startsWith(month));
-    const monthExpensesVisible = visibleRows.filter((e) => e.date.startsWith(month));
+    const monthExpensesAll = rowsInScope.filter((e) => periodKeyOfDate(e.date) === month);
+    const monthExpensesVisible = visibleRows.filter((e) => periodKeyOfDate(e.date) === month);
     const monthIncome = sumAmount(incomesInScope.filter((i) => i.month === month));
-    const monthInvest = sumAmount(investmentsInScope.filter((iv) => iv.date.startsWith(month)));
+    const monthInvest = sumAmount(investmentsInScope.filter((iv) => periodKeyOfDate(iv.date) === month));
     const byAccount: Record<string, number> = {};
     monthExpensesAll.forEach((e) => {
       byAccount[e.account_id] = (byAccount[e.account_id] ?? 0) + e.amount;

@@ -14,14 +14,32 @@ export function todayStrJST(): string {
   return `${y}-${m}-${d}`;
 }
 
-export function nowMonthKeyJST(): string {
-  return todayStrJST().slice(0, 7);
-}
-
 export function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** 家計上の「月」は25日始まり・翌月24日締め。ラベルは開始月を使う（例: 7/25〜8/24 は「2026-07」）。
+ * dateStr（YYYY-MM-DD）が属する月ラベルを返す。 */
+export function periodKeyOfDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const calMonth = `${y}-${String(m).padStart(2, "0")}`;
+  return d >= 25 ? calMonth : shiftMonth(calMonth, -1);
+}
+
+export function nowMonthKeyJST(): string {
+  return periodKeyOfDate(todayStrJST());
+}
+
+/** 月ラベル(monthKey)が表す25日始まり・翌月24日締め期間の [from, toExclusive) を返す。 */
+export function periodRange(monthKey: string): { from: string; toExclusive: string } {
+  return { from: `${monthKey}-25`, toExclusive: `${shiftMonth(monthKey, 1)}-25` };
+}
+
+/** 月ラベル(monthKey)が表す期間の末日（含む）。常に翌暦月の24日。 */
+export function periodEndInclusive(monthKey: string): string {
+  return `${shiftMonth(monthKey, 1)}-24`;
 }
 
 export function isValidMonthKey(key: string): boolean {

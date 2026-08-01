@@ -4,7 +4,7 @@ import { getExpensesInRange } from "./expenses";
 import { getIncomesInMonthRange } from "./incomes";
 import { getInvestmentsInRange } from "./investments";
 import { buildPerCategory, isMaskedForViewer, sumAmount } from "./aggregate";
-import { nowMonthKeyJST, shiftMonth } from "./date";
+import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate } from "./date";
 import { getAllProfiles, makeNameLookup } from "./profiles";
 import type { ExpenseRow, IncomeRow } from "./types";
 
@@ -48,7 +48,7 @@ async function earliestMonth(): Promise<string> {
   ]);
   const candidates: string[] = [];
   if (incRow?.[0]?.month) candidates.push(incRow[0].month as string);
-  if (expRow?.[0]?.date) candidates.push((expRow[0].date as string).slice(0, 7));
+  if (expRow?.[0]?.date) candidates.push(periodKeyOfDate(expRow[0].date as string));
   if (candidates.length === 0) return shiftMonth(nowMonthKeyJST(), -FALLBACK_MONTHS_BACK);
   return candidates.sort()[0];
 }
@@ -63,8 +63,8 @@ export async function getFlowAnalysis(viewerProfileId: string): Promise<FlowAnal
     months.push(cursor);
     if (months.length > 60) break; // safety cap
   }
-  const fromDate = `${months[0]}-01`;
-  const toDateExclusive = `${shiftMonth(nowMonth, 1)}-01`;
+  const fromDate = periodRange(months[0]).from;
+  const toDateExclusive = periodRange(nowMonth).toExclusive;
 
   const [incomeRows, expenseRows, investRows, profiles] = await Promise.all([
     getIncomesInMonthRange(months[0], nowMonth),
@@ -78,8 +78,8 @@ export async function getFlowAnalysis(viewerProfileId: string): Promise<FlowAnal
   let cumulativeNet = 0;
   const monthPoints: FlowMonthPoint[] = months.map((month) => {
     const incForMonth = incomeRows.filter((r) => r.month === month);
-    const expForMonth = expenseRows.filter((r) => r.date.startsWith(month));
-    const invForMonth = investRows.filter((r) => r.date.startsWith(month));
+    const expForMonth = expenseRows.filter((r) => periodKeyOfDate(r.date) === month);
+    const invForMonth = investRows.filter((r) => periodKeyOfDate(r.date) === month);
 
     const incomeRegular = sumAmount(incForMonth.filter((r: IncomeRow) => isRegularIncome(r.name)));
     const incomeSpecial = sumAmount(incForMonth.filter((r: IncomeRow) => !isRegularIncome(r.name)));

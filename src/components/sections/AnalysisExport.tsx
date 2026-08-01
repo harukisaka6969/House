@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { todayStrJST, nowMonthKeyJST, shiftMonth } from "@/lib/date";
+import { todayStrJST, nowMonthKeyJST, shiftMonth, periodRange, periodEndInclusive } from "@/lib/date";
 import { useDashboard } from "../DashboardContext";
 
 type Preset = "thisMonth" | "lastMonth" | "3m" | "6m" | "1y" | "all" | "custom";
@@ -13,23 +13,21 @@ function presetRange(preset: Preset): { from: string; to: string } {
   const curMonth = nowMonthKeyJST();
   switch (preset) {
     case "thisMonth":
-      return { from: `${curMonth}-01`, to: today };
+      return { from: periodRange(curMonth).from, to: today };
     case "lastMonth": {
       const m = shiftMonth(curMonth, -1);
-      const [y, mm] = m.split("-").map(Number);
-      const lastDay = new Date(y, mm, 0).getDate();
-      return { from: `${m}-01`, to: `${m}-${String(lastDay).padStart(2, "0")}` };
+      return { from: periodRange(m).from, to: periodEndInclusive(m) };
     }
     case "3m":
-      return { from: `${shiftMonth(curMonth, -2)}-01`, to: today };
+      return { from: periodRange(shiftMonth(curMonth, -2)).from, to: today };
     case "6m":
-      return { from: `${shiftMonth(curMonth, -5)}-01`, to: today };
+      return { from: periodRange(shiftMonth(curMonth, -5)).from, to: today };
     case "1y":
-      return { from: `${shiftMonth(curMonth, -11)}-01`, to: today };
+      return { from: periodRange(shiftMonth(curMonth, -11)).from, to: today };
     case "all":
       return { from: "2000-01-01", to: today };
     default:
-      return { from: `${curMonth}-01`, to: today };
+      return { from: periodRange(curMonth).from, to: today };
   }
 }
 
