@@ -48,7 +48,10 @@ function QuickEntryInner() {
   const acctBudget = acct?.budget ?? 0;
   const catOptions = categoriesForAccount(allCats, form.account);
   const meName = me?.profile.name ?? "";
-  const myTotal = month.expenses.reduce((s, e) => s + (e.masked ? 0 : e.owner_name === meName ? e.amount : 0), 0);
+  // 世帯合算（ハルキ＋アリサ）の口座別支出。相手の第3口座の明細は個々には非公開だが、
+  // 集計値（perAccount.spent）には相手分も含まれた真の世帯合計が入っている。
+  const a1Spent = accounts.find((a) => a.id === "a1")?.spent ?? 0;
+  const a3Spent = accounts.find((a) => a.id === "a3")?.spent ?? 0;
 
   const promoMsg = (promoted: string[]) => (promoted.length ? ` ✨「${promoted.join("、")}」を新カテゴリにしました` : "");
 
@@ -168,10 +171,11 @@ function QuickEntryInner() {
       <div className="mf-quickhead">
         <span className="mf-eyebrow">QUICK ENTRY</span>
         <span className="mf-numsub">
-          {monthKey.replace("-", "年")}月 ／ {meName}の支出計{" "}
+          {monthKey.replace("-", "年")}月 ／ 世帯の支出計（第1 <b className="mf-mono" style={{ color: "#E7ECF2" }}>{fmt(a1Spent)}</b> ／ 第3{" "}
           <b className="mf-mono" style={{ color: "#E7ECF2" }}>
-            {fmt(myTotal)}
+            {fmt(a3Spent)}
           </b>
+          ）
         </span>
       </div>
 
