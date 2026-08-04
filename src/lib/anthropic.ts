@@ -238,6 +238,51 @@ export async function runAdvisor(
   return joinText(res.content) || "回答を生成できませんでした。";
 }
 
+export interface ExtractedRecord {
+  category: string;
+  date: string | null;
+  title: string;
+  metrics: { label: string; value: string }[];
+}
+
+/** 任意の「記録」の写真（体組成計・ランニングアプリ・ボルダリングの記録など何でもよい）から、
+ * カテゴリ・日付・タイトル・項目一覧を抽出する。既存カテゴリに明らかに一致すればそれを再利用し、
+ * カテゴリが乱立しないようにする。 */
+export async function extractRecordFromPhoto(base64: string, mediaType: string, existingCategories: string[]): Promise<ExtractedRecord> {
+  const catHint =
+    existingCategories.length > 0
+      ? `既存のカテゴリ: ${existingCategories.join("、")}。この画像の内容が既存カテゴリのいずれかと明らかに同じ種類の記録であれば、そのカテゴリ名をそのまま使ってください（表記ゆれを作らない）。どれにも当てはまらなければ、短く分かりやすい新しいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`
+      : `カテゴリが未登録なので、内容から短く分かりやすいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`;
+
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1200,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: `この画像は、体組成計の測定結果・ランニングアプリの記録・ボルダリングの記録など、何らかの個人の記録です。画像から読み取れる情報をもとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
+${catHint}
+{"category":"カテゴリ名","date":"YYYY-MM-DD（画像内に日付があればそれ、無ければnull）","title":"この記録の短いタイトル（15文字程度、例: 体組成測定、皇居5km走）","metrics":[{"label":"項目名","value":"値（単位込みでよい。例: 84.1kg、29.1、5:12/km）"}]}
+画像から読み取れる主要な数値・項目はできるだけ全てmetricsに含めてください。文字や数値がほとんど読み取れない画像なら、metricsは空配列にしてください。`,
+          },
+        ],
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  const parsed = JSON.parse(text) as ExtractedRecord;
+  return {
+    category: (parsed.category || "その他").trim(),
+    date: parsed.date ?? null,
+    title: (parsed.title || "").trim(),
+    metrics: Array.isArray(parsed.metrics) ? parsed.metrics.filter((m) => m && typeof m.label === "string" && typeof m.value === "string") : [],
+  };
+}
+
 /** 日次・週次ダイジェスト（前日/先週のまとめ）を生成する。promptはlib/digestContext.tsで構築したもの。 */
 export async function generateDigest(prompt: string, maxTokens: number): Promise<string> {
   const res = await anthropic().messages.create({

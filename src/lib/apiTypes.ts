@@ -408,6 +408,27 @@ export interface FamilyOverviewResponse {
   assets: FamilyAssetOut[];
 }
 
+export interface RecordMetric {
+  label: string;
+  value: string;
+}
+
+export interface PersonalRecordOut {
+  id: string;
+  category: string;
+  date: string;
+  title: string;
+  metrics: RecordMetric[];
+  memo: string;
+  created_at: string;
+}
+
+export interface RecordCategorySummary {
+  category: string;
+  count: number;
+  lastDate: string;
+}
+
 export type DigestKind = "daily" | "weekly";
 
 export interface DigestOut {

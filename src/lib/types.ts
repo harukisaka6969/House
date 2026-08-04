@@ -328,6 +328,24 @@ export interface PfcTargetRow {
   updated_at: string;
 }
 
+/* ---- 個人記録（写真から自動分類される任意の記録: 体組成・ランニング・ボルダリング等）---- */
+
+export interface RecordMetric {
+  label: string;
+  value: string;
+}
+
+export interface PersonalRecordRow {
+  id: string;
+  owner: string;
+  category: string;
+  date: string;
+  title: string;
+  metrics: RecordMetric[];
+  memo: string;
+  created_at: string;
+}
+
 /* ---- ダイジェスト（AIによる日次・週次の振り返り）---- */
 
 export type DigestKind = "daily" | "weekly";
