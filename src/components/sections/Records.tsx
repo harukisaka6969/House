@@ -143,7 +143,7 @@ export default function Records() {
       />
 
       <div className="mf-panel">
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         <button className="mf-photobox" disabled={busy} onClick={() => fileRef.current?.click()}>
           {busy ? "解析中…" : "📷 記録を撮影・アップロード"}
         </button>
