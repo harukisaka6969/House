@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
 import { getRecordCategories, getRecordsForCategory, createRecord } from "@/lib/personalRecords";
-import { extractRecordFromPhoto } from "@/lib/anthropic";
+import { extractRecordFromPhoto, extractRecordFromText } from "@/lib/anthropic";
 import { todayStrJST, isValidDateStr } from "@/lib/date";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -34,19 +34,22 @@ export async function POST(req: Request) {
 
     const form = await req.formData();
     const file = form.get("image");
-    if (!(file instanceof File)) throw new ApiError(400, "画像が指定されていません");
-    if (file.size > MAX_BYTES) throw new ApiError(400, "画像サイズが大きすぎます");
-
-    const buf = Buffer.from(await file.arrayBuffer());
-    const base64 = buf.toString("base64");
+    const text = String(form.get("text") ?? "").trim();
+    if (!(file instanceof File) && !text) throw new ApiError(400, "画像または文章を指定してください");
+    if (file instanceof File && file.size > MAX_BYTES) throw new ApiError(400, "画像サイズが大きすぎます");
 
     const existingCategories = (await getRecordCategories(session.profile_id)).map((c) => c.category);
 
     let extracted;
     try {
-      extracted = await extractRecordFromPhoto(base64, file.type || "image/jpeg", existingCategories);
+      if (file instanceof File) {
+        const buf = Buffer.from(await file.arrayBuffer());
+        extracted = await extractRecordFromPhoto(buf.toString("base64"), file.type || "image/jpeg", existingCategories);
+      } else {
+        extracted = await extractRecordFromText(text, existingCategories, todayStrJST());
+      }
     } catch (err) {
-      throw new ApiError(502, `画像の解析に失敗しました。時間をおいてもう一度お試しください。（詳細: ${err instanceof Error ? err.message : String(err)}）`);
+      throw new ApiError(502, `解析に失敗しました。時間をおいてもう一度お試しください。（詳細: ${err instanceof Error ? err.message : String(err)}）`);
     }
 
     const date = extracted.date && isValidDateStr(extracted.date) ? extracted.date : todayStrJST();

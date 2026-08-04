@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
 import { getMealLogsInRange, createMealLog } from "@/lib/mealLog";
-import { estimateMealNutrition } from "@/lib/anthropic";
+import { estimateMealNutrition, estimateMealNutritionFromText } from "@/lib/anthropic";
 import { isValidMonthKey, nowMonthKeyJST, isValidDateStr } from "@/lib/date";
 import { monthRange } from "@/lib/expenses";
 
@@ -30,18 +30,22 @@ export async function POST(req: Request) {
 
     const form = await req.formData();
     const file = form.get("image");
+    const text = String(form.get("text") ?? "").trim();
     const date = String(form.get("date") ?? "");
-    if (!(file instanceof File)) throw new ApiError(400, "画像が指定されていません");
-    if (file.size > MAX_BYTES) throw new ApiError(400, "画像サイズが大きすぎます");
+    if (!(file instanceof File) && !text) throw new ApiError(400, "画像または文章を指定してください");
+    if (file instanceof File && file.size > MAX_BYTES) throw new ApiError(400, "画像サイズが大きすぎます");
     if (!isValidDateStr(date)) throw new ApiError(400, "invalid date");
 
-    const buf = Buffer.from(await file.arrayBuffer());
-    const base64 = buf.toString("base64");
     let estimate;
     try {
-      estimate = await estimateMealNutrition(base64, file.type || "image/jpeg");
+      if (file instanceof File) {
+        const buf = Buffer.from(await file.arrayBuffer());
+        estimate = await estimateMealNutrition(buf.toString("base64"), file.type || "image/jpeg");
+      } else {
+        estimate = await estimateMealNutritionFromText(text);
+      }
     } catch (err) {
-      throw new ApiError(502, `画像の解析に失敗しました。時間をおいてもう一度お試しください。（詳細: ${err instanceof Error ? err.message : String(err)}）`);
+      throw new ApiError(502, `解析に失敗しました。時間をおいてもう一度お試しください。（詳細: ${err instanceof Error ? err.message : String(err)}）`);
     }
 
     const log = await createMealLog(session.profile_id, {

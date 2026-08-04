@@ -224,6 +224,24 @@ export async function estimateMealNutrition(base64: string, mediaType: string): 
   return JSON.parse(text) as MealEstimate;
 }
 
+/** 食事の文章の説明 → {description, calories, protein_g, fat_g, carb_g}。写真が無いときのテキスト入力用。 */
+export async function estimateMealNutritionFromText(description: string): Promise<MealEstimate> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `次の食事の説明から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"description":"料理名や内容の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}
+食事の説明: ${description}`,
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  return JSON.parse(text) as MealEstimate;
+}
+
 /** 家計アドバイザー。system はサーバーが§5準拠で構築したコンテキスト。 */
 export async function runAdvisor(
   system: string,
@@ -245,15 +263,29 @@ export interface ExtractedRecord {
   metrics: { label: string; value: string }[];
 }
 
+function recordCategoryHint(existingCategories: string[]): string {
+  return existingCategories.length > 0
+    ? `既存のカテゴリ: ${existingCategories.join("、")}。内容が既存カテゴリのいずれかと明らかに同じ種類の記録であれば、そのカテゴリ名をそのまま使ってください（表記ゆれを作らない）。どれにも当てはまらなければ、短く分かりやすい新しいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`
+    : `カテゴリが未登録なので、内容から短く分かりやすいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`;
+}
+
+function parseExtractedRecord(text: string): ExtractedRecord {
+  const parsed = JSON.parse(stripFence(text)) as ExtractedRecord;
+  return {
+    category: (parsed.category || "その他").trim(),
+    date: parsed.date ?? null,
+    title: (parsed.title || "").trim(),
+    metrics: Array.isArray(parsed.metrics) ? parsed.metrics.filter((m) => m && typeof m.label === "string" && typeof m.value === "string") : [],
+  };
+}
+
+const RECORD_JSON_FORMAT =
+  '{"category":"カテゴリ名","date":"YYYY-MM-DD（分かればそれ、無ければnull）","title":"この記録の短いタイトル（15文字程度、例: 体組成測定、皇居5km走）","metrics":[{"label":"項目名","value":"値（単位込みでよい。例: 84.1kg、29.1、5:12/km）"}]}';
+
 /** 任意の「記録」の写真（体組成計・ランニングアプリ・ボルダリングの記録など何でもよい）から、
  * カテゴリ・日付・タイトル・項目一覧を抽出する。既存カテゴリに明らかに一致すればそれを再利用し、
  * カテゴリが乱立しないようにする。 */
 export async function extractRecordFromPhoto(base64: string, mediaType: string, existingCategories: string[]): Promise<ExtractedRecord> {
-  const catHint =
-    existingCategories.length > 0
-      ? `既存のカテゴリ: ${existingCategories.join("、")}。この画像の内容が既存カテゴリのいずれかと明らかに同じ種類の記録であれば、そのカテゴリ名をそのまま使ってください（表記ゆれを作らない）。どれにも当てはまらなければ、短く分かりやすい新しいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`
-      : `カテゴリが未登録なので、内容から短く分かりやすいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`;
-
   const res = await anthropic().messages.create({
     model: MODEL,
     max_tokens: 1200,
@@ -265,22 +297,35 @@ export async function extractRecordFromPhoto(base64: string, mediaType: string, 
           {
             type: "text",
             text: `この画像は、体組成計の測定結果・ランニングアプリの記録・ボルダリングの記録など、何らかの個人の記録です。画像から読み取れる情報をもとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
-${catHint}
-{"category":"カテゴリ名","date":"YYYY-MM-DD（画像内に日付があればそれ、無ければnull）","title":"この記録の短いタイトル（15文字程度、例: 体組成測定、皇居5km走）","metrics":[{"label":"項目名","value":"値（単位込みでよい。例: 84.1kg、29.1、5:12/km）"}]}
+${recordCategoryHint(existingCategories)}
+${RECORD_JSON_FORMAT}
 画像から読み取れる主要な数値・項目はできるだけ全てmetricsに含めてください。文字や数値がほとんど読み取れない画像なら、metricsは空配列にしてください。`,
           },
         ],
       },
     ],
   });
-  const text = stripFence(joinText(res.content));
-  const parsed = JSON.parse(text) as ExtractedRecord;
-  return {
-    category: (parsed.category || "その他").trim(),
-    date: parsed.date ?? null,
-    title: (parsed.title || "").trim(),
-    metrics: Array.isArray(parsed.metrics) ? parsed.metrics.filter((m) => m && typeof m.label === "string" && typeof m.value === "string") : [],
-  };
+  return parseExtractedRecord(joinText(res.content));
+}
+
+/** 任意の「記録」の文章での説明（写真が無いとき）から、カテゴリ・日付・タイトル・項目一覧を抽出する。 */
+export async function extractRecordFromText(text: string, existingCategories: string[], todayStr: string): Promise<ExtractedRecord> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1200,
+    messages: [
+      {
+        role: "user",
+        content: `次の文章は、体組成の測定結果・ランニングの記録・ボルダリングの記録など、何らかの個人の記録の説明です。内容から読み取れる情報をもとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
+今日の日付: ${todayStr}（文中に日付が無ければこれを使う。「昨日」等の相対表現や「8/5」のような月日のみの表記は、ここを基準に計算・補完すること）
+${recordCategoryHint(existingCategories)}
+${RECORD_JSON_FORMAT}
+文章から読み取れる主要な数値・項目はできるだけ全てmetricsに含めてください。
+記録の説明: ${text}`,
+      },
+    ],
+  });
+  return parseExtractedRecord(joinText(res.content));
 }
 
 /** 日次・週次ダイジェスト（前日/先週のまとめ）を生成する。promptはlib/digestContext.tsで構築したもの。 */

@@ -42,6 +42,9 @@ export default function MealLog() {
   const [targetForm, setTargetForm] = useState(DEFAULT_TARGET);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [logEditForm, setLogEditForm] = useState({ description: "", calories: "", protein_g: "", fat_g: "", carb_g: "" });
+  const [regenBusy, setRegenBusy] = useState(false);
+  const [textIn, setTextIn] = useState("");
+  const [textBusy, setTextBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const monthKey = periodKeyOfDate(date);
@@ -100,6 +103,28 @@ export default function MealLog() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
+  const onText = async () => {
+    if (!textIn.trim()) return;
+    setTextBusy(true);
+    setMsg("文章を解析中…");
+    try {
+      const fd = new FormData();
+      fd.append("text", textIn.trim());
+      fd.append("date", date);
+      const res = await fetch("/api/meal-logs", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body && body.error) || "failed");
+      }
+      setMsg("✓ 記録しました。");
+      setTextIn("");
+      loadLogs();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "解析に失敗しました。");
+    }
+    setTextBusy(false);
+  };
+
   const remove = async (id: string) => {
     await apiDelete(`/api/meal-logs/${id}`);
     loadLogs();
@@ -133,6 +158,24 @@ export default function MealLog() {
     }
   };
 
+  const regenerateFromDescription = async () => {
+    if (!editingLogId || !logEditForm.description.trim()) return;
+    setRegenBusy(true);
+    try {
+      const r = await apiPut<{ log: MealLogOut }>(`/api/meal-logs/${editingLogId}`, { description: logEditForm.description, regenerate: true });
+      setLogEditForm({
+        description: r.log.description,
+        calories: String(Math.round(r.log.calories)),
+        protein_g: String(Math.round(r.log.protein_g)),
+        fat_g: String(Math.round(r.log.fat_g)),
+        carb_g: String(Math.round(r.log.carb_g)),
+      });
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "再計算に失敗しました。");
+    }
+    setRegenBusy(false);
+  };
+
   const saveTarget = async () => {
     try {
       const r = await apiPut<{ target: PfcTargetOut }>("/api/pfc-target", targetForm);
@@ -146,7 +189,7 @@ export default function MealLog() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="15" title="食事ログ" sub="食事の写真からAIがカロリー・PFCを大まかに推定します。目標と比較して見られます。" />
+      <SectionHead no="15" title="食事ログ" sub="食事の写真、または文章の説明からAIがカロリー・PFCを大まかに推定します。目標と比較して見られます。" />
 
       <div className="mf-row" style={{ justifyContent: "center", gap: 10, marginBottom: 14 }}>
         <button className="mf-iconbtn" onClick={() => setDate(shiftDate(date, -1))} aria-label="前の日">
@@ -174,6 +217,20 @@ export default function MealLog() {
         <button className="mf-btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>
           {busy ? "解析中…" : "📷 食事の写真をアップロード"}
         </button>
+
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <input
+            className="mf-input"
+            style={{ flex: 1 }}
+            placeholder="文章で入力（例: 牛丼並盛とみそ汁）"
+            value={textIn}
+            onChange={(e) => setTextIn(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onText()}
+          />
+          <button className="mf-btn ghost" disabled={textBusy || !textIn.trim()} onClick={onText}>
+            {textBusy ? "解析中…" : "✍️ 記録する"}
+          </button>
+        </div>
         {msg && <div className="mf-hint">{msg}</div>}
       </div>
 
@@ -252,12 +309,18 @@ export default function MealLog() {
                 <label className="mf-fieldlabel" htmlFor="mf-meal-desc">
                   内容
                 </label>
-                <input
-                  id="mf-meal-desc"
-                  className="mf-input"
-                  value={logEditForm.description}
-                  onChange={(e) => setLogEditForm({ ...logEditForm, description: e.target.value })}
-                />
+                <div className="mf-row">
+                  <input
+                    id="mf-meal-desc"
+                    className="mf-input"
+                    style={{ flex: 1 }}
+                    value={logEditForm.description}
+                    onChange={(e) => setLogEditForm({ ...logEditForm, description: e.target.value })}
+                  />
+                  <button className="mf-btn ghost" style={{ flex: "0 0 auto" }} disabled={regenBusy || !logEditForm.description.trim()} onClick={regenerateFromDescription}>
+                    {regenBusy ? "計算中…" : "✨ 内容から栄養を再計算"}
+                  </button>
+                </div>
                 <div className="mf-formgrid" style={{ marginTop: 8 }}>
                   <div>
                     <label className="mf-fieldlabel" htmlFor="mf-meal-cal">

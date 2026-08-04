@@ -43,6 +43,8 @@ export default function Records() {
     metrics: [],
     memo: "",
   });
+  const [textIn, setTextIn] = useState("");
+  const [textBusy, setTextBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadCategories = () => {
@@ -64,12 +66,9 @@ export default function Records() {
     if (activeCategory) loadRecords(activeCategory);
   }, [activeCategory]);
 
-  const onFile = async (file: File) => {
-    setBusy(true);
+  const submitRecord = async (fd: FormData): Promise<boolean> => {
     setMsg("記録を解析中…");
     try {
-      const fd = new FormData();
-      fd.append("image", file);
       const res = await fetch("/api/records", { method: "POST", body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -80,11 +79,29 @@ export default function Records() {
       setActiveCategory(record.category);
       loadCategories();
       loadRecords(record.category);
+      return true;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "解析に失敗しました。");
+      return false;
     }
+  };
+
+  const onFile = async (file: File) => {
+    setBusy(true);
+    const fd = new FormData();
+    fd.append("image", file);
+    await submitRecord(fd);
     setBusy(false);
     if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onText = async () => {
+    if (!textIn.trim()) return;
+    setTextBusy(true);
+    const fd = new FormData();
+    fd.append("text", textIn.trim());
+    if (await submitRecord(fd)) setTextIn("");
+    setTextBusy(false);
   };
 
   const startEdit = (r: PersonalRecordOut) => {
@@ -119,13 +136,31 @@ export default function Records() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="18" title="記録" sub="体組成計・ランニング・ボルダリングなど、何でも写真で撮ると自動でカテゴリごとに整理されます（自分だけの記録です）。" />
+      <SectionHead
+        no="18"
+        title="記録"
+        sub="体組成計・ランニング・ボルダリングなど、何でも写真か文章で記録すると自動でカテゴリごとに整理されます（自分だけの記録です）。"
+      />
 
       <div className="mf-panel">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
         <button className="mf-photobox" disabled={busy} onClick={() => fileRef.current?.click()}>
           {busy ? "解析中…" : "📷 記録を撮影・アップロード"}
         </button>
+
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <input
+            className="mf-input"
+            style={{ flex: 1 }}
+            placeholder="文章で入力（例: 体重84.1kg、体脂肪率21.5%だった）"
+            value={textIn}
+            onChange={(e) => setTextIn(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onText()}
+          />
+          <button className="mf-btn ghost" disabled={textBusy || !textIn.trim()} onClick={onText}>
+            {textBusy ? "解析中…" : "✍️ 記録する"}
+          </button>
+        </div>
         {msg && <div className="mf-hint">{msg}</div>}
       </div>
 
