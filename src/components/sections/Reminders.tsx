@@ -146,20 +146,22 @@ export default function Reminders() {
       ) : (
         <div className="mf-list" style={{ maxHeight: "none" }}>
           {reminders.map((r) => (
-            <div key={r.id} className="mf-listrow" style={{ opacity: r.active ? 1 : 0.5 }}>
-              <span className="mf-listmemo">
-                <b>{r.name}</b>
-                {r.memo && <span style={{ opacity: 0.7 }}> ・{r.memo}</span>}
-              </span>
-              <span className="mf-hint" style={{ margin: 0, flex: "0 0 auto" }}>
-                {recurrenceLabel(r)}（次回 {r.next_date}）
-              </span>
-              <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => toggleActive(r)}>
-                {r.active ? "オフにする" : "オンにする"}
-              </button>
-              <button className="mf-del" onClick={() => remove(r.id)}>
-                ×
-              </button>
+            <div key={r.id} className="mf-shopitem" style={{ opacity: r.active ? 1 : 0.5 }}>
+              <div className="mf-row" style={{ gap: 10 }}>
+                <span className="mf-shopname">{r.name}</span>
+                <button className="mf-del" onClick={() => remove(r.id)}>
+                  ×
+                </button>
+              </div>
+              <div className="mf-row" style={{ gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                <span className="mf-listcat">
+                  {recurrenceLabel(r)}（次回 {r.next_date}）
+                </span>
+                {r.memo && <span className="mf-hint" style={{ margin: 0 }}>{r.memo}</span>}
+                <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => toggleActive(r)}>
+                  {r.active ? "オフにする" : "オンにする"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
