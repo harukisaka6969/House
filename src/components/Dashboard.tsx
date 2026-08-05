@@ -21,7 +21,7 @@ const dyn = <P extends object>(loader: () => Promise<{ default: React.ComponentT
 
 const FamilyDashboard = dyn<{ slug: string }>(() => import("./FamilyDashboard"));
 const AgentWidget = dynamic(() => import("./AgentWidget"), { ssr: false });
-const DigestBanner = dyn(() => import("./DigestBanner"));
+const Home = dyn(() => import("./sections/Home"));
 const Summary = dyn(() => import("./sections/Summary"));
 const Flow = dyn(() => import("./sections/Flow"));
 const Accounts = dyn(() => import("./sections/Accounts"));
@@ -42,6 +42,10 @@ const Records = dyn(() => import("./sections/Records"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
+  {
+    label: "🏡 ホーム",
+    items: [["home", "⑲ ホーム"]],
+  },
   {
     label: "💰 お金",
     items: [
@@ -131,7 +135,7 @@ function LowStockBanner({ onOpenInventory }: { onOpenInventory: () => void }) {
 function DashboardInner() {
   const router = useRouter();
   const { slug, me, monthKey, setMonthKey, loading } = useDashboard();
-  const [view, setView] = useState<string>("summary");
+  const [view, setView] = useState<string>("home");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -209,7 +213,6 @@ function DashboardInner() {
       </header>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
-        <DigestBanner />
         <LowStockBanner onOpenInventory={() => setView("inventory")} />
       </div>
 
@@ -220,6 +223,7 @@ function DashboardInner() {
           </div>
         ) : (
           <>
+            {view === "home" && <Home />}
             {view === "summary" && <Summary />}
             {view === "flow" && <Flow />}
             {view === "accounts" && <Accounts />}
