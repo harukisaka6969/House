@@ -442,3 +442,17 @@ export interface DigestsResponse {
   daily: DigestOut | null;
   weekly: DigestOut | null;
 }
+
+export type RecurrenceType = "daily" | "weekly" | "monthly";
+
+export interface ReminderOut {
+  id: string;
+  name: string;
+  recurrence_type: RecurrenceType;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  memo: string;
+  active: boolean;
+  next_date: string;
+  created_at: string;
+}

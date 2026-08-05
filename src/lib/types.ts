@@ -185,6 +185,20 @@ export interface LifeEventRow {
   created_at: string;
 }
 
+export type RecurrenceType = "daily" | "weekly" | "monthly";
+
+/** 定期的にやること（ゴミ出し・ペットの薬など）。世帯で共有、owner区別なし。 */
+export interface ReminderRow {
+  id: string;
+  name: string;
+  recurrence_type: RecurrenceType;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  memo: string;
+  active: boolean;
+  created_at: string;
+}
+
 export type AssetKind = "car" | "house" | "appliance" | "other";
 
 export interface AssetRow {
