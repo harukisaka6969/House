@@ -84,6 +84,16 @@ export default function ShoppingList() {
     }
   };
 
+  const notifySeiyu = async () => {
+    setMsg("");
+    try {
+      const r = await apiPost<{ count: number }>("/api/shopping-items/notify-seiyu", {});
+      setMsg(`✓ 西友の買い物リスト（${r.count}件）をLINEに送りました。`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "送信に失敗しました。");
+    }
+  };
+
   const remove = async (id: string) => {
     await apiDelete(`/api/shopping-items/${id}`);
     setSelected((s) => {
@@ -130,7 +140,14 @@ export default function ShoppingList() {
       </div>
 
       <div className="mf-panel">
-        <div className="mf-paneltitle">買うもの（{pending.length}件）</div>
+        <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <div className="mf-paneltitle" style={{ margin: 0 }}>
+            買うもの（{pending.length}件）
+          </div>
+          <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={notifySeiyu}>
+            🛒 西友の分をLINEに送る
+          </button>
+        </div>
         {selected.size > 0 && (
           <div className="mf-row" style={{ marginBottom: 10 }}>
             <button className="mf-btn primary" disabled={busy} onClick={buySelected}>
