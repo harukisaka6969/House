@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextOccurrence } from "@/lib/reminderRecurrence";
+import { nextOccurrence, resolveNextDate } from "@/lib/reminderRecurrence";
 
 describe("nextOccurrence", () => {
   it("daily always returns the given date", () => {
@@ -38,5 +38,28 @@ describe("nextOccurrence", () => {
     it("rolls over correctly across a year boundary", () => {
       expect(nextOccurrence({ recurrence_type: "monthly", day_of_week: null, day_of_month: 1 }, "2026-12-15")).toBe("2027-01-01");
     });
+  });
+});
+
+describe("resolveNextDate", () => {
+  it("shows today as next when not yet completed", () => {
+    const r = { recurrence_type: "daily" as const, day_of_week: null, day_of_month: null, last_completed_date: null };
+    expect(resolveNextDate(r, "2026-08-04")).toEqual({ next_date: "2026-08-04", done_today: false });
+  });
+
+  it("advances a daily reminder to tomorrow once completed today", () => {
+    const r = { recurrence_type: "daily" as const, day_of_week: null, day_of_month: null, last_completed_date: "2026-08-04" };
+    expect(resolveNextDate(r, "2026-08-04")).toEqual({ next_date: "2026-08-05", done_today: true });
+  });
+
+  it("ignores a stale completion from a previous occurrence", () => {
+    // weekly Tuesday, completed last week — today (also a Tuesday) should still show as due
+    const r = { recurrence_type: "weekly" as const, day_of_week: 2, day_of_month: null, last_completed_date: "2026-07-28" };
+    expect(resolveNextDate(r, "2026-08-04")).toEqual({ next_date: "2026-08-04", done_today: false });
+  });
+
+  it("advances a monthly reminder to next month once completed today", () => {
+    const r = { recurrence_type: "monthly" as const, day_of_week: null, day_of_month: 4, last_completed_date: "2026-08-04" };
+    expect(resolveNextDate(r, "2026-08-04")).toEqual({ next_date: "2026-09-04", done_today: true });
   });
 });

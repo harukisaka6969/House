@@ -1,8 +1,9 @@
 import "server-only";
 import { db } from "./db";
+import { todayStrJST } from "./date";
 import type { ReminderRow, RecurrenceType } from "./types";
 
-export { nextOccurrence } from "./reminderRecurrence";
+export { nextOccurrence, resolveNextDate } from "./reminderRecurrence";
 
 export async function getReminders(): Promise<ReminderRow[]> {
   const { data, error } = await db().from("reminders").select("*").order("created_at", { ascending: true });
@@ -41,6 +42,8 @@ export interface ReminderPatch {
   day_of_month?: number | null;
   memo?: string;
   active?: boolean;
+  /** trueで「今日の分を完了」、falseで取り消し。 */
+  done?: boolean;
 }
 
 export async function updateReminder(id: string, patch: ReminderPatch): Promise<ReminderRow | null> {
@@ -48,6 +51,7 @@ export async function updateReminder(id: string, patch: ReminderPatch): Promise<
   if (patch.name !== undefined) update.name = patch.name.trim();
   if (patch.memo !== undefined) update.memo = patch.memo.trim();
   if (patch.active !== undefined) update.active = patch.active;
+  if (patch.done !== undefined) update.last_completed_date = patch.done ? todayStrJST() : null;
   if (patch.recurrence_type !== undefined) {
     update.recurrence_type = patch.recurrence_type;
     update.day_of_week = patch.recurrence_type === "weekly" ? patch.day_of_week ?? 0 : null;

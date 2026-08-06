@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { checkPin, changePin, getProfileById, kioskPinExists } from "@/lib/pinAuth";
+import { lineNotifyAvailable } from "@/lib/lineNotify";
 import { getAllCategories, getCustomCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
 import { listFamilyAccounts } from "@/lib/familyAccounts";
@@ -25,6 +26,8 @@ export async function GET() {
       accounts,
       familyAccounts,
       kioskConfigured,
+      lineUserId: profile.line_user_id,
+      lineNotifyAvailable: lineNotifyAvailable(),
     });
   } catch (e) {
     return errorResponse(e);

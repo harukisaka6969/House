@@ -167,6 +167,8 @@ export interface SettingsResponse {
   accounts: AccountOut[];
   familyAccounts: FamilyAccountOut[];
   kioskConfigured: boolean;
+  lineUserId: string | null;
+  lineNotifyAvailable: boolean;
 }
 
 /* ---- v2 ---- */
@@ -455,6 +457,8 @@ export interface ReminderOut {
   memo: string;
   active: boolean;
   next_date: string;
+  last_completed_date: string | null;
+  done_today: boolean;
   created_at: string;
 }
 

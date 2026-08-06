@@ -28,3 +28,14 @@ export function nextOccurrence(r: Pick<ReminderRow, "recurrence_type" | "day_of_
   const nextMonthDay = Math.min(target, daysInMonth(nextY, nextM));
   return `${nextY}-${String(nextM).padStart(2, "0")}-${String(nextMonthDay).padStart(2, "0")}`;
 }
+
+/** todayの回をすでに完了済みなら、表示上の「次回」は繰り上げて次の回にする。 */
+export function resolveNextDate(
+  r: Pick<ReminderRow, "recurrence_type" | "day_of_week" | "day_of_month" | "last_completed_date">,
+  today: string
+): { next_date: string; done_today: boolean } {
+  const raw = nextOccurrence(r, today);
+  const doneToday = raw === today && r.last_completed_date === today;
+  const next_date = doneToday ? nextOccurrence(r, addDaysStr(today, 1)) : raw;
+  return { next_date, done_today: doneToday };
+}

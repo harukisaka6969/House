@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getShoppingItems, createShoppingItem, ValidationError } from "@/lib/shoppingList";
-import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
+import { getAllProfiles, makeNameLookup, findPartnerOwner, getLineUserId } from "@/lib/profiles";
+import { sendLineMessage } from "@/lib/lineNotify";
 
 export async function GET() {
   try {
@@ -38,6 +39,21 @@ export async function POST(req: Request) {
     const session = await requireOwnerSession();
     const input = bodySchema.parse(await req.json());
     const item = await createShoppingItem(session.profile_id, input);
+
+    if (item.needs_approval) {
+      try {
+        const profiles = await getAllProfiles();
+        const me = profiles.find((p) => p.id === session.profile_id);
+        const partner = findPartnerOwner(profiles, session.profile_id);
+        const partnerLineId = partner ? await getLineUserId(partner.id) : null;
+        if (partnerLineId) {
+          await sendLineMessage(partnerLineId, `🛒 ${me?.name ?? "パートナー"}が買い物リストに追加しました。\n「${item.name}」の承認をお願いします。`);
+        }
+      } catch (e) {
+        console.error("shopping approval LINE notify failed", e);
+      }
+    }
+
     return NextResponse.json({ item });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });

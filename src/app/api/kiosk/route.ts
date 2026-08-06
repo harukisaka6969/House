@@ -3,7 +3,7 @@ import { requireKioskOrOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { getShoppingItems } from "@/lib/shoppingList";
 import { getReminders } from "@/lib/reminders";
-import { nextOccurrence } from "@/lib/reminderRecurrence";
+import { resolveNextDate } from "@/lib/reminderRecurrence";
 import { getAccounts } from "@/lib/accounts";
 import { getIncomes } from "@/lib/incomes";
 import { getExpensesInRange, monthRange } from "@/lib/expenses";
@@ -62,17 +62,22 @@ export async function GET() {
     const today = todayStrJST();
     const reminders = reminderRows
       .filter((r) => r.active)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        recurrence_type: r.recurrence_type,
-        day_of_week: r.day_of_week,
-        day_of_month: r.day_of_month,
-        memo: r.memo,
-        active: r.active,
-        next_date: nextOccurrence(r, today),
-        created_at: r.created_at,
-      }))
+      .map((r) => {
+        const { next_date, done_today } = resolveNextDate(r, today);
+        return {
+          id: r.id,
+          name: r.name,
+          recurrence_type: r.recurrence_type,
+          day_of_week: r.day_of_week,
+          day_of_month: r.day_of_month,
+          memo: r.memo,
+          active: r.active,
+          next_date,
+          done_today,
+          last_completed_date: r.last_completed_date,
+          created_at: r.created_at,
+        };
+      })
       .sort((a, b) => a.next_date.localeCompare(b.next_date));
 
     const pendingApprovalItems = activeShopping

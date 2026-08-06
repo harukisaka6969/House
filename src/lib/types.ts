@@ -196,6 +196,8 @@ export interface ReminderRow {
   day_of_month: number | null;
   memo: string;
   active: boolean;
+  /** 今日分を完了にした日（YYYY-MM-DD）。次回計算時にこの日と一致すれば翌回へ繰り上げる。 */
+  last_completed_date: string | null;
   created_at: string;
 }
 

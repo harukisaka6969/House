@@ -10,6 +10,7 @@ const patchSchema = z.object({
   day_of_month: z.number().int().min(1).max(31).optional(),
   memo: z.string().max(300).optional(),
   active: z.boolean().optional(),
+  done: z.boolean().optional(),
 });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {

@@ -54,6 +54,11 @@ export default function Reminders() {
     load();
   };
 
+  const toggleDone = async (r: ReminderOut) => {
+    await apiPut(`/api/reminders/${r.id}`, { done: !r.done_today });
+    load();
+  };
+
   const remove = async (id: string) => {
     await apiDelete(`/api/reminders/${id}`);
     load();
@@ -148,7 +153,10 @@ export default function Reminders() {
           {reminders.map((r) => (
             <div key={r.id} className="mf-shopitem" style={{ opacity: r.active ? 1 : 0.5 }}>
               <div className="mf-row" style={{ gap: 10 }}>
-                <span className="mf-shopname">{r.name}</span>
+                <span className="mf-shopname" style={r.done_today ? { textDecoration: "line-through", opacity: 0.6 } : undefined}>
+                  {r.done_today && "✓ "}
+                  {r.name}
+                </span>
                 <button className="mf-del" onClick={() => remove(r.id)}>
                   ×
                 </button>
@@ -158,6 +166,13 @@ export default function Reminders() {
                   {recurrenceLabel(r)}（次回 {r.next_date}）
                 </span>
                 {r.memo && <span className="mf-hint" style={{ margin: 0 }}>{r.memo}</span>}
+                <button
+                  className={"mf-btn " + (r.done_today ? "ghost" : "primary")}
+                  style={{ padding: "3px 8px", fontSize: 12 }}
+                  onClick={() => toggleDone(r)}
+                >
+                  {r.done_today ? "完了を取り消す" : "✓ 完了にする"}
+                </button>
                 <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => toggleActive(r)}>
                   {r.active ? "オフにする" : "オンにする"}
                 </button>

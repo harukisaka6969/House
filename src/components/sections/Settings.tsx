@@ -16,6 +16,8 @@ export default function Settings() {
   const [pinMsg, setPinMsg] = useState("");
   const [kioskPinForm, setKioskPinForm] = useState({ next: "", confirm: "" });
   const [kioskMsg, setKioskMsg] = useState("");
+  const [lineIdInput, setLineIdInput] = useState("");
+  const [lineMsg, setLineMsg] = useState("");
   const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
   const [familyMsg, setFamilyMsg] = useState("");
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -83,6 +85,18 @@ export default function Settings() {
       refreshSettings();
     } catch (e) {
       setKioskMsg(e instanceof Error ? e.message : "設定に失敗しました。");
+    }
+  };
+
+  const saveLineId = async (value: string) => {
+    setLineMsg("");
+    try {
+      await apiPost("/api/settings/line-user-id", { line_user_id: value });
+      setLineMsg(value ? "✓ 保存しました。" : "解除しました。");
+      setLineIdInput("");
+      refreshSettings();
+    } catch (e) {
+      setLineMsg(e instanceof Error ? e.message : "保存に失敗しました。");
     }
   };
 
@@ -276,6 +290,40 @@ export default function Settings() {
           </button>
         </div>
         {kioskMsg && <div className="mf-hint">{kioskMsg}</div>}
+      </div>
+
+      <div className="mf-panel">
+        <div className="mf-paneltitle">📱 LINE通知 {settings.lineUserId ? "（設定済み）" : "（未設定）"}</div>
+        <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+          リマインダーの当日分・在庫切れの毎朝のお知らせや、買い物リストの承認依頼をLINEに届けます。①
+          家計簿のLINE公式アカウントを友だち追加、② 何かメッセージを送るとあなたのユーザーIDが返信されるので、③
+          それをコピーしてここに貼り付けて保存してください。
+          {!settings.lineNotifyAvailable && "（現在サーバー側でLINE連携が未設定のため、設定してもまだ通知は届きません）"}
+        </div>
+        {settings.lineUserId && (
+          <div className="mf-hint" style={{ marginTop: 0 }}>
+            現在のユーザーID: {settings.lineUserId}
+          </div>
+        )}
+        <div className="mf-formgrid">
+          <input
+            className="mf-input mf-mono"
+            placeholder="LINEユーザーID（Uで始まる文字列）"
+            value={lineIdInput}
+            onChange={(e) => setLineIdInput(e.target.value)}
+          />
+        </div>
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <button className="mf-btn primary" onClick={() => saveLineId(lineIdInput.trim())}>
+            保存する
+          </button>
+          {settings.lineUserId && (
+            <button className="mf-btn ghost" onClick={() => saveLineId("")}>
+              解除する
+            </button>
+          )}
+        </div>
+        {lineMsg && <div className="mf-hint">{lineMsg}</div>}
       </div>
 
       <div className="mf-panel">

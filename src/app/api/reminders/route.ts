@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { getReminders, createReminder, nextOccurrence } from "@/lib/reminders";
+import { getReminders, createReminder, resolveNextDate } from "@/lib/reminders";
 import { todayStrJST } from "@/lib/date";
 
 export async function GET() {
@@ -10,17 +10,22 @@ export async function GET() {
     const rows = await getReminders();
     const today = todayStrJST();
     const reminders = rows
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        recurrence_type: r.recurrence_type,
-        day_of_week: r.day_of_week,
-        day_of_month: r.day_of_month,
-        memo: r.memo,
-        active: r.active,
-        next_date: nextOccurrence(r, today),
-        created_at: r.created_at,
-      }))
+      .map((r) => {
+        const { next_date, done_today } = resolveNextDate(r, today);
+        return {
+          id: r.id,
+          name: r.name,
+          recurrence_type: r.recurrence_type,
+          day_of_week: r.day_of_week,
+          day_of_month: r.day_of_month,
+          memo: r.memo,
+          active: r.active,
+          next_date,
+          done_today,
+          last_completed_date: r.last_completed_date,
+          created_at: r.created_at,
+        };
+      })
       .sort((a, b) => (a.active === b.active ? a.next_date.localeCompare(b.next_date) : a.active ? -1 : 1));
     return NextResponse.json({ reminders });
   } catch (e) {

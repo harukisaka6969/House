@@ -17,6 +17,7 @@ export interface ProfileRow {
   failed_attempts: number;
   locked_until: string | null;
   role: "owner" | "family" | "kiosk";
+  line_user_id: string | null;
 }
 
 export const KIOSK_SLUG = "kiosk";

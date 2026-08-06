@@ -1,9 +1,34 @@
 import { NextResponse } from "next/server";
 import { todayStrJST, prevDayStr, addDaysStr, dayOfWeek } from "@/lib/date";
-import { getAllProfiles } from "@/lib/profiles";
+import { getAllProfiles, getLineRecipients } from "@/lib/profiles";
 import { getDigest, upsertDigest } from "@/lib/digests";
 import { gatherDigestData, hasAnyContent, buildDailyDigestPrompt, buildWeeklyDigestPrompt } from "@/lib/digestContext";
 import { generateDigest } from "@/lib/anthropic";
+import { getReminders } from "@/lib/reminders";
+import { resolveNextDate } from "@/lib/reminderRecurrence";
+import { getInventoryItems, lowStockItems as filterLowStock } from "@/lib/inventory";
+import { sendLineMessage } from "@/lib/lineNotify";
+
+/** 今日分のリマインダー・在庫切れをLINEで両ownerに知らせる（何もなければ送らない）。
+ * 専用のcronは作らず、既存の毎日1回のこの枠に相乗りする（Vercelのcron本数制限を避けるため）。 */
+async function sendLineDailyReminderDigest(): Promise<void> {
+  const recipients = await getLineRecipients();
+  if (recipients.length === 0) return;
+
+  const today = todayStrJST();
+  const [reminderRows, inventoryRows] = await Promise.all([getReminders(), getInventoryItems()]);
+
+  const dueToday = reminderRows.filter((r) => r.active && resolveNextDate(r, today).next_date === today).map((r) => r.name);
+  const lowStock = filterLowStock(inventoryRows).map((i) => i.name);
+  if (dueToday.length === 0 && lowStock.length === 0) return;
+
+  const lines = [`📋 ${today} の家計簿だより`];
+  if (dueToday.length) lines.push("", "🔔 今日やること:", ...dueToday.map((n) => `・${n}`));
+  if (lowStock.length) lines.push("", "📦 在庫が少ないもの:", ...lowStock.map((n) => `・${n}`));
+  const message = lines.join("\n");
+
+  await Promise.all(recipients.map((p) => sendLineMessage(p.line_user_id, message)));
+}
 
 const NO_CONTENT_MESSAGE = "この日は記録がほとんどありませんでした。次はちょっとしたことでも日記や記録を残してみましょう。";
 
@@ -51,6 +76,8 @@ export async function GET(req: Request) {
       }
     }
   }
+
+  await sendLineDailyReminderDigest().catch((e) => console.error("sendLineDailyReminderDigest failed", e));
 
   return NextResponse.json({ today: todayJst, isMonday, results });
 }
