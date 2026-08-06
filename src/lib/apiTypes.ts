@@ -456,3 +456,37 @@ export interface ReminderOut {
   next_date: string;
   created_at: string;
 }
+
+export interface KioskPersonColumn {
+  slug: string;
+  name: string;
+  shoppingItems: ShoppingItemOut[];
+}
+
+export interface KioskAccountSummary {
+  id: string;
+  name: string;
+  color: string;
+  budget: number;
+  spent: number;
+  judgeLabel: string;
+  judgeTone: string;
+}
+
+export interface KioskResponse {
+  monthKey: string;
+  income: number;
+  expense: number;
+  invest: number;
+  judgeLabel: string;
+  judgeTone: string;
+  accounts: KioskAccountSummary[];
+  reminders: ReminderOut[];
+  left: KioskPersonColumn;
+  right: KioskPersonColumn;
+  notifications: {
+    pendingApprovalItems: { id: string; name: string; owner_name: string }[];
+    remindersToday: { id: string; name: string }[];
+    lowStockItems: { id: string; name: string }[];
+  };
+}

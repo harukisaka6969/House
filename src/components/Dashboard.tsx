@@ -184,6 +184,9 @@ function DashboardInner() {
               <button className="mf-drawitem" onClick={() => router.push(`/${slug}/quick`)}>
                 ⚡ クイック入力
               </button>
+              <button className="mf-drawitem" onClick={() => router.push(`/${slug}/kiosk`)}>
+                🖥 常設ダッシュボード
+              </button>
               <button className="mf-drawitem" onClick={logout}>
                 ログアウト
               </button>

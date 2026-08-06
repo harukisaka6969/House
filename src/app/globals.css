@@ -217,3 +217,46 @@ select.mf-input option { background: #181E25; }
 .mf-fieldlabel { display: block; font-size: 12px; color: #93A0AE; margin: 12px 0 4px; }
 .mf-fieldlabel:first-child { margin-top: 0; }
 .mf-fieldlabel.required::after { content: " *"; color: #F5A524; }
+
+/* ---- 常設ダッシュボード（キオスク画面）---- */
+.kiosk-root { min-height: 100vh; background: #0B0E12; color: #E7ECF2; padding: 20px; display: flex; flex-direction: column; gap: 14px; font-family: var(--font-body); }
+.kiosk-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.kiosk-topleft { flex: 1; min-width: 0; }
+.kiosk-eyebrow { font-size: 11px; letter-spacing: 0.08em; color: #F5A524; font-weight: 700; }
+.kiosk-title { font-size: 22px; font-weight: 800; color: #E7ECF2; }
+.kiosk-clock { text-align: right; flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.kiosk-time { font-size: 28px; font-weight: 800; font-family: var(--font-num); line-height: 1; }
+.kiosk-date { font-size: 12.5px; color: #93A0AE; margin-top: 2px; }
+
+.kiosk-bellwrap { position: relative; flex: 0 0 auto; }
+.kiosk-bell { position: relative; background: #181E25; border: 1px solid rgba(255,255,255,0.14); border-radius: 50%; width: 52px; height: 52px; font-size: 22px; cursor: pointer; }
+.kiosk-bellbadge { position: absolute; top: -4px; right: -4px; background: #F26D5F; color: #fff; font-size: 11px; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+.kiosk-bellpanel { position: absolute; top: 60px; right: 0; width: 300px; background: #181E25; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; padding: 12px; z-index: 20; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+.kiosk-notifrow { font-size: 13.5px; padding: 7px 4px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.kiosk-notifrow:last-child { border-bottom: none; }
+
+.kiosk-panel { background: #14181D; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; }
+.kiosk-panelhead { font-size: 13px; font-weight: 700; color: #C4CDD6; margin-bottom: 10px; letter-spacing: 0.03em; }
+.kiosk-empty { color: #6B7684; font-size: 13px; }
+
+.kiosk-reminderrow-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.kiosk-reminderchip { background: #101418; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+.kiosk-reminderchip b { font-size: 14px; }
+.kiosk-reminderchip span { font-size: 11.5px; color: #93A0AE; }
+
+.kiosk-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; }
+@media (max-width: 720px) { .kiosk-columns { grid-template-columns: 1fr; } }
+.kiosk-col { background: #14181D; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; overflow-y: auto; }
+.kiosk-colname { font-size: 17px; font-weight: 800; margin-bottom: 10px; }
+.kiosk-itemlist { display: flex; flex-direction: column; gap: 6px; }
+.kiosk-item { background: #101418; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kiosk-itemname { font-size: 15px; }
+.kiosk-itemmeta { font-size: 11.5px; color: #93A0AE; flex: 0 0 auto; }
+
+.kiosk-bottom { display: flex; flex-wrap: wrap; gap: 18px; background: #14181D; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px 18px; }
+.kiosk-moneystat { display: flex; flex-direction: column; gap: 2px; min-width: 90px; }
+.kiosk-moneylabel { font-size: 11px; color: #93A0AE; display: flex; align-items: center; gap: 5px; }
+.kiosk-moneyval { font-size: 19px; font-weight: 700; font-family: var(--font-num); }
+
+.kiosk-exit { align-self: center; font-size: 12px; color: #6B7684; text-decoration: none; padding: 6px; }
+.kiosk-exit:hover { color: #93A0AE; }
