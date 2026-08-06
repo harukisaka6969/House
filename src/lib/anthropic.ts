@@ -201,6 +201,32 @@ export interface MealEstimate {
   carb_g: number;
 }
 
+export type LinePhotoKind = "meal" | "receipt" | "other";
+
+/** LINEに送られてきた写真が「食事」か「レシート」かそれ以外かを判定する（自動振り分け用）。 */
+export async function classifyLinePhoto(base64: string, mediaType: string): Promise<LinePhotoKind> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 10,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: "この画像は「食事・料理の写真」「レシート・領収書」「それ以外」のどれですか。meal / receipt / other のいずれか1単語のみを返してください。",
+          },
+        ],
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content)).toLowerCase();
+  if (text.includes("meal")) return "meal";
+  if (text.includes("receipt")) return "receipt";
+  return "other";
+}
+
 /** 食事写真 → {description, calories, protein_g, fat_g, carb_g}。大まかな推定であることを前提とする。 */
 export async function estimateMealNutrition(base64: string, mediaType: string): Promise<MealEstimate> {
   const res = await anthropic().messages.create({

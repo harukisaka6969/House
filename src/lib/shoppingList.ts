@@ -1,5 +1,7 @@
 import "server-only";
 import { db } from "./db";
+import { getAllProfiles, getLineUserId } from "./profiles";
+import { sendLineMessage } from "./lineNotify";
 import type { ShoppingItemRow, ShoppingStore } from "./types";
 
 const APPROVAL_STORES: ShoppingStore[] = ["amazon", "other"];
@@ -67,6 +69,36 @@ export async function setShoppingItemBought(id: string, bought: boolean): Promis
     .single();
   if (error) throw error;
   return data as ShoppingItemRow;
+}
+
+/** approverIdが承認できる（自分以外が追加した、承認待ちの）項目一覧。LINEの「承認」コマンド用。 */
+export async function getPendingApprovalsFor(approverId: string): Promise<ShoppingItemRow[]> {
+  const { data, error } = await db()
+    .from("shopping_items")
+    .select("*")
+    .eq("needs_approval", true)
+    .eq("approved", false)
+    .neq("owner", approverId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as ShoppingItemRow[];
+}
+
+/** 承認 + 依頼した本人へのLINE通知をまとめて行う（アプリのボタンからでもLINEの「承認」コマンドからでも共通で使う）。 */
+export async function approveShoppingItemAndNotify(id: string, approverId: string): Promise<ShoppingItemRow | null> {
+  const item = await approveShoppingItem(id, approverId);
+  if (!item) return null;
+  try {
+    const profiles = await getAllProfiles();
+    const approver = profiles.find((p) => p.id === approverId);
+    const requesterLineId = await getLineUserId(item.owner);
+    if (requesterLineId) {
+      await sendLineMessage(requesterLineId, `✅ ${approver?.name ?? "パートナー"}が「${item.name}」を承認したよ！`);
+    }
+  } catch (e) {
+    console.error("shopping approve LINE notify failed", e);
+  }
+  return item;
 }
 
 export async function deleteShoppingItem(id: string): Promise<boolean> {

@@ -31,3 +31,24 @@ export async function sendLineMessage(lineUserId: string, text: string): Promise
 export async function replyLineMessage(replyToken: string, text: string): Promise<void> {
   await callLineApi(REPLY_URL, { replyToken, messages: [{ type: "text", text }] }).catch((e) => console.error("replyLineMessage failed", e));
 }
+
+/** Webhookで受け取った画像メッセージの実体データを取得する（食事写真・レシート写真の自動登録用）。 */
+export async function fetchLineImageContent(messageId: string): Promise<{ base64: string; mediaType: string } | null> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      console.error(`LINE content fetch error ${res.status}`);
+      return null;
+    }
+    const mediaType = res.headers.get("content-type") || "image/jpeg";
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { base64: buf.toString("base64"), mediaType };
+  } catch (e) {
+    console.error("fetchLineImageContent failed", e);
+    return null;
+  }
+}

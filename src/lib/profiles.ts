@@ -45,6 +45,18 @@ export async function getLineRecipients(): Promise<{ id: string; line_user_id: s
   }
 }
 
+/** LINEのユーザーIDから、紐付いているownerのprofile idを逆引きする（LINE Webhookからの操作用）。未登録なら null。 */
+export async function findProfileIdByLineUserId(lineUserId: string): Promise<string | null> {
+  try {
+    const { data, error } = await db().from("profiles").select("id").eq("line_user_id", lineUserId).eq("role", "owner").maybeSingle();
+    if (error) throw error;
+    return (data as { id: string } | null)?.id ?? null;
+  } catch (e) {
+    console.error("findProfileIdByLineUserId failed", e);
+    return null;
+  }
+}
+
 /** The other owner profile (never a family viewer profile) — used for "partner" lookups. */
 export function findPartnerOwner(profiles: Profile[], viewerProfileId: string): Profile | null {
   return profiles.find((p) => p.role === "owner" && p.id !== viewerProfileId) ?? null;

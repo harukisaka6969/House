@@ -47,7 +47,10 @@ export async function POST(req: Request) {
         const partner = findPartnerOwner(profiles, session.profile_id);
         const partnerLineId = partner ? await getLineUserId(partner.id) : null;
         if (partnerLineId) {
-          await sendLineMessage(partnerLineId, `🛒 ${me?.name ?? "パートナー"}が「${item.name}」を買いたいみたい。承認してあげてね！`);
+          await sendLineMessage(
+            partnerLineId,
+            `🛒 ${me?.name ?? "パートナー"}が「${item.name}」を買いたいみたい。承認してあげてね！\nLINEで承認したければ「承認」と送ってね。`
+          );
         }
       } catch (e) {
         console.error("shopping approval LINE notify failed", e);
