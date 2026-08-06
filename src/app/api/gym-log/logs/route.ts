@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
-import { createLog } from "@/lib/gymLog";
+import { createLog, isNewGymSession } from "@/lib/gymLog";
 import { getSportLogsInRange, createSportLog } from "@/lib/journal";
 import { isValidDateStr, nextDayStr } from "@/lib/date";
+import { getAllProfiles, findPartnerOwner, getLineUserId } from "@/lib/profiles";
+import { sendLineMessage } from "@/lib/lineNotify";
 
 const setSchema = z.object({ weight: z.number().min(0), reps: z.number().int().min(0) });
 const bodySchema = z.object({
@@ -37,6 +39,20 @@ export async function POST(req: Request) {
         date,
         activity: splitLabel ? `ジム（${splitLabel}）` : "ジム",
       });
+    }
+
+    try {
+      if (await isNewGymSession(session.profile_id, log.id, log.created_at)) {
+        const profiles = await getAllProfiles();
+        const me = profiles.find((p) => p.id === session.profile_id);
+        const partner = findPartnerOwner(profiles, session.profile_id);
+        const partnerLineId = partner ? await getLineUserId(partner.id) : null;
+        if (partnerLineId) {
+          await sendLineMessage(partnerLineId, `🏋️ ${me?.name ?? "パートナー"}がジムで筋トレを始めたみたいだよ！`);
+        }
+      }
+    } catch (e) {
+      console.error("gym session LINE notify failed", e);
     }
 
     return NextResponse.json({ log });

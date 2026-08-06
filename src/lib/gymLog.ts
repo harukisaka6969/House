@@ -91,3 +91,20 @@ export async function deleteLog(id: string, ownerId: string): Promise<boolean> {
   if (error) throw error;
   return (data?.length ?? 0) > 0;
 }
+
+const GYM_SESSION_GAP_MS = 3 * 60 * 60 * 1000;
+
+/** 直前の記録からGYM_SESSION_GAP_MS以上空いていれば「新しいジム訪問」とみなす（同じ日に2回行っても3時間空いていれば別回扱い）。 */
+export async function isNewGymSession(ownerId: string, newLogId: string, newLogCreatedAt: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("gym_logs")
+    .select("created_at")
+    .eq("owner", ownerId)
+    .neq("id", newLogId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const prev = data?.[0] as { created_at: string } | undefined;
+  if (!prev) return true;
+  return new Date(newLogCreatedAt).getTime() - new Date(prev.created_at).getTime() >= GYM_SESSION_GAP_MS;
+}
