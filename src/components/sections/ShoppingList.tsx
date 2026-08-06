@@ -88,7 +88,8 @@ export default function ShoppingList() {
     setMsg("");
     try {
       const r = await apiPost<{ count: number }>("/api/shopping-items/notify-seiyu", {});
-      setMsg(`✓ 西友の買い物リスト（${r.count}件）をLINEに送りました。`);
+      setMsg(`✓ 西友の買い物リスト（${r.count}件）をLINEに送り、購入済みにしました。`);
+      load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "送信に失敗しました。");
     }
@@ -145,7 +146,7 @@ export default function ShoppingList() {
             買うもの（{pending.length}件）
           </div>
           <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={notifySeiyu}>
-            🛒 西友の分をLINEに送る
+            🛒 西友の分をLINEに送って購入済みにする
           </button>
         </div>
         {selected.size > 0 && (
