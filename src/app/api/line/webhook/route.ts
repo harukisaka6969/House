@@ -3,12 +3,21 @@ import crypto from "crypto";
 import { replyLineMessage, sendLineMessage, fetchLineImageContent } from "@/lib/lineNotify";
 import { findProfileIdByLineUserId } from "@/lib/profiles";
 import { getPendingApprovalsFor, approveShoppingItemAndNotify } from "@/lib/shoppingList";
-import { classifyLinePhoto, estimateMealNutrition, ocrReceipt } from "@/lib/anthropic";
+import {
+  classifyLinePhoto,
+  classifyLineText,
+  estimateMealNutrition,
+  estimateMealNutritionFromText,
+  ocrReceipt,
+  parseExpenseText,
+  extractIncomeFromText,
+} from "@/lib/anthropic";
 import { createMealLog } from "@/lib/mealLog";
 import { addExpenseEntries, ValidationError as ExpenseValidationError } from "@/lib/expenses";
+import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAccounts } from "@/lib/accounts";
 import { getAllCategories } from "@/lib/categories";
-import { todayStrJST } from "@/lib/date";
+import { todayStrJST, nowMonthKeyJST } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
 interface LineEvent {
@@ -19,7 +28,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、食事の写真やレシートの写真を送ると自動で記録できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、食事・支出・収入は文章でも写真でもそのまま送るだけで自動で記録できます。`;
+
+const USAGE_HINT =
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・買い物の承認「承認」\n（食事の写真・レシートの写真もそのまま送れます）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -39,6 +51,80 @@ async function handleApproveCommand(event: LineEvent, profileId: string): Promis
     if (result) approvedNames.push(result.name);
   }
   await reply(event, approvedNames.length ? `✅ 承認しました:\n${approvedNames.map((n) => `・${n}`).join("\n")}` : "承認に失敗しました。");
+}
+
+async function handleMealText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const estimate = await estimateMealNutritionFromText(text);
+  await createMealLog(profileId, {
+    date: todayStrJST(),
+    description: estimate.description || "",
+    calories: Number(estimate.calories) || 0,
+    protein_g: Number(estimate.protein_g) || 0,
+    fat_g: Number(estimate.fat_g) || 0,
+    carb_g: Number(estimate.carb_g) || 0,
+  });
+  await reply(event, `🍚 食事を記録しました: ${estimate.description || text}（約${Math.round(estimate.calories) || 0}kcal）`);
+}
+
+async function handleExpenseText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+  const parsed = await parseExpenseText(text, accounts, categories, todayStrJST());
+  const valid = parsed.filter((p) => Number(p.amount) > 0);
+  if (valid.length === 0) {
+    await reply(event, "支出の内容を読み取れませんでした。金額を含めて送ってください。（例: コンビニで480円）");
+    return;
+  }
+  const entries = valid.map((p) => ({
+    date: p.date,
+    account_id: accounts.some((a) => a.id === p.account) ? p.account! : (accounts[0]?.id ?? "a1"),
+    category: p.category && categories.includes(p.category) ? p.category : "その他",
+    amount: Number(p.amount),
+    memo: p.memo || "",
+  }));
+  await addExpenseEntries(profileId, entries, categories);
+  const total = entries.reduce((s, e) => s + e.amount, 0);
+  const summary = entries.map((e) => `・${e.memo || e.category} ${e.amount.toLocaleString()}円`).join("\n");
+  await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}`);
+}
+
+async function handleIncomeText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const parsed = await extractIncomeFromText(text);
+  const amount = Math.round(Number(parsed.amount));
+  if (!amount || amount <= 0) {
+    await reply(event, "収入の金額を読み取れませんでした。金額を含めて送ってください。（例: 給料25万円）");
+    return;
+  }
+  const monthKey = nowMonthKeyJST();
+  const existing = await getIncomes(monthKey);
+  const next = [
+    ...existing.map((i) => ({ id: i.id, name: i.name, amount: i.amount, owner: i.owner })),
+    { name: parsed.name || "収入", amount, owner: profileId },
+  ];
+  await replaceIncomes(monthKey, next);
+  await reply(event, `💰 収入を記録しました: ${parsed.name || "収入"} ${amount.toLocaleString()}円（${monthKey}分）`);
+}
+
+/** 「承認」以外のテキストメッセージ: 食事・支出・収入のどれについてかをAIで判定し、それぞれ自動で記録する。 */
+async function handleFreeText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const limited = rateLimit(`ai:${profileId}`, 60, 60 * 60 * 1000);
+  if (!limited.ok) {
+    await reply(event, "AI機能の利用回数上限に達しました。しばらくしてから再試行してください。");
+    return;
+  }
+  try {
+    const intent = await classifyLineText(text);
+    if (intent === "meal") return await handleMealText(event, profileId, text);
+    if (intent === "expense") return await handleExpenseText(event, profileId, text);
+    if (intent === "income") return await handleIncomeText(event, profileId, text);
+    await reply(event, USAGE_HINT);
+  } catch (e) {
+    if (e instanceof ExpenseValidationError) {
+      await reply(event, `記録に失敗しました: ${e.message}`);
+      return;
+    }
+    console.error("LINE text handling failed", e);
+    await reply(event, "読み取りに失敗しました。時間をおいてもう一度試すか、アプリから登録してください。");
+  }
 }
 
 /** 画像メッセージ: 食事の写真かレシートの写真かをAIで判定し、それぞれ自動で記録する。 */
@@ -135,16 +221,16 @@ export async function POST(req: Request) {
 
     if (event.type === "message" && event.message?.type === "text") {
       const text = (event.message.text ?? "").trim();
-      if (text === "承認") {
-        const profileId = await findProfileIdByLineUserId(userId);
-        if (!profileId) {
-          await reply(event, "この操作をするには、まず家計簿アプリの「設定」→「LINE通知」でLINE連携をしてください。");
-        } else {
-          await handleApproveCommand(event, profileId);
-        }
+      const profileId = await findProfileIdByLineUserId(userId);
+      if (!profileId) {
+        await reply(event, ID_MESSAGE(userId));
         continue;
       }
-      await reply(event, ID_MESSAGE(userId));
+      if (text === "承認") {
+        await handleApproveCommand(event, profileId);
+      } else {
+        await handleFreeText(event, profileId, text);
+      }
       continue;
     }
 

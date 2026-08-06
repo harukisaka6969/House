@@ -227,6 +227,50 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
   return "other";
 }
 
+export type LineTextIntent = "meal" | "expense" | "income" | "unknown";
+
+/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」のどれについての話かを判定する（自動振り分け用）。 */
+export async function classifyLineText(text: string): Promise<LineTextIntent> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 10,
+    messages: [
+      {
+        role: "user",
+        content: `次のメッセージは「食事の内容」「支出（買い物などお金を使った内容）」「収入（お金が入った内容）」「それ以外」のどれに一番近いですか。meal / expense / income / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content)).toLowerCase();
+  if (t.includes("meal")) return "meal";
+  if (t.includes("expense")) return "expense";
+  if (t.includes("income")) return "income";
+  return "unknown";
+}
+
+export interface ParsedIncomeEntry {
+  name: string;
+  amount: number;
+}
+
+/** 文章 → 収入エントリ（名前・金額）。LINEからの収入登録用。 */
+export async function extractIncomeFromText(text: string): Promise<ParsedIncomeEntry> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 200,
+    messages: [
+      {
+        role: "user",
+        content: `次の文章から収入の内容を抽出し、次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"name":"収入の名前（給料、副業、ボーナスなど。20文字程度）","amount":金額の数値}
+文章: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  return JSON.parse(t) as ParsedIncomeEntry;
+}
+
 /** 食事写真 → {description, calories, protein_g, fat_g, carb_g}。大まかな推定であることを前提とする。 */
 export async function estimateMealNutrition(base64: string, mediaType: string): Promise<MealEstimate> {
   const res = await anthropic().messages.create({
