@@ -147,7 +147,7 @@ export interface ShoppingItemOut {
 }
 
 export interface MeResponse {
-  profile: { id: string; slug: string; name: string; role: "owner" | "family" };
+  profile: { id: string; slug: string; name: string; role: "owner" | "family" | "kiosk" };
   partner: { name: string; slug: string } | null;
 }
 
@@ -166,6 +166,7 @@ export interface SettingsResponse {
   customCategories: string[];
   accounts: AccountOut[];
   familyAccounts: FamilyAccountOut[];
+  kioskConfigured: boolean;
 }
 
 /* ---- v2 ---- */

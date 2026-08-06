@@ -88,7 +88,7 @@ function Clock() {
   );
 }
 
-export default function KioskDashboard({ slug }: { slug: string }) {
+export default function KioskDashboard({ slug, exitHref }: { slug: string; exitHref?: string }) {
   const [data, setData] = useState<KioskResponse | null>(null);
 
   useEffect(() => {
@@ -169,9 +169,11 @@ export default function KioskDashboard({ slug }: { slug: string }) {
         ))}
       </div>
 
-      <a className="kiosk-exit" href={`/${slug}/app`}>
-        ← 通常画面に戻る
-      </a>
+      {exitHref && (
+        <a className="kiosk-exit" href={exitHref}>
+          ← 通常画面に戻る
+        </a>
+      )}
     </div>
   );
 }

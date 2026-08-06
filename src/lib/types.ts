@@ -8,7 +8,7 @@ export interface Account {
   sort: number;
 }
 
-export type ProfileRole = "owner" | "family";
+export type ProfileRole = "owner" | "family" | "kiosk";
 
 export interface Profile {
   id: string;

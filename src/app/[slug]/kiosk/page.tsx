@@ -11,7 +11,7 @@ export default async function KioskPage({ params }: { params: Promise<{ slug: st
 
   return (
     <AppGate slug={slug}>
-      <KioskDashboard slug={slug} />
+      <KioskDashboard slug={slug} exitHref={`/${slug}/app`} />
     </AppGate>
   );
 }

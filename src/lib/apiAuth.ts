@@ -30,6 +30,13 @@ export async function requireFamilySession(): Promise<SessionPayload> {
   return session;
 }
 
+/** 共用ダッシュボード（/api/kiosk）専用: owner本人 または kioskロール（他のどのAPIにもアクセスできない専用の閲覧用ログイン）のみ許可する。 */
+export async function requireKioskOrOwnerSession(): Promise<SessionPayload> {
+  const session = await requireSession();
+  if (session.role !== "owner" && session.role !== "kiosk") throw new ApiError(403, "この操作には権限がありません");
+  return session;
+}
+
 export function errorResponse(e: unknown): NextResponse {
   if (e instanceof ApiError) {
     return NextResponse.json({ error: e.message, ...e.extra }, { status: e.status });

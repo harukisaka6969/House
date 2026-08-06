@@ -8,7 +8,7 @@ const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 export interface SessionPayload {
   profile_id: string;
   slug: string;
-  role: "owner" | "family";
+  role: "owner" | "family" | "kiosk";
 }
 
 function secretKey(): Uint8Array {
@@ -33,7 +33,7 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
     if (
       typeof payload.profile_id !== "string" ||
       typeof payload.slug !== "string" ||
-      (payload.role !== "owner" && payload.role !== "family")
+      (payload.role !== "owner" && payload.role !== "family" && payload.role !== "kiosk")
     ) {
       return null;
     }

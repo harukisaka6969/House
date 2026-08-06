@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { checkPin, changePin, getProfileById } from "@/lib/pinAuth";
+import { checkPin, changePin, getProfileById, kioskPinExists } from "@/lib/pinAuth";
 import { getAllCategories, getCustomCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
 import { listFamilyAccounts } from "@/lib/familyAccounts";
@@ -9,12 +9,13 @@ import { listFamilyAccounts } from "@/lib/familyAccounts";
 export async function GET() {
   try {
     const session = await requireOwnerSession();
-    const [profile, allCategories, customCategories, accounts, familyAccounts] = await Promise.all([
+    const [profile, allCategories, customCategories, accounts, familyAccounts, kioskConfigured] = await Promise.all([
       getProfileById(session.profile_id),
       getAllCategories(),
       getCustomCategories(),
       getAccounts(),
       listFamilyAccounts(),
+      kioskPinExists(),
     ]);
     if (!profile) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({
@@ -23,6 +24,7 @@ export async function GET() {
       customCategories,
       accounts,
       familyAccounts,
+      kioskConfigured,
     });
   } catch (e) {
     return errorResponse(e);

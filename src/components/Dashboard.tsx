@@ -20,6 +20,7 @@ const dyn = <P extends object>(loader: () => Promise<{ default: React.ComponentT
   dynamic(loader, { loading: () => SECTION_LOADING });
 
 const FamilyDashboard = dyn<{ slug: string }>(() => import("./FamilyDashboard"));
+const KioskDashboard = dyn<{ slug: string }>(() => import("./KioskDashboard"));
 const AgentWidget = dynamic(() => import("./AgentWidget"), { ssr: false });
 const Home = dyn(() => import("./sections/Home"));
 const Summary = dyn(() => import("./sections/Summary"));
@@ -101,6 +102,7 @@ export default function Dashboard({ slug }: { slug: string }) {
     );
   }
   if (me.profile.role === "family") return <FamilyDashboard slug={slug} />;
+  if (me.profile.role === "kiosk") return <KioskDashboard slug={slug} />;
 
   return (
     <DashboardProvider slug={slug} initialMe={me}>

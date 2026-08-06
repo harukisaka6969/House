@@ -14,6 +14,8 @@ export default function Settings() {
   const [acctDraft, setAcctDraft] = useState<Record<string, { name: string; budget: number }> | null>(null);
   const [pinForm, setPinForm] = useState({ current: "", next: "", confirm: "" });
   const [pinMsg, setPinMsg] = useState("");
+  const [kioskPinForm, setKioskPinForm] = useState({ next: "", confirm: "" });
+  const [kioskMsg, setKioskMsg] = useState("");
   const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
   const [familyMsg, setFamilyMsg] = useState("");
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -61,6 +63,26 @@ export default function Settings() {
       setPinForm({ current: "", next: "", confirm: "" });
     } catch (e) {
       setPinMsg(e instanceof Error ? e.message : "PINの変更に失敗しました。");
+    }
+  };
+
+  const setKioskPin = async () => {
+    setKioskMsg("");
+    if (!/^\d{4,8}$/.test(kioskPinForm.next)) {
+      setKioskMsg("PINは4〜8桁の数字にしてください。");
+      return;
+    }
+    if (kioskPinForm.next !== kioskPinForm.confirm) {
+      setKioskMsg("確認用PINが一致しません。");
+      return;
+    }
+    try {
+      await apiPost("/api/settings/kiosk-pin", { pin: kioskPinForm.next });
+      setKioskMsg("✓ 設定しました。/kiosk からこのPINでログインできます。");
+      setKioskPinForm({ next: "", confirm: "" });
+      refreshSettings();
+    } catch (e) {
+      setKioskMsg(e instanceof Error ? e.message : "設定に失敗しました。");
     }
   };
 
@@ -223,6 +245,37 @@ export default function Settings() {
           </button>
         </div>
         {pinMsg && <div className="mf-hint">{pinMsg}</div>}
+      </div>
+
+      <div className="mf-panel">
+        <div className="mf-paneltitle">🖥 共用ダッシュボードのPIN {settings.kioskConfigured ? "（設定済み）" : "（未設定）"}</div>
+        <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+          iPad等に常時表示する「共用ダッシュボード」専用のPINです。個々の日記・支出明細など個別のデータには一切アクセスできず、買い物リスト・リマインダー・おおまかなお金の状況のみ見られます。設定後は「/kiosk」からこのPINでログインしてください。
+        </div>
+        <div className="mf-formgrid">
+          <input
+            className="mf-input mf-mono"
+            type="password"
+            inputMode="numeric"
+            placeholder="新しいPIN（4〜8桁）"
+            value={kioskPinForm.next}
+            onChange={(e) => setKioskPinForm({ ...kioskPinForm, next: e.target.value })}
+          />
+          <input
+            className="mf-input mf-mono"
+            type="password"
+            inputMode="numeric"
+            placeholder="新しいPIN（確認）"
+            value={kioskPinForm.confirm}
+            onChange={(e) => setKioskPinForm({ ...kioskPinForm, confirm: e.target.value })}
+          />
+        </div>
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <button className="mf-btn primary" onClick={setKioskPin}>
+            {settings.kioskConfigured ? "変更する" : "設定する"}
+          </button>
+        </div>
+        {kioskMsg && <div className="mf-hint">{kioskMsg}</div>}
       </div>
 
       <div className="mf-panel">

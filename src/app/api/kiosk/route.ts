@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
+import { requireKioskOrOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { getShoppingItems } from "@/lib/shoppingList";
 import { getReminders } from "@/lib/reminders";
@@ -17,7 +17,7 @@ import type { ShoppingItemRow } from "@/lib/types";
  * 買い物リスト・リマインダー・お金の概況・重要な通知をまとめて返す。個人の日記等プライベートな情報は含まない。 */
 export async function GET() {
   try {
-    const session = await requireOwnerSession();
+    const session = await requireKioskOrOwnerSession();
     const monthKey = nowMonthKeyJST();
     const { from, toExclusive } = monthRange(monthKey);
 
