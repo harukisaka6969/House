@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { replyLineMessage, sendLineMessage, fetchLineImageContent } from "@/lib/lineNotify";
 import { findProfileIdByLineUserId } from "@/lib/profiles";
 import { getPendingApprovalsFor, approveShoppingItemAndNotify } from "@/lib/shoppingList";
+import { getDueRemindersToday, updateReminder } from "@/lib/reminders";
 import {
   classifyLinePhoto,
   classifyLineText,
@@ -28,10 +29,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、食事・支出・収入は文章でも写真でもそのまま送るだけで自動で記録できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入は文章でも写真でもそのまま送るだけで自動で記録できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・買い物の承認「承認」\n（食事の写真・レシートの写真もそのまま送れます）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -51,6 +52,22 @@ async function handleApproveCommand(event: LineEvent, profileId: string): Promis
     if (result) approvedNames.push(result.name);
   }
   await reply(event, approvedNames.length ? `✅ 承認しました:\n${approvedNames.map((n) => `・${n}`).join("\n")}` : "承認に失敗しました。");
+}
+
+/** テキスト「完了」: 今日が該当日で、まだ完了にしていないリマインダーをすべて完了にする。 */
+async function handleCompleteCommand(event: LineEvent): Promise<void> {
+  const today = todayStrJST();
+  const due = await getDueRemindersToday(today);
+  if (due.length === 0) {
+    await reply(event, "今日、完了にできるリマインダーはありません。");
+    return;
+  }
+  const completedNames: string[] = [];
+  for (const r of due) {
+    const result = await updateReminder(r.id, { done: true });
+    if (result) completedNames.push(result.name);
+  }
+  await reply(event, completedNames.length ? `✅ 完了にしました:\n${completedNames.map((n) => `・${n}`).join("\n")}` : "完了にできませんでした。");
 }
 
 async function handleMealText(event: LineEvent, profileId: string, text: string): Promise<void> {
@@ -228,6 +245,8 @@ export async function POST(req: Request) {
       }
       if (text === "承認") {
         await handleApproveCommand(event, profileId);
+      } else if (text === "完了") {
+        await handleCompleteCommand(event);
       } else {
         await handleFreeText(event, profileId, text);
       }

@@ -81,6 +81,12 @@ export async function markReminderNotified(id: string, today: string): Promise<v
   if (error) throw error;
 }
 
+/** 今日が該当日で、まだ完了にしていないリマインダー一覧。LINEの「完了」コマンド・ダイジェスト表示用。 */
+export async function getDueRemindersToday(today: string): Promise<ReminderRow[]> {
+  const rows = await getReminders();
+  return rows.filter((r) => r.active && resolveNextDate(r, today).next_date === today);
+}
+
 export async function deleteReminder(id: string): Promise<boolean> {
   const { data, error } = await db().from("reminders").delete().eq("id", id).select("id");
   if (error) throw error;

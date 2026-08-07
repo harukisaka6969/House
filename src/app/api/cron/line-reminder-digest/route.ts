@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   if (dueReminders.length > 0) {
     const recipients = await getLineRecipients();
     for (const r of dueReminders) {
-      const message = `🔔 ${r.name}${r.memo ? `\n${r.memo}` : ""}`;
+      const message = `🔔 ${r.name}${r.memo ? `\n${r.memo}` : ""}\nLINEで「完了」と送ると完了にできるよ。`;
       await Promise.all(recipients.map((p) => sendLineMessage(p.line_user_id, message)));
       await markReminderNotified(r.id, today);
     }

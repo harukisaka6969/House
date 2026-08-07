@@ -16,7 +16,9 @@ export async function buildReminderDigestMessage(): Promise<string | null> {
   if (dueToday.length === 0 && lowStock.length === 0) return null;
 
   const lines = [`📋 ${today} の家計簿だより`];
-  if (dueToday.length) lines.push("", "🔔 今日やること:", ...dueToday.map((n) => `・${n}`));
+  if (dueToday.length) {
+    lines.push("", "🔔 今日やること:", ...dueToday.map((n) => `・${n}`), "LINEで「完了」と送ると今日の分をまとめて完了にできるよ。");
+  }
   if (lowStock.length) lines.push("", "📦 在庫が少ないもの:", ...lowStock.map((n) => `・${n}`));
   return lines.join("\n");
 }
