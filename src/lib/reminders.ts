@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { todayStrJST } from "./date";
+import { resolveNextDate } from "./reminderRecurrence";
 import type { ReminderRow, RecurrenceType } from "./types";
 
 export { nextOccurrence, resolveNextDate } from "./reminderRecurrence";
@@ -17,6 +18,7 @@ export interface NewReminderInput {
   day_of_week?: number | null;
   day_of_month?: number | null;
   memo?: string;
+  notify_time?: string | null;
 }
 
 export async function createReminder(input: NewReminderInput): Promise<ReminderRow> {
@@ -28,6 +30,7 @@ export async function createReminder(input: NewReminderInput): Promise<ReminderR
       day_of_week: input.recurrence_type === "weekly" ? input.day_of_week ?? 0 : null,
       day_of_month: input.recurrence_type === "monthly" ? input.day_of_month ?? 1 : null,
       memo: input.memo?.trim() ?? "",
+      notify_time: input.notify_time ?? null,
     })
     .select("*")
     .single();
@@ -44,6 +47,8 @@ export interface ReminderPatch {
   active?: boolean;
   /** trueで「今日の分を完了」、falseで取り消し。 */
   done?: boolean;
+  /** この予定になったらLINEで個別通知する時刻（"HH:MM"）。nullで個別通知オフ。 */
+  notify_time?: string | null;
 }
 
 export async function updateReminder(id: string, patch: ReminderPatch): Promise<ReminderRow | null> {
@@ -52,6 +57,7 @@ export async function updateReminder(id: string, patch: ReminderPatch): Promise<
   if (patch.memo !== undefined) update.memo = patch.memo.trim();
   if (patch.active !== undefined) update.active = patch.active;
   if (patch.done !== undefined) update.last_completed_date = patch.done ? todayStrJST() : null;
+  if (patch.notify_time !== undefined) update.notify_time = patch.notify_time;
   if (patch.recurrence_type !== undefined) {
     update.recurrence_type = patch.recurrence_type;
     update.day_of_week = patch.recurrence_type === "weekly" ? patch.day_of_week ?? 0 : null;
@@ -60,6 +66,19 @@ export async function updateReminder(id: string, patch: ReminderPatch): Promise<
   const { data, error } = await db().from("reminders").update(update).eq("id", id).select("*").maybeSingle();
   if (error) throw error;
   return (data as ReminderRow | null) ?? null;
+}
+
+/** 指定時刻（"HH:MM"）に個別通知するよう設定されていて、実際に今日が該当日で、まだ今日は通知していないもの。 */
+export async function getRemindersDueForNotifyTime(hhmm: string, today: string): Promise<ReminderRow[]> {
+  const rows = await getReminders();
+  return rows.filter(
+    (r) => r.active && r.notify_time === hhmm && r.last_notified_date !== today && resolveNextDate(r, today).next_date === today
+  );
+}
+
+export async function markReminderNotified(id: string, today: string): Promise<void> {
+  const { error } = await db().from("reminders").update({ last_notified_date: today }).eq("id", id);
+  if (error) throw error;
 }
 
 export async function deleteReminder(id: string): Promise<boolean> {

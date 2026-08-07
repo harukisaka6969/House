@@ -75,6 +75,7 @@ export async function GET() {
           next_date,
           done_today,
           last_completed_date: r.last_completed_date,
+          notify_time: r.notify_time,
           created_at: r.created_at,
         };
       })

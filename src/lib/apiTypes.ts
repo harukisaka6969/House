@@ -460,6 +460,7 @@ export interface ReminderOut {
   next_date: string;
   last_completed_date: string | null;
   done_today: boolean;
+  notify_time: string | null;
   created_at: string;
 }
 

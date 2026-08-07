@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { updateReminder, deleteReminder } from "@/lib/reminders";
 
+const TIME_RE = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+
 const patchSchema = z.object({
   name: z.string().min(1).max(60).optional(),
   recurrence_type: z.enum(["daily", "weekly", "monthly"]).optional(),
@@ -11,6 +13,7 @@ const patchSchema = z.object({
   memo: z.string().max(300).optional(),
   active: z.boolean().optional(),
   done: z.boolean().optional(),
+  notify_time: z.string().regex(TIME_RE).nullable().optional(),
 });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {

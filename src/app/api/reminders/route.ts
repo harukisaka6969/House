@@ -23,6 +23,7 @@ export async function GET() {
           next_date,
           done_today,
           last_completed_date: r.last_completed_date,
+          notify_time: r.notify_time,
           created_at: r.created_at,
         };
       })
@@ -33,12 +34,15 @@ export async function GET() {
   }
 }
 
+const TIME_RE = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+
 const bodySchema = z.object({
   name: z.string().min(1).max(60),
   recurrence_type: z.enum(["daily", "weekly", "monthly"]),
   day_of_week: z.number().int().min(0).max(6).optional(),
   day_of_month: z.number().int().min(1).max(31).optional(),
   memo: z.string().max(300).optional(),
+  notify_time: z.string().regex(TIME_RE).nullable().optional(),
 });
 
 export async function POST(req: Request) {

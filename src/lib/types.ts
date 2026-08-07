@@ -198,6 +198,10 @@ export interface ReminderRow {
   active: boolean;
   /** 今日分を完了にした日（YYYY-MM-DD）。次回計算時にこの日と一致すれば翌回へ繰り上げる。 */
   last_completed_date: string | null;
+  /** この予定になったらLINEで個別通知する時刻（JST "HH:MM"、15分刻み）。nullなら個別通知なし。 */
+  notify_time: string | null;
+  /** 個別通知を最後に送った日（YYYY-MM-DD）。同じ日の二重送信を防ぐ。 */
+  last_notified_date: string | null;
   created_at: string;
 }
 

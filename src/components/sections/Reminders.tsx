@@ -13,13 +13,28 @@ export function recurrenceLabel(r: Pick<ReminderOut, "recurrence_type" | "day_of
   return `毎月${r.day_of_month ?? 1}日`;
 }
 
-const emptyForm = { name: "", recurrence_type: "weekly" as RecurrenceType, day_of_week: 2, day_of_month: 1, memo: "" };
+const emptyForm = {
+  name: "",
+  recurrence_type: "weekly" as RecurrenceType,
+  day_of_week: 2,
+  day_of_month: 1,
+  memo: "",
+  notifyEnabled: false,
+  notifyHour: "21",
+  notifyMinute: "00",
+};
+
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
+const MINUTES = ["00", "15", "30", "45"];
 
 export default function Reminders() {
   const [reminders, setReminders] = useState<ReminderOut[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState("");
+  const [editingNotifyId, setEditingNotifyId] = useState<string | null>(null);
+  const [editHour, setEditHour] = useState("21");
+  const [editMinute, setEditMinute] = useState("00");
 
   const load = () => {
     apiGet<{ reminders: ReminderOut[] }>("/api/reminders")
@@ -39,6 +54,7 @@ export default function Reminders() {
         day_of_week: form.recurrence_type === "weekly" ? form.day_of_week : undefined,
         day_of_month: form.recurrence_type === "monthly" ? form.day_of_month : undefined,
         memo: form.memo,
+        notify_time: form.notifyEnabled ? `${form.notifyHour}:${form.notifyMinute}` : null,
       });
       setForm(emptyForm);
       setShowForm(false);
@@ -56,6 +72,12 @@ export default function Reminders() {
 
   const toggleDone = async (r: ReminderOut) => {
     await apiPut(`/api/reminders/${r.id}`, { done: !r.done_today });
+    load();
+  };
+
+  const saveNotifyTime = async (id: string, time: string | null) => {
+    await apiPut(`/api/reminders/${id}`, { notify_time: time });
+    setEditingNotifyId(null);
     load();
   };
 
@@ -127,6 +149,34 @@ export default function Reminders() {
             </label>
             <input id="rem-memo" className="mf-input" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
 
+            <label className="mf-row" style={{ marginTop: 10, gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={form.notifyEnabled} onChange={(e) => setForm({ ...form, notifyEnabled: e.target.checked })} />
+              この予定になったらLINEで個別に通知する
+            </label>
+            {form.notifyEnabled && (
+              <div className="mf-row" style={{ marginTop: 6, gap: 8 }}>
+                <select className="mf-input mf-mono" style={{ width: 90 }} value={form.notifyHour} onChange={(e) => setForm({ ...form, notifyHour: e.target.value })}>
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {h}時
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="mf-input mf-mono"
+                  style={{ width: 90 }}
+                  value={form.notifyMinute}
+                  onChange={(e) => setForm({ ...form, notifyMinute: e.target.value })}
+                >
+                  {MINUTES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}分
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="mf-row" style={{ marginTop: 10 }}>
               <button className="mf-btn primary" onClick={submit}>
                 追加する
@@ -176,7 +226,49 @@ export default function Reminders() {
                 <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => toggleActive(r)}>
                   {r.active ? "オフにする" : "オンにする"}
                 </button>
+                <button
+                  className="mf-btn ghost"
+                  style={{ padding: "3px 8px", fontSize: 12 }}
+                  onClick={() => {
+                    if (editingNotifyId === r.id) {
+                      setEditingNotifyId(null);
+                      return;
+                    }
+                    const [h, m] = (r.notify_time ?? "21:00").split(":");
+                    setEditHour(h);
+                    setEditMinute(m);
+                    setEditingNotifyId(r.id);
+                  }}
+                >
+                  {r.notify_time ? `🔔 ${r.notify_time}に個別通知` : "🔔 個別通知を設定"}
+                </button>
               </div>
+              {editingNotifyId === r.id && (
+                <div className="mf-row" style={{ gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                  <select className="mf-input mf-mono" style={{ width: 90 }} value={editHour} onChange={(e) => setEditHour(e.target.value)}>
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>
+                        {h}時
+                      </option>
+                    ))}
+                  </select>
+                  <select className="mf-input mf-mono" style={{ width: 90 }} value={editMinute} onChange={(e) => setEditMinute(e.target.value)}>
+                    {MINUTES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}分
+                      </option>
+                    ))}
+                  </select>
+                  <button className="mf-btn primary" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => saveNotifyTime(r.id, `${editHour}:${editMinute}`)}>
+                    保存
+                  </button>
+                  {r.notify_time && (
+                    <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => saveNotifyTime(r.id, null)}>
+                      通知オフ
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

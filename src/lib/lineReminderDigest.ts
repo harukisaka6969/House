@@ -9,7 +9,9 @@ export async function buildReminderDigestMessage(): Promise<string | null> {
   const today = todayStrJST();
   const [reminderRows, inventoryRows] = await Promise.all([getReminders(), getInventoryItems()]);
 
-  const dueToday = reminderRows.filter((r) => r.active && resolveNextDate(r, today).next_date === today).map((r) => r.name);
+  const dueToday = reminderRows
+    .filter((r) => r.active && !r.notify_time && resolveNextDate(r, today).next_date === today)
+    .map((r) => r.name);
   const lowStock = filterLowStock(inventoryRows).map((i) => i.name);
   if (dueToday.length === 0 && lowStock.length === 0) return null;
 
