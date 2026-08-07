@@ -28,6 +28,7 @@ export async function GET() {
       kioskConfigured,
       lineUserId: profile.line_user_id,
       lineNotifyAvailable: lineNotifyAvailable(),
+      lineReminderTime: profile.line_reminder_time,
     });
   } catch (e) {
     return errorResponse(e);

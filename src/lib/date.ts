@@ -14,6 +14,20 @@ export function todayStrJST(): string {
   return `${y}-${m}-${d}`;
 }
 
+/** 現在時刻をJSTの"HH:MM"で返し、分は15分刻みに切り捨てる（LINEリマインダー配信時刻とのマッチング用）。 */
+export function currentTimeBucketJST(stepMinutes = 15): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: JST,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const hour = parts.find((p) => p.type === "hour")!.value;
+  const minute = Number(parts.find((p) => p.type === "minute")!.value);
+  const bucketed = Math.floor(minute / stepMinutes) * stepMinutes;
+  return `${hour}:${String(bucketed).padStart(2, "0")}`;
+}
+
 export function shiftMonth(key: string, delta: number): string {
   const [y, m] = key.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));

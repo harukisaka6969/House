@@ -57,6 +57,41 @@ export async function findProfileIdByLineUserId(lineUserId: string): Promise<str
   }
 }
 
+/** 本人のリマインダー配信時刻（JST "HH:MM"、15分刻み）を設定・解除する（nullで配信オフ）。 */
+export async function setLineReminderTime(profileId: string, time: string | null): Promise<void> {
+  const { error } = await db().from("profiles").update({ line_reminder_time: time }).eq("id", profileId);
+  if (error) throw error;
+}
+
+export interface LineReminderRecipient {
+  id: string;
+  line_user_id: string;
+}
+
+/** 指定時刻（JST "HH:MM"）を配信時刻に設定していて、かつ今日まだ送っていないowner一覧。cronの時刻マッチング用。 */
+export async function getLineReminderRecipientsForTime(hhmm: string, today: string): Promise<LineReminderRecipient[]> {
+  try {
+    const { data, error } = await db()
+      .from("profiles")
+      .select("id, line_user_id, line_reminder_last_sent_date")
+      .eq("role", "owner")
+      .eq("line_reminder_time", hhmm);
+    if (error) throw error;
+    return ((data ?? []) as { id: string; line_user_id: string | null; line_reminder_last_sent_date: string | null }[])
+      .filter((p) => !!p.line_user_id && p.line_reminder_last_sent_date !== today)
+      .map((p) => ({ id: p.id, line_user_id: p.line_user_id! }));
+  } catch (e) {
+    console.error("getLineReminderRecipientsForTime failed", e);
+    return [];
+  }
+}
+
+/** 配信済みマークを付ける（同じ日に重複送信しないため）。 */
+export async function markLineReminderSent(profileId: string, today: string): Promise<void> {
+  const { error } = await db().from("profiles").update({ line_reminder_last_sent_date: today }).eq("id", profileId);
+  if (error) throw error;
+}
+
 /** The other owner profile (never a family viewer profile) — used for "partner" lookups. */
 export function findPartnerOwner(profiles: Profile[], viewerProfileId: string): Profile | null {
   return profiles.find((p) => p.role === "owner" && p.id !== viewerProfileId) ?? null;

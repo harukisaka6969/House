@@ -18,6 +18,9 @@ export default function Settings() {
   const [kioskMsg, setKioskMsg] = useState("");
   const [lineIdInput, setLineIdInput] = useState("");
   const [lineMsg, setLineMsg] = useState("");
+  const [reminderHour, setReminderHour] = useState("07");
+  const [reminderMinute, setReminderMinute] = useState("00");
+  const [reminderMsg, setReminderMsg] = useState("");
   const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
   const [familyMsg, setFamilyMsg] = useState("");
   const [showFamilyForm, setShowFamilyForm] = useState(false);
@@ -97,6 +100,17 @@ export default function Settings() {
       refreshSettings();
     } catch (e) {
       setLineMsg(e instanceof Error ? e.message : "保存に失敗しました。");
+    }
+  };
+
+  const saveReminderTime = async (time: string | null) => {
+    setReminderMsg("");
+    try {
+      await apiPost("/api/settings/line-reminder-time", { time });
+      setReminderMsg(time ? `✓ 毎日${time}に届くよう設定しました。` : "オフにしました。");
+      refreshSettings();
+    } catch (e) {
+      setReminderMsg(e instanceof Error ? e.message : "設定に失敗しました。");
     }
   };
 
@@ -295,7 +309,7 @@ export default function Settings() {
       <div className="mf-panel">
         <div className="mf-paneltitle">📱 LINE通知 {settings.lineUserId ? "（設定済み）" : "（未設定）"}</div>
         <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
-          リマインダーの当日分・在庫切れの毎朝のお知らせや、買い物リストの承認依頼をLINEに届けます。①
+          買い物リストの承認依頼・承認完了・ジム開始などをLINEに届けます。①
           家計簿のLINE公式アカウントを友だち追加、② 何かメッセージを送るとあなたのユーザーIDが返信されるので、③
           それをコピーしてここに貼り付けて保存してください。
           {!settings.lineNotifyAvailable && "（現在サーバー側でLINE連携が未設定のため、設定してもまだ通知は届きません）"}
@@ -324,6 +338,42 @@ export default function Settings() {
           )}
         </div>
         {lineMsg && <div className="mf-hint">{lineMsg}</div>}
+      </div>
+
+      <div className="mf-panel">
+        <div className="mf-paneltitle">
+          🔔 リマインダー通知の時刻 {settings.lineReminderTime ? `（毎日 ${settings.lineReminderTime}）` : "（オフ）"}
+        </div>
+        <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+          今日やること（リマインダー）・在庫切れのお知らせを、毎日好きな時刻にLINEへまとめて届けます。15分刻みで指定でき、必要なければオフのままで届きません。
+        </div>
+        <div className="mf-row" style={{ marginTop: 6, gap: 8 }}>
+          <select className="mf-input mf-mono" style={{ width: 90 }} value={reminderHour} onChange={(e) => setReminderHour(e.target.value)}>
+            {Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0")).map((h) => (
+              <option key={h} value={h}>
+                {h}時
+              </option>
+            ))}
+          </select>
+          <select className="mf-input mf-mono" style={{ width: 90 }} value={reminderMinute} onChange={(e) => setReminderMinute(e.target.value)}>
+            {["00", "15", "30", "45"].map((m) => (
+              <option key={m} value={m}>
+                {m}分
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <button className="mf-btn primary" onClick={() => saveReminderTime(`${reminderHour}:${reminderMinute}`)}>
+            この時刻に設定する
+          </button>
+          {settings.lineReminderTime && (
+            <button className="mf-btn ghost" onClick={() => saveReminderTime(null)}>
+              オフにする
+            </button>
+          )}
+        </div>
+        {reminderMsg && <div className="mf-hint">{reminderMsg}</div>}
       </div>
 
       <div className="mf-panel">

@@ -18,6 +18,8 @@ export interface ProfileRow {
   locked_until: string | null;
   role: "owner" | "family" | "kiosk";
   line_user_id: string | null;
+  line_reminder_time: string | null;
+  line_reminder_last_sent_date: string | null;
 }
 
 export const KIOSK_SLUG = "kiosk";

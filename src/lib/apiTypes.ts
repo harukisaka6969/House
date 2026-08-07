@@ -169,6 +169,7 @@ export interface SettingsResponse {
   kioskConfigured: boolean;
   lineUserId: string | null;
   lineNotifyAvailable: boolean;
+  lineReminderTime: string | null;
 }
 
 /* ---- v2 ---- */

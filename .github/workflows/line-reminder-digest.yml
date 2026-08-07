@@ -1,0 +1,17 @@
+name: LINE reminder digest
+
+# 15分おきに /api/cron/line-reminder-digest を叩く。Vercel Hobbyプランのcronは1日1回までしか
+# 実行できない制限があるため、ユーザーが自由な時刻を選べるこの機能はGitHub Actions側でスケジュールする。
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and send due LINE reminders
+        run: |
+          curl -sS -f -X GET "${{ vars.APP_BASE_URL || 'https://house-wheat-nine.vercel.app' }}/api/cron/line-reminder-digest" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
