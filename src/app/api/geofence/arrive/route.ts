@@ -6,9 +6,9 @@ import { getLineRecipients, findProfileBySlug } from "@/lib/profiles";
 import { sendLineMessage } from "@/lib/lineNotify";
 
 const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40) });
-const AWAY_THRESHOLD_MS = 60 * 60 * 1000;
+const AWAY_THRESHOLD_MS = 15 * 60 * 1000;
 
-/** iOSショートカットの「到着」オートメーションから呼ばれる想定のWebhook。1時間以上外出していた場合のみ、
+/** iOSショートカットの「到着」オートメーションから呼ばれる想定のWebhook。15分以上外出していた場合のみ、
  * 設定済みの鍵デバイスを解錠し、念のため世帯のLINEに通知する（無条件解錠を避けるための最低限の安全策）。 */
 export async function POST(req: Request) {
   try {
