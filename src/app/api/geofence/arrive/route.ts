@@ -5,19 +5,30 @@ import { sendCommand, switchBotAvailable } from "@/lib/switchbot";
 import { getLineRecipients, findProfileBySlug } from "@/lib/profiles";
 import { sendLineMessage } from "@/lib/lineNotify";
 
-const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40) });
+const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40), leftAt: z.string().optional() });
 const AWAY_THRESHOLD_MS = 15 * 60 * 1000;
 
 /** iOSショートカットの「到着」オートメーションから呼ばれる想定のWebhook。15分以上外出していた場合のみ、
- * 設定済みの鍵デバイスを解錠し、念のため世帯のLINEに通知する（無条件解錠を避けるための最低限の安全策）。 */
+ * 設定済みの鍵デバイスを解錠し、念のため世帯のLINEに通知する（無条件解錠を避けるための最低限の安全策）。
+ * 外出時刻は、不安定になりがちな「外出」側の通信を避けるため、ショートカット側でローカル保存した値を
+ * この到着リクエストのbodyに`leftAt`として乗せて送ってもらう想定。省略された場合のみ、旧来のサーバー側
+ * 記録（/api/geofence/leave経由）にフォールバックする。 */
 export async function POST(req: Request) {
   try {
     const secret = process.env.GEOFENCE_TOKEN;
-    const { token, slug } = bodySchema.parse(await req.json());
+    const { token, slug, leftAt: leftAtParam } = bodySchema.parse(await req.json());
     if (!secret || token !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-    const leftAt = await getLeftAt(slug);
-    await clearLeft(slug);
+    let leftAt: string | null;
+    if (leftAtParam) {
+      const parsed = new Date(leftAtParam);
+      if (Number.isNaN(parsed.getTime())) return NextResponse.json({ error: "invalid leftAt" }, { status: 400 });
+      leftAt = parsed.toISOString();
+      await clearLeft(slug);
+    } else {
+      leftAt = await getLeftAt(slug);
+      await clearLeft(slug);
+    }
 
     if (!leftAt) return NextResponse.json({ ok: true, unlocked: false, reason: "no leave record" });
 
