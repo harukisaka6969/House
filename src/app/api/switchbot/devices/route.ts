@@ -20,7 +20,15 @@ export async function GET() {
 
     return NextResponse.json({
       devices: withStatus,
-      infraredRemotes: infraredRemoteList.map((d) => ({ ...d, status: null })),
+      // 赤外線リモコンはdeviceTypeを持たずremoteTypeのみのため、操作ロジック用に中立な型名を割り当てる
+      // （Curtain/Lock/Vacuum等の実機専用コマンドを誤って学習リモコンに送らないようにするため）。
+      infraredRemotes: infraredRemoteList.map((d) => ({
+        deviceId: d.deviceId,
+        deviceName: d.deviceName,
+        deviceType: "Remote",
+        remoteType: d.remoteType,
+        status: null,
+      })),
     });
   } catch (e) {
     return errorResponse(e);

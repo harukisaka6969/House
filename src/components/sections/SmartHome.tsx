@@ -62,7 +62,7 @@ function DeviceRow({ device, busy, onCommand }: { device: SwitchBotDeviceOut; bu
       </div>
       <div className="mf-row" style={{ gap: 6, marginTop: 4, flexWrap: "wrap" }}>
         <span className="mf-hint" style={{ margin: 0 }}>
-          {device.deviceType}
+          {device.remoteType ?? device.deviceType}
         </span>
         {actions.length === 0 ? (
           <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>
