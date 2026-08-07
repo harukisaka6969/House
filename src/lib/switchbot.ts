@@ -64,3 +64,19 @@ export async function sendCommand(deviceId: string, command: string, parameter: 
     body: JSON.stringify({ command, parameter, commandType }),
   });
 }
+
+export interface SwitchBotScene {
+  sceneId: string;
+  sceneName: string;
+}
+
+/** SwitchBotアプリ側で作成済みのシーン（条件付き自動化）一覧。API経由でのシーン新規作成・条件編集はできず、
+ * 既存シーンの一覧取得と手動実行のみ可能（条件の作成・変更はSwitchBotアプリで行う必要がある）。 */
+export async function listScenes(): Promise<SwitchBotScene[]> {
+  return call<SwitchBotScene[]>("/scenes");
+}
+
+/** 既存シーンを手動で実行する。 */
+export async function executeScene(sceneId: string): Promise<void> {
+  await call<Record<string, unknown>>(`/scenes/${sceneId}/execute`, { method: "POST" });
+}

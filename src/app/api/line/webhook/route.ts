@@ -4,6 +4,7 @@ import { replyLineMessage, sendLineMessage, fetchLineImageContent } from "@/lib/
 import { findProfileIdByLineUserId } from "@/lib/profiles";
 import { getPendingApprovalsFor, approveShoppingItemAndNotify } from "@/lib/shoppingList";
 import { getDueRemindersToday, updateReminder } from "@/lib/reminders";
+import { runSmartHomeTextCommand } from "@/lib/switchbotCommand";
 import {
   classifyLinePhoto,
   classifyLineText,
@@ -29,10 +30,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入は文章でも写真でもそのまま送るだけで自動で記録できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -133,6 +134,7 @@ async function handleFreeText(event: LineEvent, profileId: string, text: string)
     if (intent === "meal") return await handleMealText(event, profileId, text);
     if (intent === "expense") return await handleExpenseText(event, profileId, text);
     if (intent === "income") return await handleIncomeText(event, profileId, text);
+    if (intent === "smarthome") return await reply(event, await runSmartHomeTextCommand(text));
     await reply(event, USAGE_HINT);
   } catch (e) {
     if (e instanceof ExpenseValidationError) {

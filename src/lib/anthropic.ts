@@ -227,9 +227,9 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
   return "other";
 }
 
-export type LineTextIntent = "meal" | "expense" | "income" | "unknown";
+export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "unknown";
 
-/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」のどれについての話かを判定する（自動振り分け用）。 */
+/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」「家電操作」のどれについての話かを判定する（自動振り分け用）。 */
 export async function classifyLineText(text: string): Promise<LineTextIntent> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -237,15 +237,50 @@ export async function classifyLineText(text: string): Promise<LineTextIntent> {
     messages: [
       {
         role: "user",
-        content: `次のメッセージは「食事の内容」「支出（買い物などお金を使った内容）」「収入（お金が入った内容）」「それ以外」のどれに一番近いですか。meal / expense / income / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
+        content: `次のメッセージは「食事の内容」「支出（買い物などお金を使った内容）」「収入（お金が入った内容）」「家電の操作やシーンの実行（照明・エアコン・鍵など）」「それ以外」のどれに一番近いですか。meal / expense / income / smarthome / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
       },
     ],
   });
-  const t = stripFence(joinText(res.content)).toLowerCase();
+  const t = stripFence(joinText(res.content)).toLowerCase().replace(/\s+/g, "");
+  if (t.includes("smarthome")) return "smarthome";
   if (t.includes("meal")) return "meal";
   if (t.includes("expense")) return "expense";
   if (t.includes("income")) return "income";
   return "unknown";
+}
+
+export interface SmartHomeCommandResult {
+  type: "device" | "scene" | "unknown";
+  id: string | null;
+  command: string | null;
+}
+
+/** 家電操作の自然文 → 対象デバイス/シーンとコマンド。実在するデバイス・シーン一覧を渡して、その中から選ばせる（幻覚防止）。 */
+export async function interpretSmartHomeCommand(
+  text: string,
+  devices: { id: string; name: string; type: string }[],
+  scenes: { id: string; name: string }[]
+): Promise<SmartHomeCommandResult> {
+  const deviceList = devices.map((d) => `${d.id}=${d.name}(${d.type})`).join(", ") || "なし";
+  const sceneList = scenes.map((s) => `${s.id}=${s.name}`).join(", ") || "なし";
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 200,
+    messages: [
+      {
+        role: "user",
+        content: `次のメッセージが、下のデバイス一覧のどれかを操作したいのか、シーン一覧のどれかを実行したいのかを判定してください。
+デバイス一覧（id=名前(種類)）: ${deviceList}
+シーン一覧（id=名前）: ${sceneList}
+デバイスの場合、コマンドは種類に応じて turnOn / turnOff / press / lock / unlock / open / close / pause のいずれかを選んでください（例: Curtainならopen/close、Lockならlock/unlock、それ以外は基本turnOn/turnOff）。
+一覧の中に明確に一致するものが無ければtype:"unknown"にしてください。次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"type":"device"|"scene"|"unknown","id":"該当するid（無ければnull）","command":"デバイスの場合のコマンド（シーン・unknownならnull）"}
+メッセージ: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  return JSON.parse(t) as SmartHomeCommandResult;
 }
 
 export interface ParsedIncomeEntry {

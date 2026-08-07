@@ -504,6 +504,7 @@ export interface SwitchBotDeviceOut {
   deviceType: string;
   remoteType?: string;
   status: Record<string, unknown> | null;
+  room: string | null;
 }
 
 export interface SwitchBotDevicesResponse {
