@@ -6,6 +6,10 @@ import type { ReminderRow, RecurrenceType } from "./types";
 
 export { nextOccurrence, resolveNextDate } from "./reminderRecurrence";
 
+export class ValidationError extends Error {}
+
+const NIGHT_HOURS = new Set(["00", "01", "02", "03", "04", "05"]);
+
 export async function getReminders(): Promise<ReminderRow[]> {
   const { data, error } = await db().from("reminders").select("*").order("created_at", { ascending: true });
   if (error) throw error;
@@ -52,6 +56,18 @@ export interface ReminderPatch {
 }
 
 export async function updateReminder(id: string, patch: ReminderPatch): Promise<ReminderRow | null> {
+  if (patch.notify_time && NIGHT_HOURS.has(patch.notify_time.slice(0, 2))) {
+    let effectiveRecurrence = patch.recurrence_type;
+    if (!effectiveRecurrence) {
+      const { data, error } = await db().from("reminders").select("recurrence_type").eq("id", id).maybeSingle();
+      if (error) throw error;
+      effectiveRecurrence = (data as { recurrence_type: RecurrenceType } | null)?.recurrence_type;
+    }
+    if (effectiveRecurrence === "daily") {
+      throw new ValidationError("「毎日」のリマインダーは深夜（0〜5時）に通知できません。");
+    }
+  }
+
   const update: Record<string, unknown> = {};
   if (patch.name !== undefined) update.name = patch.name.trim();
   if (patch.memo !== undefined) update.memo = patch.memo.trim();

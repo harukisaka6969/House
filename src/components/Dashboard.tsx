@@ -41,6 +41,7 @@ const ShoppingList = dyn(() => import("./sections/ShoppingList"));
 const IdeaBoard = dyn(() => import("./sections/IdeaBoard"));
 const Records = dyn(() => import("./sections/Records"));
 const Reminders = dyn(() => import("./sections/Reminders"));
+const SmartHome = dyn(() => import("./sections/SmartHome"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
@@ -79,6 +80,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["inventory", "⑪ 在庫管理"],
       ["shoppingList", "⑯ 買い物リスト"],
       ["reminders", "⑳ リマインダー"],
+      ["smartHome", "㉑ 家電"],
     ],
   },
   {
@@ -254,6 +256,7 @@ function DashboardInner() {
             {view === "gymLog" && <GymLog />}
             {view === "mealLog" && <MealLog />}
             {view === "shoppingList" && <ShoppingList />}
+            {view === "smartHome" && <SmartHome />}
             {view === "settings" && <Settings />}
           </>
         )}

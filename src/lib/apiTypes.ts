@@ -497,3 +497,16 @@ export interface KioskResponse {
     lowStockItems: { id: string; name: string }[];
   };
 }
+
+export interface SwitchBotDeviceOut {
+  deviceId: string;
+  deviceName: string;
+  deviceType: string;
+  remoteType?: string;
+  status: Record<string, unknown> | null;
+}
+
+export interface SwitchBotDevicesResponse {
+  devices: SwitchBotDeviceOut[];
+  infraredRemotes: SwitchBotDeviceOut[];
+}

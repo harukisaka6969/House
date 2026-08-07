@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { updateReminder, deleteReminder } from "@/lib/reminders";
+import { updateReminder, deleteReminder, ValidationError } from "@/lib/reminders";
 
 const TIME_RE = /^([01]\d|2[0-3]):(00|15|30|45)$/;
 
@@ -26,6 +26,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ reminder });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });
+    if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 });
     return errorResponse(e);
   }
 }

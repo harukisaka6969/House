@@ -25,7 +25,13 @@ const emptyForm = {
 };
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
+const NIGHT_HOURS = new Set(["00", "01", "02", "03", "04", "05"]);
 const MINUTES = ["00", "15", "30", "45"];
+
+/** 「毎日」タイプは深夜（0〜5時）を選べないようにする（同じ通知が毎晩続くと迷惑なため）。 */
+function hourOptionsFor(recurrenceType: RecurrenceType): string[] {
+  return recurrenceType === "daily" ? HOURS.filter((h) => !NIGHT_HOURS.has(h)) : HOURS;
+}
 
 export default function Reminders() {
   const [reminders, setReminders] = useState<ReminderOut[] | null>(null);
@@ -111,7 +117,17 @@ export default function Reminders() {
                   ["monthly", "毎月"],
                 ] as [RecurrenceType, string][]
               ).map(([v, label]) => (
-                <button key={v} className={"mf-chipbtn" + (form.recurrence_type === v ? " on" : "")} onClick={() => setForm({ ...form, recurrence_type: v })}>
+                <button
+                  key={v}
+                  className={"mf-chipbtn" + (form.recurrence_type === v ? " on" : "")}
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      recurrence_type: v,
+                      notifyHour: v === "daily" && NIGHT_HOURS.has(form.notifyHour) ? "21" : form.notifyHour,
+                    })
+                  }
+                >
                   {label}
                 </button>
               ))}
@@ -153,10 +169,15 @@ export default function Reminders() {
               <input type="checkbox" checked={form.notifyEnabled} onChange={(e) => setForm({ ...form, notifyEnabled: e.target.checked })} />
               この予定になったらLINEで個別に通知する
             </label>
+            {form.notifyEnabled && form.recurrence_type === "daily" && (
+              <div className="mf-hint" style={{ margin: "4px 0 0" }}>
+                「毎日」は深夜（0〜5時）を選べません。
+              </div>
+            )}
             {form.notifyEnabled && (
               <div className="mf-row" style={{ marginTop: 6, gap: 8 }}>
                 <select className="mf-input mf-mono" style={{ width: 90 }} value={form.notifyHour} onChange={(e) => setForm({ ...form, notifyHour: e.target.value })}>
-                  {HOURS.map((h) => (
+                  {hourOptionsFor(form.recurrence_type).map((h) => (
                     <option key={h} value={h}>
                       {h}時
                     </option>
@@ -246,7 +267,7 @@ export default function Reminders() {
               {editingNotifyId === r.id && (
                 <div className="mf-row" style={{ gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                   <select className="mf-input mf-mono" style={{ width: 90 }} value={editHour} onChange={(e) => setEditHour(e.target.value)}>
-                    {HOURS.map((h) => (
+                    {hourOptionsFor(r.recurrence_type).map((h) => (
                       <option key={h} value={h}>
                         {h}時
                       </option>
