@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut, apiDelete } from "@/lib/apiClient";
 import type { PersonalRecordOut, RecordCategorySummary, RecordMetric } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
+import RecordsTrend from "./RecordsTrend";
 
 /** 値の先頭にある数値（例: "84.1kg"→84.1）を取り出す。比較不能なら null。 */
 function leadingNumber(value: string): number | null {
@@ -182,6 +183,8 @@ export default function Records() {
           </div>
         </div>
       )}
+
+      {activeCategory && records && records.length >= 2 && <RecordsTrend records={records} />}
 
       {activeCategory && records && (
         <div className="mf-panel">
