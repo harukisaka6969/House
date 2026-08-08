@@ -13,8 +13,10 @@ export const CAT_COLORS = [
 
 /** 第1口座（生活必需）専用カテゴリ — 第3口座選択時はこれらを候補から外す。 */
 export const A1_ONLY_CATEGORIES = ["食費", "住居", "水道光熱", "通信", "交通", "車関係", "日用品", "医療", "ペット"] as const;
-/** 第3口座（趣味・娯楽・交際）専用カテゴリ — 第1口座選択時はこれらを候補から外す。 */
-export const A3_ONLY_CATEGORIES = ["外食", "趣味", "交際費", "旅行"] as const;
+/** 第3口座（趣味・娯楽・交際）専用カテゴリ — 第1口座選択時はこれらを候補から外す。
+ * 「外食」は含めない — 毎日の必須の食事（第1口座）と、高額・カフェ・間食等の嗜好的な外食（第3口座）の
+ * 両方であり得るため、どちらの口座でも選べるようにする。 */
+export const A3_ONLY_CATEGORIES = ["趣味", "交際費", "旅行"] as const;
 
 /** 選択中の口座に合わせてカテゴリ候補を絞り込む（第1/第3のみ対象、それ以外の口座は絞り込まない）。 */
 export function categoriesForAccount(allCats: string[], accountId: string): string[] {

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fmt } from "@/lib/judge";
 import { PRIVATE_ACCOUNT, categoriesForAccount } from "@/lib/constants";
-import { apiDelete, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AgentWidget from "./AgentWidget";
 import AiSuggestButton from "./AiSuggestButton";
@@ -37,6 +37,15 @@ function QuickEntryInner() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ date: string; account_id: string; category: string; sub: string; amount: string; memo: string }>({
+    date: "",
+    account_id: "",
+    category: "",
+    sub: "",
+    amount: "",
+    memo: "",
+  });
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!month) {
@@ -134,14 +143,19 @@ function QuickEntryInner() {
       fd.append("image", file);
       const res = await fetch("/api/ai/ocr", { method: "POST", body: fd });
       if (!res.ok) throw new Error("failed");
-      const p = (await res.json()) as { date: string | null; store: string; total: number; category: string };
-      setForm((f) => ({
-        ...f,
-        date: p.date || f.date,
-        amount: String(p.total || f.amount),
-        category: allCats.includes(p.category) ? p.category : f.category,
-        memo: p.store || f.memo,
-      }));
+      const p = (await res.json()) as { date: string | null; store: string; total: number; category: string; account?: string };
+      setForm((f) => {
+        const account = accounts.some((a) => a.id === p.account) ? (p.account as string) : f.account;
+        const nextCats = categoriesForAccount(allCats, account);
+        return {
+          ...f,
+          date: p.date || f.date,
+          amount: String(p.total || f.amount),
+          account,
+          category: nextCats.includes(p.category) ? p.category : nextCats.includes(f.category) ? f.category : nextCats[0] ?? f.category,
+          memo: p.store || f.memo,
+        };
+      });
       setMode("manual");
       setMsg(`読み取り成功: ${p.store || "店名不明"} ${fmt(p.total || 0)}。内容を確認して追加してください。`);
     } catch {
@@ -152,6 +166,25 @@ function QuickEntryInner() {
 
   const deleteExpense = async (id: string) => {
     await apiDelete(`/api/expenses/${id}`);
+    refreshMonth();
+  };
+
+  const startEdit = (e: { id: string; date: string; account_id: string; category: string; sub: string | null; amount: number; memo: string }) => {
+    setEditingId(e.id);
+    setEditForm({ date: e.date, account_id: e.account_id, category: e.category, sub: e.sub ?? "", amount: String(e.amount), memo: e.memo });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    await apiPut(`/api/expenses/${editingId}`, {
+      date: editForm.date,
+      account_id: editForm.account_id,
+      category: editForm.category,
+      sub: editForm.category === "その他" ? editForm.sub.trim() : null,
+      amount: Number(editForm.amount),
+      memo: editForm.memo,
+    });
+    setEditingId(null);
     refreshMonth();
   };
 
@@ -340,8 +373,61 @@ function QuickEntryInner() {
         <div className="mf-panel" style={{ marginTop: 18 }}>
           <div className="mf-paneltitle">{meName}の最近の入力</div>
           <div className="mf-list">
-            {recent.map((e) =>
-              e.masked ? null : (
+            {recent.map((e) => {
+              if (e.masked) return null;
+              if (editingId === e.id) {
+                return (
+                  <div key={e.id} className="mf-formgrid" style={{ padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <input className="mf-input" type="date" value={editForm.date} onChange={(ev) => setEditForm((f) => ({ ...f, date: ev.target.value }))} />
+                    <div className="mf-chips">
+                      {accounts.map((a) => (
+                        <button
+                          key={a.id}
+                          className={"mf-chipbtn" + (editForm.account_id === a.id ? " on" : "")}
+                          onClick={() => {
+                            const nextCats = categoriesForAccount(allCats, a.id);
+                            setEditForm((f) => ({ ...f, account_id: a.id, category: nextCats.includes(f.category) ? f.category : nextCats[0] ?? "" }));
+                          }}
+                        >
+                          {a.name.replace("口座", "")}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mf-chips">
+                      {categoriesForAccount(allCats, editForm.account_id).map((c) => (
+                        <button key={c} className={"mf-chipbtn" + (editForm.category === c ? " on" : "")} onClick={() => setEditForm((f) => ({ ...f, category: c }))}>
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                    {editForm.category === "その他" && (
+                      <input
+                        className="mf-input"
+                        placeholder="その他の内容"
+                        value={editForm.sub}
+                        onChange={(ev) => setEditForm((f) => ({ ...f, sub: ev.target.value }))}
+                      />
+                    )}
+                    <input
+                      className="mf-input mf-mono"
+                      type="number"
+                      placeholder="金額"
+                      value={editForm.amount}
+                      onChange={(ev) => setEditForm((f) => ({ ...f, amount: ev.target.value }))}
+                    />
+                    <input className="mf-input" placeholder="メモ" value={editForm.memo} onChange={(ev) => setEditForm((f) => ({ ...f, memo: ev.target.value }))} />
+                    <div className="mf-row">
+                      <button className="mf-btn primary" onClick={saveEdit}>
+                        保存
+                      </button>
+                      <button className="mf-btn ghost" onClick={() => setEditingId(null)}>
+                        キャンセル
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+              return (
                 <div key={e.id} className="mf-listrow">
                   <span className="mf-mono mf-listdate">{e.date.slice(5)}</span>
                   <span className="mf-listcat">
@@ -350,12 +436,15 @@ function QuickEntryInner() {
                   </span>
                   <span className="mf-listmemo">{e.memo}</span>
                   <span className="mf-mono mf-listamt">{fmt(e.amount)}</span>
+                  <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
+                    編集
+                  </button>
                   <button className="mf-del" onClick={() => deleteExpense(e.id)}>
                     ×
                   </button>
                 </div>
-              )
-            )}
+              );
+            })}
           </div>
         </div>
       )}

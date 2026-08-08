@@ -23,15 +23,29 @@ function joinText(content: Anthropic.ContentBlock[]): string {
     .join("\n");
 }
 
+/** 口座推定ルール（parseExpenseText / extractExpensesFromJournal / ocrReceipt で共通利用）。
+ * 外食は、普段の値段の必須の食事（朝食・昼食・夕食）はa1、それ以外（高額な食事・カフェ・喫茶店・
+ * 間食やデザート・飲み会など嗜好性の高いもの）はa3として扱う。 */
+function accountRuleText(acctList: string): string {
+  return `口座候補: ${acctList}。内容から最も適切な口座を選ぶこと（日常の生活必需品はa1、ローン返済はa2、趣味・娯楽・交際・レジャーはa3、投資関連はa4。外食は、普段の値段の必須の食事（朝食・昼食・夕食）ならa1、それ以外（高額な食事、カフェ・喫茶店、間食・デザート、飲み会など嗜好性の高いもの）はa3として扱うこと。判断がつかなければa1）。`;
+}
+
 export interface OcrResult {
   date: string | null;
   store: string;
   total: number;
   category: string;
+  account?: string;
 }
 
-/** レシート画像 → {date, store, total, category}（現行版 ocrReceipt を移植） */
-export async function ocrReceipt(base64: string, mediaType: string, categories: string[]): Promise<OcrResult> {
+/** レシート画像 → {date, store, total, category, account}（現行版 ocrReceipt を移植） */
+export async function ocrReceipt(
+  base64: string,
+  mediaType: string,
+  categories: string[],
+  accounts: { id: string; name: string }[]
+): Promise<OcrResult> {
+  const acctList = accounts.map((a) => `${a.id}=${a.name}`).join(", ");
   const res = await anthropic().messages.create({
     model: MODEL,
     max_tokens: 1000,
@@ -43,7 +57,8 @@ export async function ocrReceipt(base64: string, mediaType: string, categories: 
           {
             type: "text",
             text: `このレシート画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
-{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値,"category":"${categories.join("|")} のいずれか"}`,
+${accountRuleText(acctList)}
+{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値,"category":"${categories.join("|")} のいずれか","account":"口座id"}`,
           },
         ],
       },
@@ -77,7 +92,7 @@ export async function parseExpenseText(
         role: "user",
         content: `次の日本語の文章から家計簿の支出エントリを抽出し、JSON配列のみを返してください。前置きやコードブロックは不要です。複数の支出が含まれる場合は複数要素にしてください。
 今日の日付: ${todayStr}（「昨日」等の相対表現はここから計算）
-口座候補: ${acctList}。内容から最も適切な口座を選ぶこと（日常の生活必需品はa1、ローン返済はa2、趣味・娯楽・交際・レジャーはa3、投資関連はa4。判断がつかなければa1）。
+${accountRuleText(acctList)}
 カテゴリ候補: ${categories.join("|")}
 形式: [{"date":"YYYY-MM-DD","account":"口座id","category":"カテゴリ","amount":金額の数値,"memo":"店名や品名"}]
 文章: ${text}`,
@@ -177,7 +192,7 @@ export async function extractExpensesFromJournal(
         role: "user",
         content: `次の日記本文から、その日実際にお金を使った出来事だけを抽出し、JSON配列のみを返してください。前置きやコードブロックは不要です。
 金額がはっきり書かれていない場合は、内容から常識的な金額を推測してください（多少の誤差は許容されます、推測できたら必ず金額を入れてください）。お金の動きが全くない内容なら空配列 [] を返してください。
-口座候補: ${acctList}。内容から最も適切な口座を選ぶこと（日常の生活必需品はa1、ローン返済はa2、趣味・娯楽・交際・レジャーはa3、投資関連はa4。判断がつかなければa1）。
+${accountRuleText(acctList)}
 カテゴリ候補: ${categories.join("|")}
 形式: [{"account":"口座id","category":"カテゴリ","amount":金額の数値,"memo":"内容の要約（10文字程度）"}]
 日記本文: ${text}`,

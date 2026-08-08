@@ -181,14 +181,13 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
     }
 
     if (kind === "receipt") {
-      const categories = await getAllCategories();
-      const ocr = await ocrReceipt(content.base64, content.mediaType, categories);
+      const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+      const ocr = await ocrReceipt(content.base64, content.mediaType, categories, accounts);
       if (!ocr.total || ocr.total <= 0) {
         await reply(event, "レシートの金額を読み取れませんでした。アプリから登録してください。");
         return;
       }
-      const accounts = await getAccounts();
-      const account = accounts[0];
+      const account = accounts.find((a) => a.id === ocr.account) ?? accounts[0];
       if (!account) {
         await reply(event, "口座の設定が見つかりません。アプリから登録してください。");
         return;

@@ -3,6 +3,7 @@ import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
 import { ocrReceipt } from "@/lib/anthropic";
 import { getAllCategories } from "@/lib/categories";
+import { getAccounts } from "@/lib/accounts";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -19,8 +20,8 @@ export async function POST(req: Request) {
 
     const buf = Buffer.from(await file.arrayBuffer());
     const base64 = buf.toString("base64");
-    const categories = await getAllCategories();
-    const result = await ocrReceipt(base64, file.type || "image/jpeg", categories);
+    const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+    const result = await ocrReceipt(base64, file.type || "image/jpeg", categories, accounts);
     return NextResponse.json(result);
   } catch (e) {
     return errorResponse(e);
