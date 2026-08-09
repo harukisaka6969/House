@@ -50,6 +50,14 @@ export default function ExpensePanel() {
   const [linkDetail, setLinkDetail] = useState<SplitEventDetailOut | null>(null);
   const [linkBeneficiaryIds, setLinkBeneficiaryIds] = useState<string[]>([]);
 
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkEvent, setBulkEvent] = useState<SplitEventOut | null>(null);
+  const [bulkDetail, setBulkDetail] = useState<SplitEventDetailOut | null>(null);
+  const [bulkBeneficiaryIds, setBulkBeneficiaryIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+
   useEffect(() => {
     apiGet<{ events: SplitEventOut[] }>("/api/split-events")
       .then((r) => setSplitEvents(r.events))
@@ -260,6 +268,81 @@ export default function ExpensePanel() {
     refreshMonth();
   };
 
+  const toggleBulkMode = () => {
+    setBulkMode((m) => !m);
+    setBulkSelectedIds(new Set());
+    setBulkEvent(null);
+    setBulkDetail(null);
+    setBulkBeneficiaryIds([]);
+    setBulkMsg("");
+  };
+
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectBulkEvent = async (ev: SplitEventOut) => {
+    if (bulkEvent?.id === ev.id) {
+      setBulkEvent(null);
+      setBulkDetail(null);
+      setBulkBeneficiaryIds([]);
+      return;
+    }
+    setBulkEvent(ev);
+    setBulkDetail(null);
+    try {
+      const detail = await apiGet<SplitEventDetailOut>(`/api/split/${ev.share_token}`);
+      setBulkDetail(detail);
+      setBulkBeneficiaryIds(detail.participants.map((p) => p.id));
+    } catch {
+      setBulkMsg("イベントの読み込みに失敗しました。");
+    }
+  };
+
+  const toggleBulkBeneficiary = (id: string) => {
+    setBulkBeneficiaryIds((ids) => (ids.includes(id) ? ids.filter((b) => b !== id) : [...ids, id]));
+  };
+
+  /** 選択中の既存の支出（複数）を、選んだ割り勘イベントにまとめて登録する（1件ずつ複製登録）。
+   * 支払った人はそれぞれの支出のowner_nameに対応する参加者にする（相手名義の支出も選べるため）。 */
+  const registerBulkToSplit = async () => {
+    if (!bulkEvent || !bulkDetail || bulkSelectedIds.size === 0 || bulkBeneficiaryIds.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    setBulkMsg("");
+    const targets = month.expenses.filter(
+      (e): e is Extract<typeof e, { masked: false }> => !e.masked && bulkSelectedIds.has(e.id)
+    );
+    let okCount = 0;
+    let failCount = 0;
+    for (const e of targets) {
+      const payer = bulkDetail.participants.find((p) => p.name === e.owner_name) ?? bulkDetail.participants[0];
+      if (!payer) {
+        failCount++;
+        continue;
+      }
+      try {
+        await apiPost(`/api/split/${bulkEvent.share_token}/expenses`, {
+          payerId: payer.id,
+          beneficiaryIds: bulkBeneficiaryIds,
+          amount: e.amount,
+          memo: e.memo,
+          date: e.date,
+        });
+        okCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    setBulkMsg(`✓「${bulkEvent.name}」に${okCount}件登録しました。` + (failCount > 0 ? `（${failCount}件失敗）` : ""));
+    setBulkSelectedIds(new Set());
+    setBulkBusy(false);
+  };
+
   return (
     <>
       <div className="mf-panel">
@@ -468,8 +551,17 @@ export default function ExpensePanel() {
       )}
 
       <div className="mf-panel">
-        <div className="mf-paneltitle">明細（{sorted.length}件）</div>
-        <div className="mf-chips" style={{ marginBottom: 8 }}>
+        <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <div className="mf-paneltitle" style={{ margin: 0 }}>
+            明細（{sorted.length}件）
+          </div>
+          {splitEvents && splitEvents.length > 0 && (
+            <button className="mf-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={toggleBulkMode}>
+              {bulkMode ? "✕ 選択をやめる" : "🧳 選択して割り勘に追加"}
+            </button>
+          )}
+        </div>
+        <div className="mf-chips" style={{ margin: "8px 0" }}>
           <button className={"mf-chipbtn" + (filterAcct === "all" ? " on" : "")} onClick={() => setFilterAcct("all")}>
             全て
           </button>
@@ -480,6 +572,52 @@ export default function ExpensePanel() {
             </button>
           ))}
         </div>
+
+        {bulkMode && (
+          <div className="mf-panel" style={{ margin: "0 0 10px", background: "#181E25" }}>
+            <div className="mf-hint" style={{ margin: 0 }}>
+              {bulkSelectedIds.size}件選択中（明細の左側のチェックボックスで選択）
+            </div>
+            {splitEvents && (
+              <div className="mf-chips" style={{ marginTop: 8 }}>
+                {splitEvents.slice(0, SPLIT_RECENT_LIMIT).map((ev) => (
+                  <button key={ev.id} className={"mf-chipbtn" + (bulkEvent?.id === ev.id ? " on" : "")} onClick={() => selectBulkEvent(ev)}>
+                    {ev.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {bulkEvent && bulkDetail && bulkDetail.participants.length > 0 && (
+              <>
+                <div className="mf-hint" style={{ margin: "8px 0 4px" }}>
+                  誰のための支出か
+                </div>
+                <div className="mf-chips" style={{ marginTop: 0 }}>
+                  {bulkDetail.participants.map((p) => (
+                    <button
+                      key={p.id}
+                      className={"mf-chipbtn" + (bulkBeneficiaryIds.includes(p.id) ? " on" : "")}
+                      onClick={() => toggleBulkBeneficiary(p.id)}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="mf-row" style={{ marginTop: 8 }}>
+              <button
+                className="mf-btn primary"
+                disabled={bulkBusy || !bulkEvent || !bulkDetail || bulkSelectedIds.size === 0 || bulkBeneficiaryIds.length === 0}
+                onClick={registerBulkToSplit}
+              >
+                {bulkEvent && !bulkDetail ? "読み込み中…" : `選択した${bulkSelectedIds.size}件を登録する`}
+              </button>
+            </div>
+            {bulkMsg && <div className="mf-hint">{bulkMsg}</div>}
+          </div>
+        )}
+
         {sorted.length === 0 ? (
           <div className="mf-empty">まだ支出がありません。上のフォームかレシート写真から追加できます。</div>
         ) : (
@@ -554,6 +692,14 @@ export default function ExpensePanel() {
               }
               return (
                 <div key={e.id} className="mf-listrow">
+                  {bulkMode && (
+                    <input
+                      type="checkbox"
+                      checked={bulkSelectedIds.has(e.id)}
+                      onChange={() => toggleBulkSelect(e.id)}
+                      style={{ marginRight: 2 }}
+                    />
+                  )}
                   <span className="mf-mono mf-listdate">{e.date.slice(5)}</span>
                   <span className="mf-dot" style={{ background: acctColor(e.account_id) }} title={acctName(e.account_id)} />
                   <span className="mf-listcat">
