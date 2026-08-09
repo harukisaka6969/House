@@ -511,3 +511,49 @@ export interface SwitchBotDevicesResponse {
   devices: SwitchBotDeviceOut[];
   infraredRemotes: SwitchBotDeviceOut[];
 }
+
+export interface SplitEventOut {
+  id: string;
+  name: string;
+  created_by: string;
+  share_token: string;
+  created_at: string;
+}
+
+export interface SplitParticipantOut {
+  id: string;
+  name: string;
+}
+
+export interface SplitExpenseOut {
+  id: string;
+  payerId: string;
+  payerName: string;
+  amount: number;
+  memo: string;
+  date: string;
+  beneficiaryIds: string[];
+  beneficiaryNames: string[];
+}
+
+export interface SplitBalanceOut {
+  participantId: string;
+  name: string;
+  paid: number;
+  owed: number;
+  net: number;
+}
+
+export interface SplitSettlementTxnOut {
+  from: string;
+  to: string;
+  amount: number;
+}
+
+export interface SplitEventDetailOut {
+  event: { id: string; name: string };
+  participants: SplitParticipantOut[];
+  expenses: SplitExpenseOut[];
+  balances: SplitBalanceOut[];
+  settlement: SplitSettlementTxnOut[];
+}
