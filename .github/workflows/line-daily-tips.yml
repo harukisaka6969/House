@@ -1,0 +1,17 @@
+name: LINE daily life tips
+
+# 15分おきに /api/cron/line-daily-tips を叩く。09:00/12:00/15:00/18:00/21:00(JST)のいずれかに一致した
+# ときだけ、その時刻担当のtipsが生成・送信される（サーバー側で時刻判定・冪等性チェックを行う）。
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and send due LINE daily tips
+        run: |
+          curl -sS -f -X GET "${{ vars.APP_BASE_URL || 'https://house-wheat-nine.vercel.app' }}/api/cron/line-daily-tips" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

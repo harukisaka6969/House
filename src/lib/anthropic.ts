@@ -475,3 +475,14 @@ export async function runResearch(query: string): Promise<string> {
   });
   return joinText(res.content) || "結果を取得できませんでした。";
 }
+
+/** LINEに1日5回送る生活tips用。useWebSearchがtrueならweb検索を使う（前日ニュースダイジェスト用）。 */
+export async function generateDailyTip(prompt: string, useWebSearch: boolean): Promise<string> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: useWebSearch ? 1500 : 500,
+    messages: [{ role: "user", content: prompt }],
+    ...(useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" }] } : {}),
+  });
+  return joinText(res.content).trim() || "本日分の生成に失敗しました。";
+}
