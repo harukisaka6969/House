@@ -83,8 +83,12 @@ export const TIP_DEFS: TipDef[] = [
   },
 ];
 
-export function tipsDueForTime(hhmm: string): TipDef[] {
-  return TIP_DEFS.filter((t) => t.time === hhmm);
+/** GitHub Actionsの実際の発火間隔は設定通り15分おきとは限らず、混雑時は1時間近く空くこともある。
+ * 時刻の完全一致で判定すると、その1回のタイミングを逃した瞬間そのカテゴリは一日中送られなくなって
+ * しまうため、「予定時刻を過ぎていて、今日まだ送っていない」ものは全て対象にする（自己修復・追いつき
+ * 配信）。実際に送るかどうかは呼び出し側のhasTipSentTodayが最終判定する。 */
+export function tipsDueForTime(currentHhmm: string): TipDef[] {
+  return TIP_DEFS.filter((t) => t.time <= currentHhmm);
 }
 
 export async function hasTipSentToday(category: TipCategory, date: string): Promise<boolean> {
