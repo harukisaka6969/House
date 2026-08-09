@@ -258,11 +258,12 @@ export interface TimelineChildOut {
 
 export interface TimelineItemOut {
   date: string;
-  kind: "anniversary" | "expense" | "diary";
+  kind: "expense" | "diary";
   title: string;
   description: string;
   amount?: number;
   children?: TimelineChildOut[];
+  major?: boolean;
 }
 
 export interface YearTimelineOut {

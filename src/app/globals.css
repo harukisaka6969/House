@@ -270,13 +270,19 @@ select.mf-input option { background: #181E25; }
 .yr-htrack { position: relative; display: flex; align-items: flex-start; padding: 30px 10px 0; width: max-content; min-width: 100%; }
 .yr-htrack::before { content: ""; position: absolute; left: 10px; right: 10px; top: 30px; height: 2px; background: linear-gradient(to right, rgba(245,165,36,0.06), rgba(245,165,36,0.3) 3%, rgba(245,165,36,0.3) 97%, rgba(245,165,36,0.06)); }
 .yr-hcol { position: relative; flex: 0 0 auto; width: 128px; display: flex; flex-direction: column; align-items: center; padding: 0 5px; transition: width 0.15s ease; }
-.yr-hmonth { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: 0.06em; color: #6B7684; font-family: var(--font-num), monospace; white-space: nowrap; }
 .yr-hdot { width: 18px; height: 18px; border-radius: 50%; background: #101418; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 9.5px; z-index: 1; flex: 0 0 auto; }
+.yr-hcol.major .yr-hdot { width: 26px; height: 26px; border-width: 3px; font-size: 13px; }
 .yr-hcard { margin-top: 8px; width: 100%; background: #181E25; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 7px 9px; text-align: center; }
+.yr-hcard.major { background: #1D232B; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
 .yr-hdate { font-size: 10px; color: #6B7684; font-family: var(--font-num), monospace; }
 .yr-htitle { font-weight: 700; font-size: 12.5px; margin-top: 2px; line-height: 1.32; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yr-hcard.major .yr-htitle { font-size: 14.5px; }
 .yr-hamount { font-family: var(--font-num), monospace; font-size: 11px; color: #F5A524; margin-top: 3px; }
+.yr-hcard.major .yr-hamount { font-size: 12.5px; }
 .yr-hcount { font-size: 10px; color: #93A0AE; margin-top: 2px; }
+.yr-hmonthcol { position: relative; flex: 0 0 auto; width: 30px; display: flex; flex-direction: column; align-items: center; }
+.yr-hmonthcollabel { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; color: #6B7684; font-family: var(--font-num), monospace; white-space: nowrap; }
+.yr-hmonthtick { width: 2px; height: 10px; background: rgba(255,255,255,0.28); }
 .yr-hchildren { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 5px; text-align: left; }
 .yr-hchild { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; }
 .yr-hchilddate { font-family: var(--font-num), monospace; color: #6B7684; flex: 0 0 auto; }

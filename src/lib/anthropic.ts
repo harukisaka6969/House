@@ -492,20 +492,41 @@ export interface YearHighlight {
   date: string;
   title: string;
   description: string;
+  importance: "major" | "normal";
 }
 
-/** 年間タイムライン機能: 1年分の日記（本人の分のみ）から、大きな出来事だけを抜き出す。 */
-export async function extractYearHighlightsFromJournal(year: number, entries: { date: string; body: string }[]): Promise<YearHighlight[]> {
+/** 年間タイムライン機能: 1年分の日記（本人の分のみ）＋その日の支出メモから、タイムラインに載せる
+ * 出来事を抜き出す。人生の節目だけでなく、祭り・花火大会・けんかなど思い出に残る日も対象にする。
+ * 抽出結果は本人にしか表示されないが、年末の振り返り等でパートナーと一緒に見る場面もあり得るため、
+ * 極端にプライベートな内容は選ばないようプロンプトで指示している。 */
+export async function extractYearHighlightsFromJournal(
+  year: number,
+  entries: { date: string; body: string; expenseNote?: string }[]
+): Promise<YearHighlight[]> {
   const capped = entries.slice(0, 200);
-  const body = capped.map((e) => `${e.date}: ${e.body.slice(0, 300)}`).join("\n\n");
+  const body = capped
+    .map((e) => `${e.date}: ${e.body.slice(0, 300)}${e.expenseNote ? `（その日の支出: ${e.expenseNote}）` : ""}`)
+    .join("\n\n");
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 2000,
     messages: [
       {
         role: "user",
-        content: `あなたは日記から、その年の大きな出来事だけを抜き出す編集者です。以下は${year}年の日記です（日付: 本文）。旅行・お祝い・大きな決断・記念になる出来事など、後から振り返って「あの年はこんなことがあった」と思えるような大きめの出来事だけを、多くても8件程度選んでJSON配列のみで返してください。日常のちょっとした出来事（普段の食事、体調管理の記録など）は含めないでください。前置きやコードブロックは不要です。
-形式: [{"date":"YYYY-MM-DD","title":"短い見出し(10字程度)","description":"1〜2文の説明"}]
+        content: `あなたは日記から、その年のタイムラインに載せる出来事を抜き出す編集者です。以下は${year}年の日記です（日付: 本文。その日に支出の記録があれば参考として添えています）。
+
+次のような、後から振り返って「あの年はこんなことがあった」と思えることを選んでください。
+・結婚・出産・引っ越しなど人生の大きな節目
+・旅行、お祭り、花火大会など思い出に残る外出やイベント
+・大きな決断、けんかや仲直りなど感情的に大きな出来事
+普段通りの食事や体調管理の記録など、特に印象に残らない日常の記述は含めないでください。多くても10件程度。
+
+これはあなた自身の日記ですが、抽出結果は年末の振り返りなどでパートナーと一緒に見る場面もあり得ます。客観的に考えてパートナーに見せるべきでないと判断できる、踏み込みすぎた内容は選ばないでください。けんかのような出来事でも、事実を簡潔に・穏当な言い方で構いません。
+
+それぞれに重要度を付けてください。"major"=結婚・出産・プロポーズ・大きな旅行など特に大きな節目、"normal"=お祭り・花火大会など思い出深いが節目ではないもの。
+
+JSON配列のみを返してください。前置きやコードブロックは不要です。
+形式: [{"date":"YYYY-MM-DD","title":"短い見出し(10字程度)","description":"1〜2文の説明","importance":"major"または"normal"}]
 
 ${body}`,
       },

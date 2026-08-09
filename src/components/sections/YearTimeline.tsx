@@ -7,17 +7,11 @@ import type { YearTimelineOut, TimelineItemOut } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
 
 const DOT_COLOR: Record<TimelineItemOut["kind"], string> = {
-  anniversary: "#F26D5F",
   expense: "#8B7CF6",
   diary: "#45C48F",
 };
 
 function iconFor(item: TimelineItemOut): string {
-  if (item.kind === "anniversary") {
-    if (item.title.includes("誕生日")) return "🎂";
-    if (item.title.includes("結婚") || item.title.includes("プロポーズ")) return "💍";
-    return "🎉";
-  }
   if (item.kind === "expense") return item.description === "旅行" ? "✈️" : "💴";
   return "📖";
 }
@@ -28,22 +22,33 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-type Column = { kind: "item"; item: TimelineItemOut; key: string } | { kind: "today" };
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
 
-/** 表示中の年が今年なら、日付順の並びの中に「今日」の目印を差し込む位置を決める。 */
+type Column = { kind: "item"; item: TimelineItemOut; key: string } | { kind: "today" } | { kind: "month"; month: number };
+
+/** 1月〜12月の目盛りと（今年なら）今日の目印を、日付順で出来事の並びに差し込む。同じ日付なら目盛り類を先に置く。 */
 function buildColumns(items: TimelineItemOut[], year: number): Column[] {
-  const columns: Column[] = [];
   const isCurrentYear = year === Number(todayStr().slice(0, 4));
-  let todayInserted = !isCurrentYear;
-  items.forEach((item, i) => {
-    if (!todayInserted && item.date > todayStr()) {
-      columns.push({ kind: "today" });
-      todayInserted = true;
-    }
-    columns.push({ kind: "item", item, key: `${item.date}-${item.kind}-${i}` });
-  });
-  if (!todayInserted) columns.push({ kind: "today" });
-  return columns;
+  const markers: { date: string; col: Column }[] = [];
+  for (let m = 1; m <= 12; m++) {
+    markers.push({ date: `${year}-${pad2(m)}-01`, col: { kind: "month", month: m - 1 } });
+  }
+  if (isCurrentYear) markers.push({ date: todayStr(), col: { kind: "today" } });
+
+  const itemEntries = items.map((item, i) => ({ date: item.date, col: { kind: "item", item, key: `${item.date}-${item.kind}-${i}` } as Column }));
+
+  return [...markers, ...itemEntries]
+    .sort((a, b) => {
+      const cmp = a.date.localeCompare(b.date);
+      if (cmp !== 0) return cmp;
+      const aIsMarker = a.col.kind !== "item";
+      const bIsMarker = b.col.kind !== "item";
+      if (aIsMarker === bIsMarker) return 0;
+      return aIsMarker ? -1 : 1;
+    })
+    .map((x) => x.col);
 }
 
 export default function YearTimeline() {
@@ -71,7 +76,7 @@ export default function YearTimeline() {
   useEffect(() => load(year), [year]);
 
   useEffect(() => {
-    if (data && data.items.length > 0) {
+    if (data) {
       todayRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
     }
   }, [data]);
@@ -93,7 +98,7 @@ export default function YearTimeline() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="24" title="タイムライン" sub="その年に起きた大きな出来事を、記念日・注目の支出・日記から振り返ります。右へ進むほど時期が進みます。" />
+      <SectionHead no="24" title="タイムライン" sub="その年に起きた注目の支出や日記の出来事を振り返ります。右へ進むほど時期が進みます。" />
 
       <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div className="mf-row" style={{ gap: 10 }}>
@@ -122,13 +127,11 @@ export default function YearTimeline() {
         {!data ? (
           <div className="mf-empty">読み込み中…</div>
         ) : data.items.length === 0 ? (
-          <div className="mf-empty">
-            {year}年にはまだ何も記録がありません。記念日を登録するか、日記を書いてハイライトを抽出してみてください。
-          </div>
+          <div className="mf-empty">{year}年にはまだ何も記録がありません。支出を登録するか、日記を書いてハイライトを抽出してみてください。</div>
         ) : (
           <div className="yr-hscroll">
             <div className="yr-htrack">
-              {columns.map((col, ci) => {
+              {columns.map((col) => {
                 if (col.kind === "today") {
                   return (
                     <div key="today" ref={todayRef} className="yr-htoday">
@@ -137,31 +140,48 @@ export default function YearTimeline() {
                     </div>
                   );
                 }
+                if (col.kind === "month") {
+                  return (
+                    <div key={`month-${col.month}`} className="yr-hmonthcol">
+                      <span className="yr-hmonthcollabel">{MONTH_LABELS[col.month]}</span>
+                      <span className="yr-hmonthtick" />
+                    </div>
+                  );
+                }
                 const { item, key } = col;
-                const prevItem = columns[ci - 1];
-                const prevMonth =
-                  prevItem?.kind === "item" ? Number(prevItem.item.date.slice(5, 7)) - 1 : ci === 0 ? -1 : Number(item.date.slice(5, 7)) - 1;
-                const month = Number(item.date.slice(5, 7)) - 1;
-                const showMonth = month !== prevMonth;
                 const hasChildren = (item.children?.length ?? 0) > 1;
                 const isOpen = expanded.has(key);
+                const isMajor = !!item.major;
                 return (
-                  <div key={key} className="yr-hcol" style={hasChildren && isOpen ? { width: 240 } : undefined}>
-                    {showMonth && <div className="yr-hmonth">{MONTH_LABELS[month] ?? ""}</div>}
+                  <div
+                    key={key}
+                    className={"yr-hcol" + (isMajor ? " major" : "")}
+                    style={hasChildren && isOpen ? { width: 240 } : isMajor ? { width: 148 } : undefined}
+                  >
                     <div className="yr-hdot" style={{ borderColor: DOT_COLOR[item.kind] }}>
-                      {iconFor(item)}
+                      {isMajor ? "★" : iconFor(item)}
                     </div>
-                    <div className="yr-hcard" style={hasChildren ? { cursor: "pointer" } : undefined} onClick={hasChildren ? () => toggleExpand(key) : undefined}>
+                    <div
+                      className={"yr-hcard" + (isMajor ? " major" : "")}
+                      style={{ ...(isMajor ? { borderColor: DOT_COLOR[item.kind] } : {}), ...(hasChildren ? { cursor: "pointer" } : {}) }}
+                      onClick={hasChildren ? () => toggleExpand(key) : undefined}
+                    >
                       <div className="yr-hdate">{item.date.slice(5)}</div>
                       <div className="yr-htitle">{item.title}</div>
                       {item.amount !== undefined && <div className="yr-hamount">{fmt(item.amount)}</div>}
-                      {hasChildren && <div className="yr-hcount">{isOpen ? "▾" : "▸"} 内訳 {item.children!.length}件</div>}
+                      {hasChildren && (
+                        <div className="yr-hcount">
+                          {isOpen ? "▾" : "▸"} 内訳 {item.children!.length}件
+                        </div>
+                      )}
                       {hasChildren && isOpen && (
                         <div className="yr-hchildren">
                           {item.children!.map((c, cci) => (
                             <div key={cci} className="yr-hchild">
                               <span className="yr-hchilddate">{c.date.slice(5)}</span>
-                              <span className="yr-hchildtitle" title={c.title}>{c.title}</span>
+                              <span className="yr-hchildtitle" title={c.title}>
+                                {c.title}
+                              </span>
                               <span className="yr-hchildamount">{fmt(c.amount)}</span>
                             </div>
                           ))}
