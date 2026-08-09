@@ -11,6 +11,23 @@ const NOTABLE_CATEGORY = "旅行";
 const NOTABLE_AMOUNT_THRESHOLD = 30000;
 const MAJOR_AMOUNT_THRESHOLD = 100000;
 
+/** 家賃・水道光熱・通信のような「毎月出ていくだけの支払い」は、金額が大きくても
+ * タイムラインに載せる「出来事」ではないため常に除外する。 */
+const ROUTINE_CATEGORIES = new Set(["住居", "水道光熱", "通信"]);
+/** 過去の家計簿からまとめて取り込んだ月次集計（実際の1回の出来事ではない）を除外するための目印。 */
+const BULK_IMPORT_MEMO_MARKER = "旧家計簿より";
+
+/** 「大きな出来事」候補として意味のある支出か（定期支払い・非公開・住居費等の生活固定費・
+ * 旧家計簿からの月次集計はすべて対象外）。 */
+function isEventWorthyExpense(e: ExpenseRow, viewerProfileId: string): boolean {
+  return (
+    e.source !== "recurring" &&
+    !isMaskedForViewer(e, viewerProfileId) &&
+    !ROUTINE_CATEGORIES.has(e.category) &&
+    !e.memo.includes(BULK_IMPORT_MEMO_MARKER)
+  );
+}
+
 export interface TimelineChild {
   date: string;
   title: string;
@@ -50,10 +67,10 @@ export interface YearTimelineHighlightRow {
   generated_at: string;
 }
 
-/** 定期支払いは「大きな出来事」ではないため除外し、旅行カテゴリか高額な支出だけを拾う（日付昇順）。 */
+/** 定期支払い・生活固定費・旧家計簿の月次集計を除外し、旅行カテゴリか高額な支出だけを拾う（日付昇順）。 */
 function notableExpenseRows(rows: ExpenseRow[], viewerProfileId: string): ExpenseRow[] {
   return rows
-    .filter((e) => e.source !== "recurring" && !isMaskedForViewer(e, viewerProfileId))
+    .filter((e) => isEventWorthyExpense(e, viewerProfileId))
     .filter((e) => e.category === NOTABLE_CATEGORY || e.amount >= NOTABLE_AMOUNT_THRESHOLD)
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -119,7 +136,7 @@ export async function generateYearTimelineHighlights(ownerId: string, year: numb
 
   const expenseNotesByDate = new Map<string, string[]>();
   for (const e of expenseRows) {
-    if (e.source === "recurring" || isMaskedForViewer(e, ownerId)) continue;
+    if (!isEventWorthyExpense(e, ownerId)) continue;
     const list = expenseNotesByDate.get(e.date) ?? [];
     list.push(`${e.memo || e.category}(${e.amount}円)`);
     expenseNotesByDate.set(e.date, list);
