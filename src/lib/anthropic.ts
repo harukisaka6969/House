@@ -515,3 +515,26 @@ ${body}`,
   const arr = JSON.parse(t);
   return Array.isArray(arr) ? arr : [arr];
 }
+
+/** 年間タイムライン機能: 同じカテゴリ・近い日付でまとめた支出の塊（例: 北海道旅行の一式）に、
+ * 内容から推測できる短い見出しを1つずつ付ける。クラスタ数に関わらず1回のAI呼び出しで済ませる。 */
+export async function titleExpenseClusters(clusters: { category: string; from: string; to: string; memos: string[] }[]): Promise<string[]> {
+  if (clusters.length === 0) return [];
+  const listing = clusters.map((c, i) => `${i + 1}. カテゴリ:${c.category} 期間:${c.from}〜${c.to} 内容:${c.memos.join("、")}`).join("\n");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `次は家計簿の支出をカテゴリと日付の近さでまとめたグループの一覧です。それぞれの内容から、旅行なら行き先、それ以外は何のためのお金かが一目でわかる短い見出し（5〜10字程度、例:「北海道旅行」「結婚式費用」）を1つずつ考えてください。JSON配列のみを返してください（要素数・順番は入力と同じにすること）。前置きやコードブロックは不要です。
+形式: ["見出し1","見出し2",...]
+
+${listing}`,
+      },
+    ],
+  });
+  const clusterTitlesRaw = stripFence(joinText(res.content));
+  const clusterTitlesArr = JSON.parse(clusterTitlesRaw);
+  return Array.isArray(clusterTitlesArr) ? clusterTitlesArr.map((s) => String(s)) : [];
+}

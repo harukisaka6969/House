@@ -250,12 +250,19 @@ export interface AnniversaryOut {
   created_at: string;
 }
 
+export interface TimelineChildOut {
+  date: string;
+  title: string;
+  amount: number;
+}
+
 export interface TimelineItemOut {
   date: string;
   kind: "anniversary" | "expense" | "diary";
   title: string;
   description: string;
   amount?: number;
+  children?: TimelineChildOut[];
 }
 
 export interface YearTimelineOut {

@@ -278,3 +278,9 @@ select.mf-input option { background: #181E25; }
 .yr-tltitle { font-weight: 700; font-size: 14.5px; margin-top: 2px; }
 .yr-tldesc { font-size: 12.5px; color: #C4CDD6; margin-top: 3px; line-height: 1.5; }
 .yr-tlamount { font-family: var(--font-num), monospace; font-size: 12.5px; color: #F5A524; margin-top: 4px; }
+.yr-tlcount { font-size: 11px; font-weight: 500; color: #93A0AE; }
+.yr-tlchildren { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 5px; }
+.yr-tlchild { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.yr-tlchilddate { font-family: var(--font-num), monospace; color: #6B7684; flex: 0 0 auto; }
+.yr-tlchildtitle { color: #C4CDD6; flex: 1; }
+.yr-tlchildamount { font-family: var(--font-num), monospace; color: #93A0AE; flex: 0 0 auto; }

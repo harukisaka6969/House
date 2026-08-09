@@ -29,6 +29,16 @@ export default function YearTimeline() {
   const [data, setData] = useState<YearTimelineOut | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const load = (y: number) => {
     apiGet<YearTimelineOut>(`/api/year-timeline?year=${y}`)
@@ -43,7 +53,7 @@ export default function YearTimeline() {
     try {
       await apiPost("/api/year-timeline/generate", { year });
       load(year);
-      setMsg("✓ 日記からハイライトを抽出しました。");
+      setMsg("✓ タイムラインを整理しました。");
     } catch (e) {
       setMsg(e instanceof ApiClientError ? e.message : "抽出に失敗しました。");
     }
@@ -67,12 +77,12 @@ export default function YearTimeline() {
           </button>
         </div>
         <button className="mf-btn ghost" disabled={busy} onClick={generate}>
-          {busy ? "抽出中…" : data?.highlightsGeneratedAt ? "🪄 日記から再抽出する" : "🪄 日記からハイライトを抽出する"}
+          {busy ? "整理中…" : data?.highlightsGeneratedAt ? "🪄 タイムラインを整理し直す" : "🪄 AIでタイムラインを整理する"}
         </button>
       </div>
       {data?.highlightsGeneratedAt && (
         <div className="mf-hint" style={{ opacity: 0.7 }}>
-          最終抽出: {new Date(data.highlightsGeneratedAt).toLocaleString("ja-JP")}（自分の日記からのみ。相手には表示されません）
+          最終整理: {new Date(data.highlightsGeneratedAt).toLocaleString("ja-JP")}（支出のまとめ方の見出しと、日記のハイライト（自分の分のみ・相手には非表示）を更新します）
         </div>
       )}
       {msg && <div className="mf-hint">{msg}</div>}
@@ -90,18 +100,39 @@ export default function YearTimeline() {
               const month = Number(item.date.slice(5, 7)) - 1;
               const prevMonth = i > 0 ? Number(data.items[i - 1].date.slice(5, 7)) - 1 : -1;
               const showMonth = month !== prevMonth;
+              const key = `${item.date}-${item.kind}-${i}`;
+              const hasChildren = (item.children?.length ?? 0) > 1;
+              const isOpen = expanded.has(key);
               return (
-                <div key={`${item.date}-${item.kind}-${i}`}>
+                <div key={key}>
                   {showMonth && <div className="yr-tlmonth">{MONTH_LABELS[month] ?? ""}</div>}
                   <div className="yr-tlnode">
                     <div className="yr-tldot" style={{ borderColor: DOT_COLOR[item.kind] }}>
                       {iconFor(item)}
                     </div>
-                    <div className="yr-tlcard">
+                    <div
+                      className="yr-tlcard"
+                      style={hasChildren ? { cursor: "pointer" } : undefined}
+                      onClick={hasChildren ? () => toggleExpand(key) : undefined}
+                    >
                       <div className="yr-tldate">{item.date}</div>
-                      <div className="yr-tltitle">{item.title}</div>
+                      <div className="yr-tltitle">
+                        {item.title}
+                        {hasChildren && <span className="yr-tlcount"> {isOpen ? "▾" : "▸"} 内訳 {item.children!.length}件</span>}
+                      </div>
                       {item.description && item.kind !== "expense" && <div className="yr-tldesc">{item.description}</div>}
                       {item.amount !== undefined && <div className="yr-tlamount">{fmt(item.amount)}</div>}
+                      {hasChildren && isOpen && (
+                        <div className="yr-tlchildren">
+                          {item.children!.map((c, ci) => (
+                            <div key={ci} className="yr-tlchild">
+                              <span className="yr-tlchilddate">{c.date.slice(5)}</span>
+                              <span className="yr-tlchildtitle">{c.title}</span>
+                              <span className="yr-tlchildamount">{fmt(c.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
