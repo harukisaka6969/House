@@ -69,6 +69,11 @@ function QuickEntryInner() {
   const [splitBusy, setSplitBusy] = useState(false);
   const [splitMsg, setSplitMsg] = useState("");
 
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkEvent, setLinkEvent] = useState<SplitEventOut | null>(null);
+  const [linkDetail, setLinkDetail] = useState<SplitEventDetailOut | null>(null);
+  const [linkBeneficiaryIds, setLinkBeneficiaryIds] = useState<string[]>([]);
+
   useEffect(() => {
     apiGet<{ events: SplitEventOut[] }>("/api/split-events")
       .then((r) => setSplitEvents(r.events))
@@ -91,6 +96,28 @@ function QuickEntryInner() {
 
   const promoMsg = (promoted: string[]) => (promoted.length ? ` ✨「${promoted.join("、")}」を新カテゴリにしました` : "");
 
+  const selectLinkEvent = async (ev: SplitEventOut) => {
+    if (linkEvent?.id === ev.id) {
+      setLinkEvent(null);
+      setLinkDetail(null);
+      setLinkBeneficiaryIds([]);
+      return;
+    }
+    setLinkEvent(ev);
+    setLinkDetail(null);
+    try {
+      const detail = await apiGet<SplitEventDetailOut>(`/api/split/${ev.share_token}`);
+      setLinkDetail(detail);
+      setLinkBeneficiaryIds(detail.participants.map((p) => p.id));
+    } catch {
+      setMsg("イベントの読み込みに失敗しました。");
+    }
+  };
+
+  const toggleLinkBeneficiary = (id: string) => {
+    setLinkBeneficiaryIds((ids) => (ids.includes(id) ? ids.filter((b) => b !== id) : [...ids, id]));
+  };
+
   const add = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
       setMsg("金額を入力してください。");
@@ -110,7 +137,25 @@ function QuickEntryInner() {
           },
         ],
       });
-      setMsg(`✓ 追加: ${form.category}${form.category === "その他" && form.sub ? `（${form.sub}）` : ""} ${fmt(Number(form.amount))}（${acct?.name ?? ""}）` + promoMsg(promoted));
+      let splitNote = "";
+      if (linkEvent && linkDetail && linkBeneficiaryIds.length > 0) {
+        const payer = linkDetail.participants.find((p) => p.name === meName) ?? linkDetail.participants[0];
+        if (payer) {
+          try {
+            await apiPost(`/api/split/${linkEvent.share_token}/expenses`, {
+              payerId: payer.id,
+              beneficiaryIds: linkBeneficiaryIds,
+              amount: Number(form.amount),
+              memo: form.memo,
+              date: form.date || todayStr(),
+            });
+            splitNote = ` ／「${linkEvent.name}」にも登録`;
+          } catch {
+            splitNote = " ／ 割り勘への登録は失敗しました";
+          }
+        }
+      }
+      setMsg(`✓ 追加: ${form.category}${form.category === "その他" && form.sub ? `（${form.sub}）` : ""} ${fmt(Number(form.amount))}（${acct?.name ?? ""}）` + promoMsg(promoted) + splitNote);
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
       refreshMonth();
     } catch (e) {
@@ -399,8 +444,45 @@ function QuickEntryInner() {
             </>
           )}
 
-          <button className="mf-btn primary mf-bigbtn" style={{ width: "100%", marginTop: 14 }} disabled={busy} onClick={add}>
-            追加する
+          {splitEvents && splitEvents.length > 0 && (
+            <>
+              <button className="mf-optbtn" onClick={() => setLinkOpen((o) => !o)}>
+                {linkOpen ? "▾" : "▸"} 🧳{linkEvent ? `「${linkEvent.name}」にも登録` : "割り勘にも登録"} — 任意
+              </button>
+              {linkOpen && (
+                <>
+                  <div className="mf-chips" style={{ marginTop: 6 }}>
+                    {splitEvents.slice(0, SPLIT_RECENT_LIMIT).map((ev) => (
+                      <button key={ev.id} className={"mf-chipbtn" + (linkEvent?.id === ev.id ? " on" : "")} onClick={() => selectLinkEvent(ev)}>
+                        {ev.name}
+                      </button>
+                    ))}
+                  </div>
+                  {linkEvent && linkDetail && linkDetail.participants.length > 0 && (
+                    <>
+                      <div className="mf-hint" style={{ margin: "8px 0 4px" }}>
+                        誰のための支出か
+                      </div>
+                      <div className="mf-chips" style={{ marginTop: 0 }}>
+                        {linkDetail.participants.map((p) => (
+                          <button
+                            key={p.id}
+                            className={"mf-chipbtn" + (linkBeneficiaryIds.includes(p.id) ? " on" : "")}
+                            onClick={() => toggleLinkBeneficiary(p.id)}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          <button className="mf-btn primary mf-bigbtn" style={{ width: "100%", marginTop: 14 }} disabled={busy || (!!linkEvent && !linkDetail)} onClick={add}>
+            {linkEvent && !linkDetail ? "割り勘イベントを読み込み中…" : "追加する"}
           </button>
         </>
       )}

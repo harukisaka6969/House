@@ -1,15 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import { CAT_COLORS, categoriesForAccount } from "@/lib/constants";
-import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
+import type { SplitEventOut, SplitEventDetailOut } from "@/lib/apiTypes";
 import { TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
 import RecurringExpenses from "./RecurringExpenses";
+
+const SPLIT_RECENT_LIMIT = 5;
 
 export default function ExpensePanel() {
   const { month, monthKey, allCats, refreshMonth, refreshSettings, me } = useDashboard();
@@ -41,11 +44,45 @@ export default function ExpensePanel() {
   });
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [splitEvents, setSplitEvents] = useState<SplitEventOut[] | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkEvent, setLinkEvent] = useState<SplitEventOut | null>(null);
+  const [linkDetail, setLinkDetail] = useState<SplitEventDetailOut | null>(null);
+  const [linkBeneficiaryIds, setLinkBeneficiaryIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    apiGet<{ events: SplitEventOut[] }>("/api/split-events")
+      .then((r) => setSplitEvents(r.events))
+      .catch(() => setSplitEvents([]));
+  }, []);
+
   if (!month) return null;
 
   const catOptions = categoriesForAccount(allCats, form.account);
 
   const promoMsg = (promoted: string[]) => (promoted.length ? ` ✨「${promoted.join("、")}」を新カテゴリとして追加しました。` : "");
+
+  const selectLinkEvent = async (ev: SplitEventOut) => {
+    if (linkEvent?.id === ev.id) {
+      setLinkEvent(null);
+      setLinkDetail(null);
+      setLinkBeneficiaryIds([]);
+      return;
+    }
+    setLinkEvent(ev);
+    setLinkDetail(null);
+    try {
+      const detail = await apiGet<SplitEventDetailOut>(`/api/split/${ev.share_token}`);
+      setLinkDetail(detail);
+      setLinkBeneficiaryIds(detail.participants.map((p) => p.id));
+    } catch {
+      setMsg("イベントの読み込みに失敗しました。");
+    }
+  };
+
+  const toggleLinkBeneficiary = (id: string) => {
+    setLinkBeneficiaryIds((ids) => (ids.includes(id) ? ids.filter((b) => b !== id) : [...ids, id]));
+  };
 
   const addExpense = async () => {
     if (!form.amount || Number(form.amount) <= 0) {
@@ -66,8 +103,26 @@ export default function ExpensePanel() {
           },
         ],
       });
+      let splitNote = "";
+      if (linkEvent && linkDetail && linkBeneficiaryIds.length > 0) {
+        const payer = linkDetail.participants.find((p) => p.name === meName) ?? linkDetail.participants[0];
+        if (payer) {
+          try {
+            await apiPost(`/api/split/${linkEvent.share_token}/expenses`, {
+              payerId: payer.id,
+              beneficiaryIds: linkBeneficiaryIds,
+              amount: Number(form.amount),
+              memo: form.memo,
+              date: form.date || todayStrJST(),
+            });
+            splitNote = ` ／「${linkEvent.name}」にも登録`;
+          } catch {
+            splitNote = " ／ 割り勘への登録は失敗しました";
+          }
+        }
+      }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
-      setMsg("✓ 追加しました。" + promoMsg(promoted));
+      setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote);
       refreshMonth();
       if (promoted.length) refreshSettings();
     } catch (e) {
@@ -326,9 +381,47 @@ export default function ExpensePanel() {
         <div className="mf-hint" style={{ opacity: 0.6 }}>
           日付を空にすると今日（{todayStrJST()}）の日付で登録されます。
         </div>
+
+        {splitEvents && splitEvents.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <button className="mf-optbtn" onClick={() => setLinkOpen((o) => !o)}>
+              {linkOpen ? "▾" : "▸"} 🧳{linkEvent ? `「${linkEvent.name}」にも登録` : "割り勘にも登録"} — 任意
+            </button>
+            {linkOpen && (
+              <>
+                <div className="mf-chips" style={{ marginTop: 6 }}>
+                  {splitEvents.slice(0, SPLIT_RECENT_LIMIT).map((ev) => (
+                    <button key={ev.id} className={"mf-chipbtn" + (linkEvent?.id === ev.id ? " on" : "")} onClick={() => selectLinkEvent(ev)}>
+                      {ev.name}
+                    </button>
+                  ))}
+                </div>
+                {linkEvent && linkDetail && linkDetail.participants.length > 0 && (
+                  <>
+                    <div className="mf-hint" style={{ margin: "8px 0 4px" }}>
+                      誰のための支出か
+                    </div>
+                    <div className="mf-chips" style={{ marginTop: 0 }}>
+                      {linkDetail.participants.map((p) => (
+                        <button
+                          key={p.id}
+                          className={"mf-chipbtn" + (linkBeneficiaryIds.includes(p.id) ? " on" : "")}
+                          onClick={() => toggleLinkBeneficiary(p.id)}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div className="mf-row" style={{ marginTop: 10 }}>
-          <button className="mf-btn primary" disabled={busy} onClick={addExpense}>
-            追加する
+          <button className="mf-btn primary" disabled={busy || (!!linkEvent && !linkDetail)} onClick={addExpense}>
+            {linkEvent && !linkDetail ? "割り勘イベントを読み込み中…" : "追加する"}
           </button>
           <button className="mf-btn ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
             {busy ? "処理中…" : "📷 レシートから読み取る"}
