@@ -43,6 +43,8 @@ const Records = dyn(() => import("./sections/Records"));
 const Reminders = dyn(() => import("./sections/Reminders"));
 const SmartHome = dyn(() => import("./sections/SmartHome"));
 const SplitEvents = dyn(() => import("./sections/SplitEvents"));
+const Anniversaries = dyn(() => import("./sections/Anniversaries"));
+const YearTimeline = dyn(() => import("./sections/YearTimeline"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
@@ -83,6 +85,13 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["shoppingList", "⑯ 買い物リスト"],
       ["reminders", "⑳ リマインダー"],
       ["smartHome", "㉑ 家電"],
+    ],
+  },
+  {
+    label: "❤️ ふたり",
+    items: [
+      ["anniversaries", "㉓ 記念日"],
+      ["yearTimeline", "㉔ タイムライン"],
     ],
   },
   {
@@ -260,6 +269,8 @@ function DashboardInner() {
             {view === "shoppingList" && <ShoppingList />}
             {view === "smartHome" && <SmartHome />}
             {view === "splitEvents" && <SplitEvents />}
+            {view === "anniversaries" && <Anniversaries />}
+            {view === "yearTimeline" && <YearTimeline />}
             {view === "settings" && <Settings />}
           </>
         )}

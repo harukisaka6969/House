@@ -487,3 +487,31 @@ export async function generateDailyTip(prompt: string, useWebSearch: boolean): P
   });
   return joinText(res.content).trim() || "本日分の生成に失敗しました。";
 }
+
+export interface YearHighlight {
+  date: string;
+  title: string;
+  description: string;
+}
+
+/** 年間タイムライン機能: 1年分の日記（本人の分のみ）から、大きな出来事だけを抜き出す。 */
+export async function extractYearHighlightsFromJournal(year: number, entries: { date: string; body: string }[]): Promise<YearHighlight[]> {
+  const capped = entries.slice(0, 200);
+  const body = capped.map((e) => `${e.date}: ${e.body.slice(0, 300)}`).join("\n\n");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    messages: [
+      {
+        role: "user",
+        content: `あなたは日記から、その年の大きな出来事だけを抜き出す編集者です。以下は${year}年の日記です（日付: 本文）。旅行・お祝い・大きな決断・記念になる出来事など、後から振り返って「あの年はこんなことがあった」と思えるような大きめの出来事だけを、多くても8件程度選んでJSON配列のみで返してください。日常のちょっとした出来事（普段の食事、体調管理の記録など）は含めないでください。前置きやコードブロックは不要です。
+形式: [{"date":"YYYY-MM-DD","title":"短い見出し(10字程度)","description":"1〜2文の説明"}]
+
+${body}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  const arr = JSON.parse(t);
+  return Array.isArray(arr) ? arr : [arr];
+}

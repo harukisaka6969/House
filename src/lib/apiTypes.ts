@@ -242,6 +242,27 @@ export interface LifeEventOut {
   created_at: string;
 }
 
+export interface AnniversaryOut {
+  id: string;
+  name: string;
+  date: string;
+  memo: string;
+  created_at: string;
+}
+
+export interface TimelineItemOut {
+  date: string;
+  kind: "anniversary" | "expense" | "diary";
+  title: string;
+  description: string;
+  amount?: number;
+}
+
+export interface YearTimelineOut {
+  items: TimelineItemOut[];
+  highlightsGeneratedAt: string | null;
+}
+
 export interface UpcomingSummary {
   windowDays: number;
   maintenanceCount: number;

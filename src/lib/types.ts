@@ -185,6 +185,15 @@ export interface LifeEventRow {
   created_at: string;
 }
 
+/** 記念日（結婚記念日・誕生日など）。世帯共有、毎年dateの月日で繰り返す前提。 */
+export interface AnniversaryRow {
+  id: string;
+  name: string;
+  date: string;
+  memo: string;
+  created_at: string;
+}
+
 export type RecurrenceType = "daily" | "weekly" | "monthly";
 
 /** 定期的にやること（ゴミ出し・ペットの薬など）。世帯で共有、owner区別なし。 */

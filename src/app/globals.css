@@ -264,3 +264,17 @@ select.mf-input option { background: #181E25; }
 
 .kiosk-exit { align-self: center; font-size: 12px; color: #6B7684; text-decoration: none; padding: 6px; }
 .kiosk-exit:hover { color: #93A0AE; }
+
+/* 年間タイムライン（記念日・注目の支出・日記ハイライトの振り返り） */
+.yr-timeline { position: relative; padding-left: 26px; margin-top: 4px; }
+.yr-timeline::before { content: ""; position: absolute; left: 9px; top: 4px; bottom: 4px; width: 2px; background: linear-gradient(to bottom, rgba(245,165,36,0.05), rgba(245,165,36,0.35) 6%, rgba(245,165,36,0.35) 94%, rgba(245,165,36,0.05)); }
+.yr-tlmonth { font-size: 11px; letter-spacing: 0.08em; color: #6B7684; font-family: var(--font-num), monospace; margin: 18px 0 8px -26px; padding-left: 26px; }
+.yr-tlmonth:first-child { margin-top: 0; }
+.yr-tlnode { position: relative; padding-bottom: 14px; }
+.yr-tlnode:last-child { padding-bottom: 0; }
+.yr-tldot { position: absolute; left: -26px; top: 2px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background: #101418; border: 2px solid; z-index: 1; }
+.yr-tlcard { background: #181E25; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 14px; }
+.yr-tldate { font-size: 11px; color: #93A0AE; font-family: var(--font-num), monospace; }
+.yr-tltitle { font-weight: 700; font-size: 14.5px; margin-top: 2px; }
+.yr-tldesc { font-size: 12.5px; color: #C4CDD6; margin-top: 3px; line-height: 1.5; }
+.yr-tlamount { font-family: var(--font-num), monospace; font-size: 12.5px; color: #F5A524; margin-top: 4px; }

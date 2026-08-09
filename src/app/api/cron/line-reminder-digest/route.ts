@@ -31,10 +31,13 @@ export async function GET(req: Request) {
   const digestRecipients = await getLineReminderRecipientsForTime(bucket, today);
   let digestSent = 0;
   if (digestRecipients.length > 0) {
-    const message = await buildReminderDigestMessage();
-    if (message) {
-      await Promise.all(digestRecipients.map((r) => sendLineMessage(r.line_user_id, message)));
-      digestSent = digestRecipients.length;
+    // 日記からの「N年前の今日」は本人のみ閲覧可のため、宛先ごとに内容を作って個別送信する。
+    for (const r of digestRecipients) {
+      const message = await buildReminderDigestMessage(r.id);
+      if (message) {
+        await sendLineMessage(r.line_user_id, message);
+        digestSent++;
+      }
     }
     await Promise.all(digestRecipients.map((r) => markLineReminderSent(r.id, today)));
   }
