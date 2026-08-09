@@ -265,22 +265,24 @@ select.mf-input option { background: #181E25; }
 .kiosk-exit { align-self: center; font-size: 12px; color: #6B7684; text-decoration: none; padding: 6px; }
 .kiosk-exit:hover { color: #93A0AE; }
 
-/* 年間タイムライン（記念日・注目の支出・日記ハイライトの振り返り） */
-.yr-timeline { position: relative; padding-left: 26px; margin-top: 4px; }
-.yr-timeline::before { content: ""; position: absolute; left: 9px; top: 4px; bottom: 4px; width: 2px; background: linear-gradient(to bottom, rgba(245,165,36,0.05), rgba(245,165,36,0.35) 6%, rgba(245,165,36,0.35) 94%, rgba(245,165,36,0.05)); }
-.yr-tlmonth { font-size: 11px; letter-spacing: 0.08em; color: #6B7684; font-family: var(--font-num), monospace; margin: 18px 0 8px -26px; padding-left: 26px; }
-.yr-tlmonth:first-child { margin-top: 0; }
-.yr-tlnode { position: relative; padding-bottom: 14px; }
-.yr-tlnode:last-child { padding-bottom: 0; }
-.yr-tldot { position: absolute; left: -26px; top: 2px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; background: #101418; border: 2px solid; z-index: 1; }
-.yr-tlcard { background: #181E25; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 14px; }
-.yr-tldate { font-size: 11px; color: #93A0AE; font-family: var(--font-num), monospace; }
-.yr-tltitle { font-weight: 700; font-size: 14.5px; margin-top: 2px; }
-.yr-tldesc { font-size: 12.5px; color: #C4CDD6; margin-top: 3px; line-height: 1.5; }
-.yr-tlamount { font-family: var(--font-num), monospace; font-size: 12.5px; color: #F5A524; margin-top: 4px; }
-.yr-tlcount { font-size: 11px; font-weight: 500; color: #93A0AE; }
-.yr-tlchildren { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 5px; }
-.yr-tlchild { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.yr-tlchilddate { font-family: var(--font-num), monospace; color: #6B7684; flex: 0 0 auto; }
-.yr-tlchildtitle { color: #C4CDD6; flex: 1; }
-.yr-tlchildamount { font-family: var(--font-num), monospace; color: #93A0AE; flex: 0 0 auto; }
+/* 年間タイムライン（記念日・注目の支出・日記ハイライトの振り返り）— 横スクロールで右へ進む */
+.yr-hscroll { overflow-x: auto; overflow-y: visible; padding: 0 4px 10px; margin: 4px -4px 0; -webkit-overflow-scrolling: touch; }
+.yr-htrack { position: relative; display: flex; align-items: flex-start; padding: 30px 10px 0; width: max-content; min-width: 100%; }
+.yr-htrack::before { content: ""; position: absolute; left: 10px; right: 10px; top: 30px; height: 2px; background: linear-gradient(to right, rgba(245,165,36,0.06), rgba(245,165,36,0.3) 3%, rgba(245,165,36,0.3) 97%, rgba(245,165,36,0.06)); }
+.yr-hcol { position: relative; flex: 0 0 auto; width: 128px; display: flex; flex-direction: column; align-items: center; padding: 0 5px; transition: width 0.15s ease; }
+.yr-hmonth { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: 0.06em; color: #6B7684; font-family: var(--font-num), monospace; white-space: nowrap; }
+.yr-hdot { width: 18px; height: 18px; border-radius: 50%; background: #101418; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 9.5px; z-index: 1; flex: 0 0 auto; }
+.yr-hcard { margin-top: 8px; width: 100%; background: #181E25; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 7px 9px; text-align: center; }
+.yr-hdate { font-size: 10px; color: #6B7684; font-family: var(--font-num), monospace; }
+.yr-htitle { font-weight: 700; font-size: 12.5px; margin-top: 2px; line-height: 1.32; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.yr-hamount { font-family: var(--font-num), monospace; font-size: 11px; color: #F5A524; margin-top: 3px; }
+.yr-hcount { font-size: 10px; color: #93A0AE; margin-top: 2px; }
+.yr-hchildren { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.yr-hchild { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; }
+.yr-hchilddate { font-family: var(--font-num), monospace; color: #6B7684; flex: 0 0 auto; }
+.yr-hchildtitle { color: #C4CDD6; flex: 1; white-space: normal; word-break: break-word; line-height: 1.35; }
+.yr-hchildamount { font-family: var(--font-num), monospace; color: #93A0AE; flex: 0 0 auto; white-space: nowrap; }
+.yr-htoday { position: relative; flex: 0 0 auto; width: 2px; align-self: stretch; display: flex; justify-content: center; }
+.yr-htoday::before { content: ""; position: absolute; top: 21px; bottom: -30px; width: 2px; background: #F5A524; }
+.yr-htodaylabel { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #F5A524; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
+.yr-htodaydot { position: absolute; top: 22px; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: #F5A524; z-index: 2; }

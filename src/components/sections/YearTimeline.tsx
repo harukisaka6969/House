@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, ApiClientError } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import type { YearTimelineOut, TimelineItemOut } from "@/lib/apiTypes";
@@ -24,12 +24,35 @@ function iconFor(item: TimelineItemOut): string {
 
 const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+type Column = { kind: "item"; item: TimelineItemOut; key: string } | { kind: "today" };
+
+/** 表示中の年が今年なら、日付順の並びの中に「今日」の目印を差し込む位置を決める。 */
+function buildColumns(items: TimelineItemOut[], year: number): Column[] {
+  const columns: Column[] = [];
+  const isCurrentYear = year === Number(todayStr().slice(0, 4));
+  let todayInserted = !isCurrentYear;
+  items.forEach((item, i) => {
+    if (!todayInserted && item.date > todayStr()) {
+      columns.push({ kind: "today" });
+      todayInserted = true;
+    }
+    columns.push({ kind: "item", item, key: `${item.date}-${item.kind}-${i}` });
+  });
+  if (!todayInserted) columns.push({ kind: "today" });
+  return columns;
+}
+
 export default function YearTimeline() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<YearTimelineOut | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const todayRef = useRef<HTMLDivElement>(null);
 
   const toggleExpand = (key: string) => {
     setExpanded((prev) => {
@@ -47,6 +70,12 @@ export default function YearTimeline() {
   };
   useEffect(() => load(year), [year]);
 
+  useEffect(() => {
+    if (data && data.items.length > 0) {
+      todayRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
+    }
+  }, [data]);
+
   const generate = async () => {
     setBusy(true);
     setMsg("");
@@ -60,9 +89,11 @@ export default function YearTimeline() {
     setBusy(false);
   };
 
+  const columns = data ? buildColumns(data.items, year) : [];
+
   return (
     <section className="mf-section">
-      <SectionHead no="24" title="タイムライン" sub="その年に起きた大きな出来事を、記念日・注目の支出・日記から振り返ります。" />
+      <SectionHead no="24" title="タイムライン" sub="その年に起きた大きな出来事を、記念日・注目の支出・日記から振り返ります。右へ進むほど時期が進みます。" />
 
       <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div className="mf-row" style={{ gap: 10 }}>
@@ -95,49 +126,52 @@ export default function YearTimeline() {
             {year}年にはまだ何も記録がありません。記念日を登録するか、日記を書いてハイライトを抽出してみてください。
           </div>
         ) : (
-          <div className="yr-timeline">
-            {data.items.map((item, i) => {
-              const month = Number(item.date.slice(5, 7)) - 1;
-              const prevMonth = i > 0 ? Number(data.items[i - 1].date.slice(5, 7)) - 1 : -1;
-              const showMonth = month !== prevMonth;
-              const key = `${item.date}-${item.kind}-${i}`;
-              const hasChildren = (item.children?.length ?? 0) > 1;
-              const isOpen = expanded.has(key);
-              return (
-                <div key={key}>
-                  {showMonth && <div className="yr-tlmonth">{MONTH_LABELS[month] ?? ""}</div>}
-                  <div className="yr-tlnode">
-                    <div className="yr-tldot" style={{ borderColor: DOT_COLOR[item.kind] }}>
+          <div className="yr-hscroll">
+            <div className="yr-htrack">
+              {columns.map((col, ci) => {
+                if (col.kind === "today") {
+                  return (
+                    <div key="today" ref={todayRef} className="yr-htoday">
+                      <span className="yr-htodaylabel">今日</span>
+                      <span className="yr-htodaydot" />
+                    </div>
+                  );
+                }
+                const { item, key } = col;
+                const prevItem = columns[ci - 1];
+                const prevMonth =
+                  prevItem?.kind === "item" ? Number(prevItem.item.date.slice(5, 7)) - 1 : ci === 0 ? -1 : Number(item.date.slice(5, 7)) - 1;
+                const month = Number(item.date.slice(5, 7)) - 1;
+                const showMonth = month !== prevMonth;
+                const hasChildren = (item.children?.length ?? 0) > 1;
+                const isOpen = expanded.has(key);
+                return (
+                  <div key={key} className="yr-hcol" style={hasChildren && isOpen ? { width: 240 } : undefined}>
+                    {showMonth && <div className="yr-hmonth">{MONTH_LABELS[month] ?? ""}</div>}
+                    <div className="yr-hdot" style={{ borderColor: DOT_COLOR[item.kind] }}>
                       {iconFor(item)}
                     </div>
-                    <div
-                      className="yr-tlcard"
-                      style={hasChildren ? { cursor: "pointer" } : undefined}
-                      onClick={hasChildren ? () => toggleExpand(key) : undefined}
-                    >
-                      <div className="yr-tldate">{item.date}</div>
-                      <div className="yr-tltitle">
-                        {item.title}
-                        {hasChildren && <span className="yr-tlcount"> {isOpen ? "▾" : "▸"} 内訳 {item.children!.length}件</span>}
-                      </div>
-                      {item.description && item.kind !== "expense" && <div className="yr-tldesc">{item.description}</div>}
-                      {item.amount !== undefined && <div className="yr-tlamount">{fmt(item.amount)}</div>}
+                    <div className="yr-hcard" style={hasChildren ? { cursor: "pointer" } : undefined} onClick={hasChildren ? () => toggleExpand(key) : undefined}>
+                      <div className="yr-hdate">{item.date.slice(5)}</div>
+                      <div className="yr-htitle">{item.title}</div>
+                      {item.amount !== undefined && <div className="yr-hamount">{fmt(item.amount)}</div>}
+                      {hasChildren && <div className="yr-hcount">{isOpen ? "▾" : "▸"} 内訳 {item.children!.length}件</div>}
                       {hasChildren && isOpen && (
-                        <div className="yr-tlchildren">
-                          {item.children!.map((c, ci) => (
-                            <div key={ci} className="yr-tlchild">
-                              <span className="yr-tlchilddate">{c.date.slice(5)}</span>
-                              <span className="yr-tlchildtitle">{c.title}</span>
-                              <span className="yr-tlchildamount">{fmt(c.amount)}</span>
+                        <div className="yr-hchildren">
+                          {item.children!.map((c, cci) => (
+                            <div key={cci} className="yr-hchild">
+                              <span className="yr-hchilddate">{c.date.slice(5)}</span>
+                              <span className="yr-hchildtitle" title={c.title}>{c.title}</span>
+                              <span className="yr-hchildamount">{fmt(c.amount)}</span>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
