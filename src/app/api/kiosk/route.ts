@@ -76,6 +76,8 @@ export async function GET() {
           done_today,
           last_completed_date: r.last_completed_date,
           notify_time: r.notify_time,
+          assigned_to: r.assigned_to,
+          assigned_to_name: r.assigned_to ? nameOf(r.assigned_to) : null,
           created_at: r.created_at,
         };
       })
@@ -104,8 +106,8 @@ export async function GET() {
         judgeTone: a.judge.tone,
       })),
       reminders,
-      left: { slug: haruki.slug, name: haruki.name, shoppingItems: leftItems },
-      right: { slug: arisa.slug, name: arisa.name, shoppingItems: rightItems },
+      left: { id: haruki.id, slug: haruki.slug, name: haruki.name, shoppingItems: leftItems },
+      right: { id: arisa.id, slug: arisa.slug, name: arisa.name, shoppingItems: rightItems },
       notifications: { pendingApprovalItems, remindersToday, lowStockItems: lowStock },
     };
 

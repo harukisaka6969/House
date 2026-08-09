@@ -23,6 +23,7 @@ export interface NewReminderInput {
   day_of_month?: number | null;
   memo?: string;
   notify_time?: string | null;
+  assigned_to?: string | null;
 }
 
 export async function createReminder(input: NewReminderInput): Promise<ReminderRow> {
@@ -35,6 +36,7 @@ export async function createReminder(input: NewReminderInput): Promise<ReminderR
       day_of_month: input.recurrence_type === "monthly" ? input.day_of_month ?? 1 : null,
       memo: input.memo?.trim() ?? "",
       notify_time: input.notify_time ?? null,
+      assigned_to: input.assigned_to ?? null,
     })
     .select("*")
     .single();
@@ -53,6 +55,7 @@ export interface ReminderPatch {
   done?: boolean;
   /** この予定になったらLINEで個別通知する時刻（"HH:MM"）。nullで個別通知オフ。 */
   notify_time?: string | null;
+  assigned_to?: string | null;
 }
 
 export async function updateReminder(id: string, patch: ReminderPatch): Promise<ReminderRow | null> {
@@ -74,6 +77,7 @@ export async function updateReminder(id: string, patch: ReminderPatch): Promise<
   if (patch.active !== undefined) update.active = patch.active;
   if (patch.done !== undefined) update.last_completed_date = patch.done ? todayStrJST() : null;
   if (patch.notify_time !== undefined) update.notify_time = patch.notify_time;
+  if (patch.assigned_to !== undefined) update.assigned_to = patch.assigned_to;
   if (patch.recurrence_type !== undefined) {
     update.recurrence_type = patch.recurrence_type;
     update.day_of_week = patch.recurrence_type === "weekly" ? patch.day_of_week ?? 0 : null;

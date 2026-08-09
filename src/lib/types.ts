@@ -202,6 +202,8 @@ export interface ReminderRow {
   notify_time: string | null;
   /** 個別通知を最後に送った日（YYYY-MM-DD）。同じ日の二重送信を防ぐ。 */
   last_notified_date: string | null;
+  /** この予定を実行する人（任意）。profiles.id。 */
+  assigned_to: string | null;
   created_at: string;
 }
 

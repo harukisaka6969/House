@@ -461,10 +461,13 @@ export interface ReminderOut {
   last_completed_date: string | null;
   done_today: boolean;
   notify_time: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
   created_at: string;
 }
 
 export interface KioskPersonColumn {
+  id: string;
   slug: string;
   name: string;
   shoppingItems: ShoppingItemOut[];

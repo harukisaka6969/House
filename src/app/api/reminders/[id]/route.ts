@@ -14,6 +14,7 @@ const patchSchema = z.object({
   active: z.boolean().optional(),
   done: z.boolean().optional(),
   notify_time: z.string().regex(TIME_RE).nullable().optional(),
+  assigned_to: z.string().uuid().nullable().optional(),
 });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {

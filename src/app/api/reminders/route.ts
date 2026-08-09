@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getReminders, createReminder, resolveNextDate } from "@/lib/reminders";
+import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { todayStrJST } from "@/lib/date";
 
 export async function GET() {
   try {
     await requireOwnerSession();
-    const rows = await getReminders();
+    const [rows, profiles] = await Promise.all([getReminders(), getAllProfiles()]);
+    const nameOf = makeNameLookup(profiles);
     const today = todayStrJST();
     const reminders = rows
       .map((r) => {
@@ -24,6 +26,8 @@ export async function GET() {
           done_today,
           last_completed_date: r.last_completed_date,
           notify_time: r.notify_time,
+          assigned_to: r.assigned_to,
+          assigned_to_name: r.assigned_to ? nameOf(r.assigned_to) : null,
           created_at: r.created_at,
         };
       })
@@ -45,6 +49,7 @@ const bodySchema = z
     day_of_month: z.number().int().min(1).max(31).optional(),
     memo: z.string().max(300).optional(),
     notify_time: z.string().regex(TIME_RE).nullable().optional(),
+    assigned_to: z.string().uuid().nullable().optional(),
   })
   .refine((data) => !(data.recurrence_type === "daily" && data.notify_time && NIGHT_TIME_RE.test(data.notify_time)), {
     message: "「毎日」のリマインダーは深夜（0〜5時）に通知できません。",

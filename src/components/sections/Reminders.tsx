@@ -5,7 +5,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { ReminderOut, RecurrenceType } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
 
-const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+export const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
 export function recurrenceLabel(r: Pick<ReminderOut, "recurrence_type" | "day_of_week" | "day_of_month">): string {
   if (r.recurrence_type === "daily") return "毎日";
