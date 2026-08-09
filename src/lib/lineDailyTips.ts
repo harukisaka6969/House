@@ -19,7 +19,15 @@ function avoidRepeatClause(recentContents: string[]): string {
   return `\n\n直近に送った内容（この内容と同じ切り口・テーマは避けて、必ず違う内容にしてください）:\n${recent}`;
 }
 
-const COMMON_RULE = "前置きや「以下にまとめます」のような言葉は不要です。本文のみを返してください。絵文字は使っても構いませんが多用しないでください。";
+/** web検索などツールを使った後、モデルが最終回答の直前に「情報が集まりました」等の地の文を
+ * 挟むことがあり、プロンプトで禁止するだけでは防ぎきれないため、本文をタグで囲んで確実に抽出する。 */
+const COMMON_RULE =
+  "本文の直前や直後に、前置き・作成プロセスの説明・「以下にまとめます」のような言葉は一切書かないでください。回答は必ず本文だけを <output> と </output> のタグで囲んで出力してください（タグの外には何も書かないこと）。絵文字は使っても構いませんが多用しないでください。";
+
+export function extractTaggedOutput(text: string): string {
+  const match = text.match(/<output>([\s\S]*?)<\/output>/);
+  return (match ? match[1] : text).trim();
+}
 
 export const TIP_DEFS: TipDef[] = [
   {
@@ -29,7 +37,7 @@ export const TIP_DEFS: TipDef[] = [
     useWebSearch: true,
     buildPrompt: (recent, today) => {
       const yesterday = prevDayStr(today);
-      return `あなたは日本語のニュースダイジェストを書くライターです。web検索を使って、${yesterday}（${today}の前日）に日本国内外で報じられた重要なニュースの中から、家庭の生活に影響を与えるもの（物価・金利・税制・天候や災害・生活インフラなど）や、ビジネス・経済への影響が大きいものを中心に選び、2分程度で読める分量（800〜1000文字程度）の日本語のダイジェストとして自然な文章でまとめてください。箇条書きは使わず、読み物として自然につながる文章にしてください。${COMMON_RULE}${avoidRepeatClause(recent)}`;
+      return `あなたは日本語のニュースダイジェストを書くライターです。web検索を使って、${yesterday}（${today}の前日）に日本国内外で報じられた重要なニュースの中から、家庭の生活に影響を与えるもの（物価・金利・税制・天候や災害・生活インフラなど）や、ビジネス・経済への影響が大きいものを中心に選び、2分程度で読める分量（800〜1000文字程度）の日本語のダイジェストとして自然な文章でまとめてください。箇条書きは使わず、読み物として自然につながる文章にしてください。検索中である旨や「検索結果をもとに作成します」のような、作成プロセスに関する言葉は一切含めないでください。${COMMON_RULE}${avoidRepeatClause(recent)}`;
     },
   },
   {
@@ -91,7 +99,8 @@ async function recordTip(category: TipCategory, date: string, content: string): 
 export async function generateAndRecordTip(def: TipDef, today: string): Promise<string> {
   const recent = await getRecentContents(def.category);
   const prompt = def.buildPrompt(recent, today);
-  const content = await generateDailyTip(prompt, def.useWebSearch);
+  const raw = await generateDailyTip(prompt, def.useWebSearch);
+  const content = extractTaggedOutput(raw);
   await recordTip(def.category, today, content);
   return content;
 }
