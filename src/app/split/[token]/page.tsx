@@ -54,6 +54,16 @@ export default function SplitPage({ params }: { params: Promise<{ token: string 
     setParticipantBusy(false);
   };
 
+  const removeParticipant = async (id: string, name: string) => {
+    if (!window.confirm(`${name}さんをこのイベントから削除しますか？（この人が関わる支出の記録も削除されます）`)) return;
+    try {
+      await apiDelete(`/api/split/${token}/participants/${id}`);
+      load();
+    } catch {
+      setMsg("参加者の削除に失敗しました。");
+    }
+  };
+
   const toggleBeneficiary = (id: string) => {
     setForm((f) => ({
       ...f,
@@ -128,8 +138,16 @@ export default function SplitPage({ params }: { params: Promise<{ token: string 
             <div className="mf-paneltitle">参加者</div>
             <div className="mf-chips">
               {data.participants.map((p) => (
-                <span key={p.id} className="mf-chipbtn on" style={{ cursor: "default" }}>
+                <span key={p.id} className="mf-chipbtn on" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   {p.name}
+                  <button
+                    type="button"
+                    onClick={() => removeParticipant(p.id, p.name)}
+                    aria-label={`${p.name}を削除`}
+                    style={{ background: "none", border: "none", color: "inherit", opacity: 0.7, cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
                 </span>
               ))}
             </div>

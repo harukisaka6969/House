@@ -240,10 +240,6 @@ function QuickEntryInner() {
     setSplitMsg("");
     try {
       const { event } = await apiPost<{ event: SplitEventOut }>("/api/split-events", { name: newEventName.trim() });
-      const names = [me?.profile.name, me?.partner?.name].filter((n): n is string => !!n);
-      for (const n of names) {
-        await apiPost(`/api/split/${event.share_token}/participants`, { name: n });
-      }
       setNewEventName("");
       setShowNewEvent(false);
       const { events } = await apiGet<{ events: SplitEventOut[] }>("/api/split-events");

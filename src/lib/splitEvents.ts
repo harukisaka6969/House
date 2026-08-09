@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "crypto";
 import { db } from "./db";
+import { getAllProfiles } from "./profiles";
 
 export interface SplitEventRow {
   id: string;
@@ -31,6 +32,8 @@ function generateShareToken(): string {
   return randomBytes(24).toString("hex");
 }
 
+/** イベント作成時、遥希・アリサ（role=owner）は基本的に参加するため自動で参加者に登録しておく。
+ * 実際には片方しか参加していなかった場合は、あとから参加者一覧からその人を削除すればよい。 */
 export async function createSplitEvent(ownerId: string, name: string): Promise<SplitEventRow> {
   const { data, error } = await db()
     .from("split_events")
@@ -38,7 +41,18 @@ export async function createSplitEvent(ownerId: string, name: string): Promise<S
     .select("*")
     .single();
   if (error) throw error;
-  return data as SplitEventRow;
+  const event = data as SplitEventRow;
+
+  const profiles = await getAllProfiles();
+  const owners = profiles.filter((p) => p.role === "owner");
+  if (owners.length > 0) {
+    const { error: partErr } = await db()
+      .from("split_participants")
+      .insert(owners.map((p) => ({ event_id: event.id, name: p.name })));
+    if (partErr) throw partErr;
+  }
+
+  return event;
 }
 
 export async function getSplitEventsForOwner(ownerId: string): Promise<SplitEventRow[]> {
@@ -69,6 +83,14 @@ export async function addSplitParticipant(eventId: string, name: string): Promis
   const { data, error } = await db().from("split_participants").insert({ event_id: eventId, name: name.trim() }).select("*").single();
   if (error) throw error;
   return data as SplitParticipantRow;
+}
+
+/** 参加者を削除する（例: 自動登録された遥希・アリサのうち片方が実際には参加していなかった場合）。
+ * その人が絡む支出・負担分もFKのon delete cascadeで一緒に削除される。 */
+export async function deleteSplitParticipant(participantId: string, eventId: string): Promise<boolean> {
+  const { data, error } = await db().from("split_participants").delete().eq("id", participantId).eq("event_id", eventId).select("id");
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
 
 export async function getSplitExpenses(eventId: string): Promise<SplitExpenseRow[]> {
