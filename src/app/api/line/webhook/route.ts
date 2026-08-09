@@ -15,6 +15,7 @@ import {
   extractIncomeFromText,
 } from "@/lib/anthropic";
 import { createMealLog } from "@/lib/mealLog";
+import { isDuplicateLineMessage } from "@/lib/lineDedup";
 import { addExpenseEntries, ValidationError as ExpenseValidationError } from "@/lib/expenses";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAccounts } from "@/lib/accounts";
@@ -236,6 +237,11 @@ export async function POST(req: Request) {
   for (const event of payload.events ?? []) {
     const userId = event.source?.userId;
     if (!userId) continue;
+
+    // LINEはWebhookがタイムアウトすると同じメッセージを再送することがあるため、
+    // 同じmessage_idを二度処理しない（支出・食事などの重複登録を防ぐ）。
+    const messageId = event.message?.id;
+    if (messageId && (await isDuplicateLineMessage(messageId))) continue;
 
     if (event.type === "message" && event.message?.type === "text") {
       const text = (event.message.text ?? "").trim();
