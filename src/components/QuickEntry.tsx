@@ -1,13 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fmt } from "@/lib/judge";
 import { PRIVATE_ACCOUNT, categoriesForAccount } from "@/lib/constants";
-import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut, ApiClientError } from "@/lib/apiClient";
+import type { SplitEventOut, SplitEventDetailOut } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AgentWidget from "./AgentWidget";
 import AiSuggestButton from "./AiSuggestButton";
+
+const SPLIT_RECENT_LIMIT = 5;
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 type Mode = "manual" | "text" | "photo";
 
@@ -47,6 +54,26 @@ function QuickEntryInner() {
     memo: "",
   });
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [splitEvents, setSplitEvents] = useState<SplitEventOut[] | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<SplitEventOut | null>(null);
+  const [eventDetail, setEventDetail] = useState<SplitEventDetailOut | null>(null);
+  const [showNewEvent, setShowNewEvent] = useState(false);
+  const [newEventName, setNewEventName] = useState("");
+  const [splitForm, setSplitForm] = useState<{ amount: string; memo: string; payerId: string; beneficiaryIds: string[] }>({
+    amount: "",
+    memo: "",
+    payerId: "",
+    beneficiaryIds: [],
+  });
+  const [splitBusy, setSplitBusy] = useState(false);
+  const [splitMsg, setSplitMsg] = useState("");
+
+  useEffect(() => {
+    apiGet<{ events: SplitEventOut[] }>("/api/split-events")
+      .then((r) => setSplitEvents(r.events))
+      .catch(() => setSplitEvents([]));
+  }, []);
 
   if (!month) {
     return <div className="mf-quickwrap">読み込み中…</div>;
@@ -186,6 +213,73 @@ function QuickEntryInner() {
     });
     setEditingId(null);
     refreshMonth();
+  };
+
+  const selectEvent = async (ev: SplitEventOut) => {
+    setSplitMsg("");
+    if (selectedEvent?.id === ev.id) {
+      setSelectedEvent(null);
+      setEventDetail(null);
+      return;
+    }
+    setSelectedEvent(ev);
+    setEventDetail(null);
+    try {
+      const detail = await apiGet<SplitEventDetailOut>(`/api/split/${ev.share_token}`);
+      setEventDetail(detail);
+      const mine = detail.participants.find((p) => p.name === meName);
+      setSplitForm({ amount: "", memo: "", payerId: mine?.id ?? detail.participants[0]?.id ?? "", beneficiaryIds: detail.participants.map((p) => p.id) });
+    } catch {
+      setSplitMsg("イベントの読み込みに失敗しました。");
+    }
+  };
+
+  const createSplitEvent = async () => {
+    if (!newEventName.trim() || splitBusy) return;
+    setSplitBusy(true);
+    setSplitMsg("");
+    try {
+      const { event } = await apiPost<{ event: SplitEventOut }>("/api/split-events", { name: newEventName.trim() });
+      const names = [me?.profile.name, me?.partner?.name].filter((n): n is string => !!n);
+      for (const n of names) {
+        await apiPost(`/api/split/${event.share_token}/participants`, { name: n });
+      }
+      setNewEventName("");
+      setShowNewEvent(false);
+      const { events } = await apiGet<{ events: SplitEventOut[] }>("/api/split-events");
+      setSplitEvents(events);
+      await selectEvent(event);
+    } catch {
+      setSplitMsg("イベントの作成に失敗しました。");
+    }
+    setSplitBusy(false);
+  };
+
+  const toggleBeneficiary = (id: string) => {
+    setSplitForm((f) => ({ ...f, beneficiaryIds: f.beneficiaryIds.includes(id) ? f.beneficiaryIds.filter((b) => b !== id) : [...f.beneficiaryIds, id] }));
+  };
+
+  const addSplitExpense = async () => {
+    if (!selectedEvent || !splitForm.amount || Number(splitForm.amount) <= 0 || !splitForm.payerId || splitForm.beneficiaryIds.length === 0) {
+      setSplitMsg("金額・支払った人・誰のためかを入力してください。");
+      return;
+    }
+    setSplitBusy(true);
+    setSplitMsg("");
+    try {
+      await apiPost(`/api/split/${selectedEvent.share_token}/expenses`, {
+        payerId: splitForm.payerId,
+        beneficiaryIds: splitForm.beneficiaryIds,
+        amount: Number(splitForm.amount),
+        memo: splitForm.memo,
+        date: todayStr(),
+      });
+      setSplitMsg(`✓「${selectedEvent.name}」に登録しました。`);
+      setSplitForm((f) => ({ ...f, amount: "", memo: "" }));
+    } catch (e) {
+      setSplitMsg(e instanceof ApiClientError ? e.message : "登録に失敗しました。");
+    }
+    setSplitBusy(false);
   };
 
   const recent = month.expenses
@@ -366,6 +460,97 @@ function QuickEntryInner() {
       {msg && (
         <div className="mf-hint" style={{ background: "#181E25", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 10px" }}>
           {msg}
+        </div>
+      )}
+
+      {splitEvents && (
+        <div className="mf-panel" style={{ marginTop: 18 }}>
+          <div className="mf-paneltitle">🧳 割り勘に追加</div>
+          <div className="mf-chips" style={{ marginTop: 0 }}>
+            {splitEvents.slice(0, SPLIT_RECENT_LIMIT).map((ev) => (
+              <button key={ev.id} className={"mf-chipbtn" + (selectedEvent?.id === ev.id ? " on" : "")} onClick={() => selectEvent(ev)}>
+                {ev.name}
+              </button>
+            ))}
+            <button className="mf-chipbtn" onClick={() => setShowNewEvent((s) => !s)}>
+              + 新規
+            </button>
+          </div>
+
+          {showNewEvent && (
+            <div className="mf-row" style={{ marginTop: 8 }}>
+              <input
+                className="mf-input"
+                style={{ flex: 1 }}
+                placeholder="例: 軽井沢旅行"
+                value={newEventName}
+                onChange={(e) => setNewEventName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createSplitEvent()}
+              />
+              <button className="mf-btn ghost" disabled={splitBusy || !newEventName.trim()} onClick={createSplitEvent}>
+                作成
+              </button>
+            </div>
+          )}
+
+          {selectedEvent && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              {!eventDetail ? (
+                <div className="mf-hint" style={{ margin: 0 }}>
+                  読み込み中…
+                </div>
+              ) : eventDetail.participants.length === 0 ? (
+                <div className="mf-hint" style={{ margin: 0 }}>
+                  このイベントにはまだ参加者がいません。「開く」で共有リンクから参加者を追加してください。
+                </div>
+              ) : (
+                <>
+                  <div className="mf-row">
+                    <input
+                      className="mf-input mf-mono"
+                      style={{ flex: 1 }}
+                      type="number"
+                      placeholder="金額"
+                      value={splitForm.amount}
+                      onChange={(e) => setSplitForm((f) => ({ ...f, amount: e.target.value }))}
+                    />
+                    <select className="mf-input" value={splitForm.payerId} onChange={(e) => setSplitForm((f) => ({ ...f, payerId: e.target.value }))}>
+                      {eventDetail.participants.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}が支払い
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    className="mf-input"
+                    style={{ marginTop: 6 }}
+                    placeholder="メモ（任意）"
+                    value={splitForm.memo}
+                    onChange={(e) => setSplitForm((f) => ({ ...f, memo: e.target.value }))}
+                  />
+                  <div className="mf-hint" style={{ margin: "8px 0 4px" }}>
+                    誰のための支出か
+                  </div>
+                  <div className="mf-chips" style={{ marginTop: 0 }}>
+                    {eventDetail.participants.map((p) => (
+                      <button
+                        key={p.id}
+                        className={"mf-chipbtn" + (splitForm.beneficiaryIds.includes(p.id) ? " on" : "")}
+                        onClick={() => toggleBeneficiary(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="mf-btn primary" style={{ marginTop: 8 }} disabled={splitBusy} onClick={addSplitExpense}>
+                    割り勘に登録する
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {splitMsg && <div className="mf-hint">{splitMsg}</div>}
         </div>
       )}
 
