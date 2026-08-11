@@ -26,6 +26,9 @@ body {
    ============================================================ */
 .mf-root { min-height: 100vh; background: #101418; color: #E7ECF2; font-family: var(--font-body), sans-serif; }
 .mf-mono { font-family: var(--font-num), monospace; font-variant-numeric: tabular-nums; }
+.mf-banner { position: relative; width: 100%; height: 150px; overflow: hidden; }
+.mf-banner img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; }
+.mf-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(16,20,24,0) 55%, #101418 100%); }
 .mf-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding: 24px 20px 14px; max-width: 960px; margin: 0 auto; flex-wrap: wrap; }
 .mf-eyebrow { font-family: var(--font-num), monospace; font-size: 10px; letter-spacing: 0.28em; color: #F5A524; }
 .mf-title { font-family: var(--font-heading), serif; font-weight: 900; font-size: clamp(22px, 5vw, 32px); margin: 4px 0 0; line-height: 1.2; }

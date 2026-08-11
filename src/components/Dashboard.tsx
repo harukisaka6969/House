@@ -177,6 +177,9 @@ function DashboardInner() {
 
   return (
     <div className="mf-root">
+      <div className="mf-banner">
+        <img src="/banner-wedding.jpg" alt="" />
+      </div>
       <header className="mf-header">
         <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
           <div className="mf-menuwrap" ref={menuRef}>
