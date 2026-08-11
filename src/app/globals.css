@@ -304,11 +304,16 @@ select.mf-input option { background: #181E25; }
 .ts-card:active { cursor: grabbing; }
 .ts-label { font-size: 12px; letter-spacing: 0.14em; color: #93A0AE; text-align: center; }
 .ts-amount { font-family: var(--font-num), monospace; font-size: 40px; font-weight: 800; text-align: center; margin: 6px 0 22px; color: #F5A524; }
-.ts-bills { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
-.ts-denomrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #101418; border-radius: 10px; padding: 8px 12px; }
-.ts-denomicons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ts-denomicon { display: inline-flex; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35)); }
-.ts-denomlabel { font-family: var(--font-num), monospace; font-size: 12.5px; color: #93A0AE; flex: 0 0 auto; white-space: nowrap; }
+.ts-moneyscene { position: relative; height: 190px; margin: 4px 0 20px; }
+.ts-walletsvg { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); filter: drop-shadow(0 10px 16px rgba(0,0,0,0.45)); }
+.ts-billfan { position: absolute; left: 50%; bottom: 108px; width: 0; height: 0; }
+.ts-billfan-item { position: absolute; left: -37px; top: -45px; width: 74px; height: 45px; transform-origin: 50% 100%; filter: drop-shadow(0 3px 4px rgba(0,0,0,0.4)); }
+.ts-fanmore { position: absolute; left: 40px; top: -18px; background: #101418; border: 1px solid rgba(255,255,255,0.12); color: #F5A524; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 8px; z-index: 20; }
+.ts-coinpile { position: absolute; left: 50%; bottom: 34px; width: 0; height: 0; }
+.ts-coinpile-item { position: absolute; margin-left: -14px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+.ts-pilemore { position: absolute; left: 36px; bottom: 8px; background: #101418; border: 1px solid rgba(255,255,255,0.12); color: #F5A524; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 8px; z-index: 30; }
+.ts-moneycaption { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 5px 8px; justify-content: center; }
+.ts-moneycaption-item { font-family: var(--font-num), monospace; font-size: 11px; color: #6B7684; }
 .ts-swipehint { text-align: center; font-size: 12px; color: #6B7684; }
 .ts-hint { position: absolute; top: 20px; padding: 6px 14px; border-radius: 8px; font-weight: 900; font-size: 15px; letter-spacing: 0.06em; opacity: 0; pointer-events: none; border: 2.5px solid; }
 .ts-hint-good { right: 18px; color: #45C48F; border-color: #45C48F; transform: rotate(-10deg); }

@@ -10,7 +10,6 @@ import type { TodayExpenseSentimentOut } from "@/lib/apiTypes";
 type SentimentValue = "good" | "bad";
 
 const SWIPE_THRESHOLD_RATIO = 0.25;
-const MAX_ICONS = 10;
 const FLING_MS = 320;
 
 export default function TodaySwipe({ slug }: { slug: string }) {
@@ -168,11 +167,7 @@ function SwipeCard({ total, onSwipe }: { total: number; onSwipe: (s: SentimentVa
         </div>
         <div className="ts-label">今日の支出</div>
         <div className="ts-amount">{fmt(total)}</div>
-        <div className="ts-bills">
-          {breakdownYen(total).map((d) => (
-            <DenomRow key={d.value} d={d} />
-          ))}
-        </div>
+        <MoneyScene total={total} />
         <div className="ts-swipehint">良いと思ったら右、無駄だったら左にスワイプ</div>
       </div>
     </div>
@@ -194,41 +189,115 @@ const BILL_STYLE: Record<number, string> = {
   10000: "#8C6A3F", // 茶
 };
 
-function CoinIcon({ value }: { value: number }) {
+function CoinIcon({ value, size = 18 }: { value: number; size?: number }) {
   const style = COIN_STYLE[value] ?? { fill: "#C9CDD3", hole: false };
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 18 18" aria-hidden="true">
       <circle cx="9" cy="9" r="8" fill={style.fill} stroke="rgba(0,0,0,0.3)" strokeWidth="0.75" />
       {style.hole && <circle cx="9" cy="9" r="2.8" fill="#101418" />}
     </svg>
   );
 }
 
-function BillIcon({ value }: { value: number }) {
+function BillIcon({ value, width = 28, height = 17 }: { value: number; width?: number; height?: number }) {
   const fill = BILL_STYLE[value] ?? "#3E6DA6";
   return (
-    <svg width="28" height="17" viewBox="0 0 28 17" aria-hidden="true">
+    <svg width={width} height={height} viewBox="0 0 28 17" aria-hidden="true">
       <rect x="0.5" y="0.5" width="27" height="16" rx="2" fill={fill} stroke="rgba(255,255,255,0.35)" strokeWidth="0.5" />
       <circle cx="20.5" cy="8.5" r="4.5" fill="rgba(255,255,255,0.18)" />
     </svg>
   );
 }
 
-function DenomRow({ d }: { d: DenominationCount }) {
-  const shownCount = Math.min(d.count, MAX_ICONS);
+function WalletIcon() {
   return (
-    <div className="ts-denomrow">
-      <span className="ts-denomicons">
-        {Array.from({ length: shownCount }).map((_, i) => (
-          <span key={i} className="ts-denomicon">
-            {d.kind === "bill" ? <BillIcon value={d.value} /> : <CoinIcon value={d.value} />}
+    <svg className="ts-walletsvg" width="216" height="126" viewBox="0 0 216 126" aria-hidden="true">
+      <path d="M6 46 Q108 10 210 46 L210 58 Q108 26 6 58 Z" fill="#4A3626" />
+      <rect x="6" y="34" width="204" height="88" rx="13" fill="#3B2A1E" stroke="rgba(0,0,0,0.4)" strokeWidth="1.5" />
+      <rect x="6" y="34" width="204" height="88" rx="13" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      <rect x="150" y="66" width="46" height="32" rx="4" fill="#2E2018" stroke="rgba(0,0,0,0.35)" strokeWidth="1" />
+      <line x1="150" y1="82" x2="196" y2="82" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+    </svg>
+  );
+}
+
+const MAX_FAN_BILLS = 6;
+const MAX_PILE_COINS = 12;
+const FAN_STEP = 11;
+const FAN_BASE_TILT = -7;
+
+function flattenByKind(breakdown: DenominationCount[], kind: DenominationCount["kind"], max: number): number[] {
+  const out: number[] = [];
+  for (const d of breakdown) {
+    if (d.kind !== kind) continue;
+    for (let i = 0; i < d.count && out.length < max; i++) out.push(d.value);
+  }
+  return out;
+}
+
+function countOfKind(breakdown: DenominationCount[], kind: DenominationCount["kind"]): number {
+  return breakdown.filter((d) => d.kind === kind).reduce((s, d) => s + d.count, 0);
+}
+
+function MoneyScene({ total }: { total: number }) {
+  const breakdown = breakdownYen(total);
+  const bills = flattenByKind(breakdown, "bill", MAX_FAN_BILLS);
+  const coins = flattenByKind(breakdown, "coin", MAX_PILE_COINS);
+  const billOverflow = countOfKind(breakdown, "bill") - bills.length;
+  const coinOverflow = countOfKind(breakdown, "coin") - coins.length;
+  const n = bills.length;
+
+  return (
+    <div className="ts-moneyscene">
+      {bills.length > 0 && (
+        <div className="ts-billfan">
+          {bills.map((value, i) => {
+            const angle = FAN_BASE_TILT + (i - (n - 1) / 2) * FAN_STEP;
+            return (
+              <div
+                key={i}
+                className="ts-billfan-item"
+                style={{ transform: `rotate(${angle}deg) translateY(-${i * 3}px)`, zIndex: i }}
+              >
+                <BillIcon value={value} width={74} height={45} />
+              </div>
+            );
+          })}
+          {billOverflow > 0 && <div className="ts-fanmore">+{billOverflow}</div>}
+        </div>
+      )}
+      <WalletIcon />
+      {coins.length > 0 && (
+        <div className="ts-coinpile">
+          {coins.map((value, i) => {
+            const jx = ((i * 37) % 61) - 30;
+            const jy = ((i * 53) % 21) - 10;
+            const rot = ((i * 29) % 40) - 20;
+            return (
+              <div
+                key={i}
+                className="ts-coinpile-item"
+                style={{
+                  left: `calc(50% + ${jx}px)`,
+                  bottom: `${8 + Math.max(0, jy)}px`,
+                  transform: `rotate(${rot}deg)`,
+                  zIndex: 10 + i,
+                }}
+              >
+                <CoinIcon value={value} size={28} />
+              </div>
+            );
+          })}
+          {coinOverflow > 0 && <div className="ts-pilemore">+{coinOverflow}</div>}
+        </div>
+      )}
+      <div className="ts-moneycaption">
+        {breakdown.map((d) => (
+          <span key={d.value} className="ts-moneycaption-item">
+            ¥{d.value.toLocaleString()}×{d.count}
           </span>
         ))}
-      </span>
-      <span className="ts-denomlabel">
-        ¥{d.value.toLocaleString()}
-        {d.count > 1 ? ` ×${d.count}` : ""}
-      </span>
+      </div>
     </div>
   );
 }
