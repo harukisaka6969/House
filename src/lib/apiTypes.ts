@@ -589,3 +589,10 @@ export interface SplitEventDetailOut {
   balances: SplitBalanceOut[];
   settlement: SplitSettlementTxnOut[];
 }
+
+export interface TodayExpenseSentimentOut {
+  date: string;
+  hasExpenses: boolean;
+  total: number;
+  sentiment: "good" | "bad" | null;
+}
