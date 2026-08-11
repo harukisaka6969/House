@@ -7,6 +7,7 @@ export default async function TodayPage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const session = await getSession();
   if (!session || session.slug !== slug) redirect(`/${slug}`);
+  if (session.role !== "owner") redirect(`/${slug}/app`);
 
   return (
     <AppGate slug={slug}>

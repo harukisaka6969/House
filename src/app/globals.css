@@ -298,7 +298,7 @@ select.mf-input option { background: #181E25; }
 
 /* 今日の支出スワイプ画面（マッチングアプリ風カード） */
 .ts-root { min-height: 100vh; background: #101418; color: #E7ECF2; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; font-family: var(--font-body), sans-serif; gap: 18px; }
-.ts-loading, .ts-zero { color: #93A0AE; font-size: 16px; text-align: center; }
+.ts-loading { color: #93A0AE; font-size: 16px; text-align: center; }
 .ts-cardwrap { position: relative; width: 100%; max-width: 340px; }
 .ts-card { position: relative; background: #181E25; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 28px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); cursor: grab; user-select: none; touch-action: none; will-change: transform; }
 .ts-card:active { cursor: grabbing; }

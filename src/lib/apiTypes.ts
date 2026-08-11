@@ -590,9 +590,10 @@ export interface SplitEventDetailOut {
   settlement: SplitSettlementTxnOut[];
 }
 
-export interface TodayExpenseSentimentOut {
+export interface PendingExpenseSentimentOut {
   date: string;
   hasExpenses: boolean;
   total: number;
   sentiment: "good" | "bad" | null;
+  pending: boolean;
 }

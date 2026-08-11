@@ -5,24 +5,35 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import { breakdownYen, type DenominationCount } from "@/lib/moneyBreakdown";
-import type { TodayExpenseSentimentOut } from "@/lib/apiTypes";
+import type { PendingExpenseSentimentOut } from "@/lib/apiTypes";
 
 type SentimentValue = "good" | "bad";
 
 const SWIPE_THRESHOLD_RATIO = 0.25;
 const FLING_MS = 320;
 
+/** ログイン直後に1日1回だけ、前日の家計支出を振り返ってスワイプ記録する画面。
+ * 記録済み・前日支出ゼロなど見せる必要がない場合は即座にダッシュボードへ流す。 */
 export default function TodaySwipe({ slug }: { slug: string }) {
   const router = useRouter();
-  const [data, setData] = useState<TodayExpenseSentimentOut | null>(null);
+  const [data, setData] = useState<PendingExpenseSentimentOut | null>(null);
   const [recorded, setRecorded] = useState<SentimentValue | null>(null);
   const [reswiping, setReswiping] = useState(false);
 
+  const openDashboard = () => router.replace(`/${slug}/app`);
+
   useEffect(() => {
-    apiGet<TodayExpenseSentimentOut>("/api/expense-sentiment/today")
-      .then(setData)
-      .catch(() => setData({ date: "", hasExpenses: false, total: 0, sentiment: null }));
-  }, []);
+    apiGet<PendingExpenseSentimentOut>("/api/expense-sentiment/pending")
+      .then((res) => {
+        if (!res.pending) {
+          router.replace(`/${slug}/app`);
+          return;
+        }
+        setData(res);
+      })
+      .catch(() => router.replace(`/${slug}/app`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   const submit = async (sentiment: SentimentValue) => {
     setRecorded(sentiment);
@@ -34,23 +45,10 @@ export default function TodaySwipe({ slug }: { slug: string }) {
     }
   };
 
-  const openDashboard = () => router.push(`/${slug}/app`);
-
   if (!data) {
     return (
       <div className="ts-root">
         <div className="ts-loading">読み込み中…</div>
-      </div>
-    );
-  }
-
-  if (!data.hasExpenses) {
-    return (
-      <div className="ts-root">
-        <div className="ts-zero">今日は支出がまだないね👍</div>
-        <button className="ts-dashlink" onClick={openDashboard}>
-          ダッシュボードを開く →
-        </button>
       </div>
     );
   }
@@ -63,7 +61,7 @@ export default function TodaySwipe({ slug }: { slug: string }) {
           <div className="ts-doneicon">{shown === "good" ? "👍" : "💭"}</div>
           <div className="ts-donetext">記録したよ！</div>
           <div className="ts-donesub">
-            今日の支出（{fmt(data.total)}）は{shown === "good" ? "良い出費" : "無駄な出費"}だったと記録したよ
+            昨日の支出（{fmt(data.total)}）は{shown === "good" ? "良い出費" : "無駄な出費"}だったと記録したよ
           </div>
           <button className="ts-relink" onClick={() => setReswiping(true)}>
             もう一度スワイプする
@@ -80,7 +78,7 @@ export default function TodaySwipe({ slug }: { slug: string }) {
     <div className="ts-root">
       <SwipeCard total={data.total} onSwipe={submit} />
       <button className="ts-dashlink" onClick={openDashboard}>
-        ダッシュボードを開く →
+        スキップしてダッシュボードを開く →
       </button>
     </div>
   );
@@ -165,7 +163,7 @@ function SwipeCard({ total, onSwipe }: { total: number; onSwipe: (s: SentimentVa
         <div className="ts-hint ts-hint-bad" ref={badHintRef}>
           BAD
         </div>
-        <div className="ts-label">今日の支出</div>
+        <div className="ts-label">昨日の支出</div>
         <div className="ts-amount">{fmt(total)}</div>
         <MoneyScene total={total} />
         <div className="ts-swipehint">良いと思ったら右、無駄だったら左にスワイプ</div>

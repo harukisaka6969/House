@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/apiClient";
+import { apiGet, apiPost } from "@/lib/apiClient";
 
 const MIN_PIN = 4;
 const MAX_PIN = 8;
@@ -22,17 +22,21 @@ export default function LockScreen({ slug, name }: { slug: string; name: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  const goApp = () => {
-    sessionStorage.setItem(`unlocked:${slug}`, "1");
-    router.push(`/${slug}/app`);
-  };
-
   const submitPin = async (value: string) => {
     setBusy(true);
     setError("");
     try {
-      await apiPost("/api/auth/pin", { slug, pin: value });
-      goApp();
+      const res = await apiPost<{ profile: { role: "owner" | "family" | "kiosk" } }>("/api/auth/pin", { slug, pin: value });
+      sessionStorage.setItem(`unlocked:${slug}`, "1");
+
+      if (res.profile.role === "owner") {
+        const pending = await apiGet<{ pending: boolean }>("/api/expense-sentiment/pending").catch(() => null);
+        if (pending?.pending) {
+          router.push(`/${slug}/today`);
+          return;
+        }
+      }
+      router.push(`/${slug}/app`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "PINが違います";
       setError(message);
