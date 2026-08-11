@@ -20,10 +20,20 @@ function nodeCenter(id: number, size: number): { x: number; y: number } {
   return { x: ((col + 0.5) / GRID) * size, y: ((row + 0.5) / GRID) * size };
 }
 
+/** 対応端末（主にAndroid）では点に触れるたびに短くバイブレーションさせる。iOS Safari等、
+ * navigator.vibrateがない環境では何もしない（例外を投げる環境もあるためtry/catchで無視）。 */
+function vibrateTick() {
+  try {
+    navigator.vibrate?.(10);
+  } catch {
+    // 対応していない環境では無視する。
+  }
+}
+
 /** Android風の9点パターンロック入力。指/マウスのドラッグで点を繋ぐ。
  * ドラッグ完了時に通過した点の並び（onComplete）を返すだけで、桁数などの検証は呼び出し側が行う。
  * 描画中のパターンを外部から強制的にクリアしたい場合は、呼び出し側で`key`を変えて再マウントさせること。 */
-export default function PatternGrid({ onComplete, disabled, size = 240, hint }: PatternGridProps) {
+export default function PatternGrid({ onComplete, disabled, size = 300, hint }: PatternGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const trailRef = useRef<SVGLineElement>(null);
   const draggingRef = useRef(false);
@@ -74,6 +84,7 @@ export default function PatternGrid({ onComplete, disabled, size = 240, hint }: 
     const hit = nearestNode(pt);
     pathRef.current = hit ? [hit] : [];
     setPath(pathRef.current);
+    if (hit) vibrateTick();
     updateTrail(pt);
   };
 
@@ -84,6 +95,7 @@ export default function PatternGrid({ onComplete, disabled, size = 240, hint }: 
     if (hit) {
       pathRef.current = [...pathRef.current, hit];
       setPath(pathRef.current);
+      vibrateTick();
     }
     updateTrail(pt);
   };
