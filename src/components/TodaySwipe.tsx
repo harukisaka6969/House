@@ -179,12 +179,52 @@ function SwipeCard({ total, onSwipe }: { total: number; onSwipe: (s: SentimentVa
   );
 }
 
+// 実際の日本のお金の見た目に寄せる: 5円・50円玉は穴あき、500円は金色、10円は銅色、など。
+const COIN_STYLE: Record<number, { fill: string; hole: boolean }> = {
+  1: { fill: "#C7CBD1", hole: false }, // アルミ・銀白色
+  5: { fill: "#C6A15B", hole: true }, // 黄銅・金色、穴あき
+  10: { fill: "#B36A3E", hole: false }, // 青銅・銅色
+  50: { fill: "#BFC3C9", hole: true }, // 白銅・銀色、穴あき
+  100: { fill: "#C9CDD3", hole: false }, // 白銅・銀色
+  500: { fill: "#C9A227", hole: false }, // ニッケル黄銅・金色
+};
+const BILL_STYLE: Record<number, string> = {
+  1000: "#3E6DA6", // 青
+  5000: "#8B4A8F", // 紫
+  10000: "#8C6A3F", // 茶
+};
+
+function CoinIcon({ value }: { value: number }) {
+  const style = COIN_STYLE[value] ?? { fill: "#C9CDD3", hole: false };
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx="9" cy="9" r="8" fill={style.fill} stroke="rgba(0,0,0,0.3)" strokeWidth="0.75" />
+      {style.hole && <circle cx="9" cy="9" r="2.8" fill="#101418" />}
+    </svg>
+  );
+}
+
+function BillIcon({ value }: { value: number }) {
+  const fill = BILL_STYLE[value] ?? "#3E6DA6";
+  return (
+    <svg width="28" height="17" viewBox="0 0 28 17" aria-hidden="true">
+      <rect x="0.5" y="0.5" width="27" height="16" rx="2" fill={fill} stroke="rgba(255,255,255,0.35)" strokeWidth="0.5" />
+      <circle cx="20.5" cy="8.5" r="4.5" fill="rgba(255,255,255,0.18)" />
+    </svg>
+  );
+}
+
 function DenomRow({ d }: { d: DenominationCount }) {
-  const icon = d.kind === "bill" ? "💴" : "🪙";
   const shownCount = Math.min(d.count, MAX_ICONS);
   return (
     <div className="ts-denomrow">
-      <span className="ts-denomicons">{icon.repeat(shownCount)}</span>
+      <span className="ts-denomicons">
+        {Array.from({ length: shownCount }).map((_, i) => (
+          <span key={i} className="ts-denomicon">
+            {d.kind === "bill" ? <BillIcon value={d.value} /> : <CoinIcon value={d.value} />}
+          </span>
+        ))}
+      </span>
       <span className="ts-denomlabel">
         ¥{d.value.toLocaleString()}
         {d.count > 1 ? ` ×${d.count}` : ""}

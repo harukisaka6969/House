@@ -12,9 +12,10 @@ export interface ExpenseSentimentRow {
   created_at: string;
 }
 
-/** 本人がその日に入力した支出の生データ（件数判定用にamountの配列で返す）。 */
-export async function getOwnExpenseAmountsForDate(ownerId: string, date: string): Promise<number[]> {
-  const { data, error } = await db().from("expenses").select("amount").eq("owner", ownerId).eq("date", date);
+/** 世帯（ハルキ＋アリサ）がその日に入力した支出の生データ（件数判定用にamountの配列で返す）。
+ * 月合計等の既存の集計と同じ考え方で、a3の個別明細は非公開でも合計には両者分を含める。 */
+export async function getHouseholdExpenseAmountsForDate(date: string): Promise<number[]> {
+  const { data, error } = await db().from("expenses").select("amount").eq("date", date);
   if (error) throw error;
   return (data ?? []).map((r) => Number((r as { amount: number }).amount));
 }

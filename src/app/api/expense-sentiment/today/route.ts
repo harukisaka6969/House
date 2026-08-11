@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { getOwnExpenseAmountsForDate, getSentimentForDate } from "@/lib/expenseSentiment";
+import { getHouseholdExpenseAmountsForDate, getSentimentForDate } from "@/lib/expenseSentiment";
 import { todayStrJST } from "@/lib/date";
 
 export async function GET() {
@@ -8,7 +8,7 @@ export async function GET() {
     const session = await requireOwnerSession();
     const date = todayStrJST();
     const [amounts, sentiment] = await Promise.all([
-      getOwnExpenseAmountsForDate(session.profile_id, date),
+      getHouseholdExpenseAmountsForDate(date),
       getSentimentForDate(session.profile_id, date),
     ]);
     const total = amounts.reduce((s, a) => s + a, 0);
