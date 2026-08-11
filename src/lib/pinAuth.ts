@@ -9,11 +9,14 @@ export function hashPin(pin: string): Promise<string> {
   return scryptHashPin(pin);
 }
 
+export type AuthMethod = "pin" | "pattern";
+
 export interface ProfileRow {
   id: string;
   slug: string;
   name: string;
   pin_hash: string;
+  auth_method: AuthMethod;
   failed_attempts: number;
   locked_until: string | null;
   role: "owner" | "family" | "kiosk";
@@ -67,23 +70,30 @@ export async function checkPin(profile: ProfileRow, pin: string): Promise<PinChe
   return { ok: false, reason: "invalid" };
 }
 
-export async function changePin(profileId: string, newPin: string): Promise<void> {
-  const pin_hash = await hashPin(newPin);
-  const { error } = await db().from("profiles").update({ pin_hash }).eq("id", profileId);
+/** 認証方式（PIN／パターン）と資格情報を同時に更新する。パターンも既存のscryptハッシュに
+ * そのまま通せる数字文字列（各点1〜9・重複なし）として渡ってくる想定。 */
+export async function changeCredential(profileId: string, authMethod: AuthMethod, credential: string): Promise<void> {
+  const pin_hash = await hashPin(credential);
+  const { error } = await db().from("profiles").update({ pin_hash, auth_method: authMethod }).eq("id", profileId);
   if (error) throw error;
 }
 
-/** 共用ダッシュボード専用ログイン（role=kiosk）のPINを設定する。まだ存在しなければ作成する。
- * owner本人がSettingsから任意に発行・変更できる想定（現在のPIN確認は不要 — 家族の管理操作）。 */
-export async function setKioskPin(newPin: string): Promise<void> {
-  const pin_hash = await hashPin(newPin);
+/** 共用ダッシュボード専用ログイン（role=kiosk）のPIN／パターンを設定する。まだ存在しなければ作成する。
+ * owner本人がSettingsから任意に発行・変更できる想定（現在の資格情報の確認は不要 — 家族の管理操作）。 */
+export async function setKioskPin(newCredential: string, authMethod: AuthMethod = "pin"): Promise<void> {
+  const pin_hash = await hashPin(newCredential);
   const existing = await getProfileBySlug(KIOSK_SLUG);
   if (existing) {
-    const { error } = await db().from("profiles").update({ pin_hash, failed_attempts: 0, locked_until: null }).eq("id", existing.id);
+    const { error } = await db()
+      .from("profiles")
+      .update({ pin_hash, auth_method: authMethod, failed_attempts: 0, locked_until: null })
+      .eq("id", existing.id);
     if (error) throw error;
     return;
   }
-  const { error } = await db().from("profiles").insert({ slug: KIOSK_SLUG, name: KIOSK_NAME, pin_hash, role: "kiosk" });
+  const { error } = await db()
+    .from("profiles")
+    .insert({ slug: KIOSK_SLUG, name: KIOSK_NAME, pin_hash, auth_method: authMethod, role: "kiosk" });
   if (error) throw error;
 }
 
@@ -91,4 +101,10 @@ export async function setKioskPin(newPin: string): Promise<void> {
 export async function kioskPinExists(): Promise<boolean> {
   const profile = await getProfileBySlug(KIOSK_SLUG);
   return !!profile;
+}
+
+/** 共用ダッシュボードの現在の認証方式（Settings画面の表示用）。未設定ならnull。 */
+export async function getKioskAuthMethod(): Promise<AuthMethod | null> {
+  const profile = await getProfileBySlug(KIOSK_SLUG);
+  return profile?.auth_method ?? null;
 }

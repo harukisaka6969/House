@@ -1,18 +1,19 @@
 import "server-only";
 import { db } from "./db";
-import { hashPin } from "./pinAuth";
+import { hashPin, type AuthMethod } from "./pinAuth";
 
 export interface FamilyAccountRow {
   id: string;
   slug: string;
   name: string;
+  auth_method: AuthMethod;
   created_at: string;
 }
 
 export async function listFamilyAccounts(): Promise<FamilyAccountRow[]> {
   const { data, error } = await db()
     .from("profiles")
-    .select("id, slug, name, created_at")
+    .select("id, slug, name, auth_method, created_at")
     .eq("role", "family")
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -21,12 +22,17 @@ export async function listFamilyAccounts(): Promise<FamilyAccountRow[]> {
 
 export class SlugTakenError extends Error {}
 
-export async function createFamilyAccount(slug: string, name: string, pin: string): Promise<FamilyAccountRow> {
-  const pin_hash = await hashPin(pin);
+export async function createFamilyAccount(
+  slug: string,
+  name: string,
+  credential: string,
+  authMethod: AuthMethod = "pin"
+): Promise<FamilyAccountRow> {
+  const pin_hash = await hashPin(credential);
   const { data, error } = await db()
     .from("profiles")
-    .insert({ slug, name, pin_hash, role: "family" })
-    .select("id, slug, name, created_at")
+    .insert({ slug, name, pin_hash, auth_method: authMethod, role: "family" })
+    .select("id, slug, name, auth_method, created_at")
     .single();
   if (error) {
     if (error.code === "23505") throw new SlugTakenError(`slug "${slug}" is already in use`);
@@ -41,11 +47,11 @@ export async function deleteFamilyAccount(id: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
-export async function resetFamilyPin(id: string, newPin: string): Promise<boolean> {
-  const pin_hash = await hashPin(newPin);
+export async function resetFamilyPin(id: string, newCredential: string, authMethod: AuthMethod = "pin"): Promise<boolean> {
+  const pin_hash = await hashPin(newCredential);
   const { data, error } = await db()
     .from("profiles")
-    .update({ pin_hash, failed_attempts: 0, locked_until: null })
+    .update({ pin_hash, auth_method: authMethod, failed_attempts: 0, locked_until: null })
     .eq("id", id)
     .eq("role", "family")
     .select("id");

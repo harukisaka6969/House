@@ -155,11 +155,12 @@ export interface FamilyAccountOut {
   id: string;
   slug: string;
   name: string;
+  auth_method: "pin" | "pattern";
   created_at: string;
 }
 
 export interface SettingsResponse {
-  profile: { id: string; slug: string; name: string };
+  profile: { id: string; slug: string; name: string; authMethod: "pin" | "pattern" };
   /** 固定カテゴリ＋自動追加カテゴリ＋「その他」を合わせた選択肢一覧（ピッカー用）。 */
   allCategories: string[];
   /** 「その他」の学習結果として自動追加されたカテゴリのみ（削除管理UI用）。 */
@@ -167,6 +168,7 @@ export interface SettingsResponse {
   accounts: AccountOut[];
   familyAccounts: FamilyAccountOut[];
   kioskConfigured: boolean;
+  kioskAuthMethod: "pin" | "pattern" | null;
   lineUserId: string | null;
   lineNotifyAvailable: boolean;
   lineReminderTime: string | null;

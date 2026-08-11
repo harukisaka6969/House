@@ -8,5 +8,5 @@ export default async function SlugLockPage({ params }: { params: Promise<{ slug:
   const profile = await getProfileBySlug(slug);
   if (!profile) notFound();
 
-  return <LockScreen slug={profile.slug} name={profile.name} />;
+  return <LockScreen slug={profile.slug} name={profile.name} authMethod={profile.auth_method} />;
 }

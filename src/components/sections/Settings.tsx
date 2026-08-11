@@ -5,16 +5,114 @@ import { apiDelete, apiPost, apiPut } from "@/lib/apiClient";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AnalysisExport from "./AnalysisExport";
+import PatternGrid from "../PatternGrid";
+import { isValidPatternSequence, patternToCode } from "@/lib/pattern";
 
-const emptyFamilyForm = { slug: "", name: "", pin: "" };
+type AuthMethod = "pin" | "pattern";
+
+const emptyFamilyForm = { slug: "", name: "" };
+
+/** 認証方法（PIN／9点パターン）を選び、新しい資格情報が確定するたびに credential を通知する。
+ * 確定前（未入力・パターン未確認など）は credential に null を渡す。 */
+function AuthMethodPicker({ onChange, size = 200 }: { onChange: (method: AuthMethod, credential: string | null) => void; size?: number }) {
+  const [method, setMethodState] = useState<AuthMethod>("pin");
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [patternFirst, setPatternFirst] = useState<number[] | null>(null);
+  const [patternMsg, setPatternMsg] = useState("");
+  const [gridKey, setGridKey] = useState(0);
+
+  const setMethod = (m: AuthMethod) => {
+    setMethodState(m);
+    setPin("");
+    setPinConfirm("");
+    setPatternFirst(null);
+    setPatternMsg("");
+    setGridKey((k) => k + 1);
+    onChange(m, null);
+  };
+
+  const updatePin = (next: string, confirm: string) => {
+    setPin(next);
+    setPinConfirm(confirm);
+    onChange("pin", /^\d{4,8}$/.test(next) && next === confirm ? next : null);
+  };
+
+  const handlePatternDraw = (nodes: number[]) => {
+    if (!patternFirst) {
+      if (!isValidPatternSequence(nodes)) {
+        setPatternMsg("4つ以上の点をなぞってください");
+        setGridKey((k) => k + 1);
+        return;
+      }
+      setPatternFirst(nodes);
+      setPatternMsg("もう一度同じパターンをなぞって確認してください");
+      setGridKey((k) => k + 1);
+      return;
+    }
+    const matches = nodes.length === patternFirst.length && nodes.every((n, i) => n === patternFirst[i]);
+    setGridKey((k) => k + 1);
+    if (matches) {
+      setPatternMsg("✓ 確認できました");
+      onChange("pattern", patternToCode(nodes));
+    } else {
+      setPatternMsg("パターンが一致しませんでした。最初からやり直してください。");
+      setPatternFirst(null);
+      onChange("pattern", null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mf-row" style={{ marginBottom: 10 }}>
+        <button type="button" className={"mf-chipbtn" + (method === "pin" ? " on" : "")} onClick={() => setMethod("pin")}>
+          暗証番号（PIN）
+        </button>
+        <button type="button" className={"mf-chipbtn" + (method === "pattern" ? " on" : "")} onClick={() => setMethod("pattern")}>
+          9点パターン
+        </button>
+      </div>
+      {method === "pin" ? (
+        <div className="mf-formgrid">
+          <input
+            className="mf-input mf-mono"
+            type="password"
+            inputMode="numeric"
+            placeholder="新しいPIN（4〜8桁）"
+            value={pin}
+            onChange={(e) => updatePin(e.target.value, pinConfirm)}
+          />
+          <input
+            className="mf-input mf-mono"
+            type="password"
+            inputMode="numeric"
+            placeholder="新しいPIN（確認）"
+            value={pinConfirm}
+            onChange={(e) => updatePin(pin, e.target.value)}
+          />
+        </div>
+      ) : (
+        <div>
+          <PatternGrid key={gridKey} onComplete={handlePatternDraw} size={size} hint={patternFirst ? "もう一度なぞって確認" : "新しいパターンをなぞる"} />
+          {patternMsg && <div className="mf-hint">{patternMsg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Settings() {
   const { month, monthKey, settings, refreshMonth, refreshSettings } = useDashboard();
   const [incomeDraft, setIncomeDraft] = useState<{ id?: string; name: string; amount: number; owner: string | null }[] | null>(null);
   const [acctDraft, setAcctDraft] = useState<Record<string, { name: string; budget: number }> | null>(null);
-  const [pinForm, setPinForm] = useState({ current: "", next: "", confirm: "" });
+  const [ownCurrentCred, setOwnCurrentCred] = useState("");
+  const [ownNewMethod, setOwnNewMethod] = useState<AuthMethod>("pin");
+  const [ownNewCred, setOwnNewCred] = useState<string | null>(null);
+  const [ownPickerKey, setOwnPickerKey] = useState(0);
   const [pinMsg, setPinMsg] = useState("");
-  const [kioskPinForm, setKioskPinForm] = useState({ next: "", confirm: "" });
+  const [kioskNewMethod, setKioskNewMethod] = useState<AuthMethod>("pin");
+  const [kioskNewCred, setKioskNewCred] = useState<string | null>(null);
+  const [kioskPickerKey, setKioskPickerKey] = useState(0);
   const [kioskMsg, setKioskMsg] = useState("");
   const [lineIdInput, setLineIdInput] = useState("");
   const [lineMsg, setLineMsg] = useState("");
@@ -22,10 +120,15 @@ export default function Settings() {
   const [reminderMinute, setReminderMinute] = useState("00");
   const [reminderMsg, setReminderMsg] = useState("");
   const [familyForm, setFamilyForm] = useState(emptyFamilyForm);
+  const [familyNewMethod, setFamilyNewMethod] = useState<AuthMethod>("pin");
+  const [familyNewCred, setFamilyNewCred] = useState<string | null>(null);
+  const [familyPickerKey, setFamilyPickerKey] = useState(0);
   const [familyMsg, setFamilyMsg] = useState("");
   const [showFamilyForm, setShowFamilyForm] = useState(false);
   const [resetPinTargetId, setResetPinTargetId] = useState<string | null>(null);
-  const [resetPinValue, setResetPinValue] = useState("");
+  const [resetMethod, setResetMethod] = useState<AuthMethod>("pin");
+  const [resetCred, setResetCred] = useState<string | null>(null);
+  const [resetPickerKey, setResetPickerKey] = useState(0);
 
   if (!month || !settings) return null;
 
@@ -54,37 +157,37 @@ export default function Settings() {
 
   const changePin = async () => {
     setPinMsg("");
-    if (!/^\d{4,8}$/.test(pinForm.next)) {
-      setPinMsg("新しいPINは4〜8桁の数字にしてください。");
+    if (!ownCurrentCred) {
+      setPinMsg("現在の認証情報を入力してください。");
       return;
     }
-    if (pinForm.next !== pinForm.confirm) {
-      setPinMsg("確認用PINが一致しません。");
+    if (!ownNewCred) {
+      setPinMsg(ownNewMethod === "pin" ? "新しいPINを正しく入力してください。" : "新しいパターンの設定が完了していません。");
       return;
     }
     try {
-      await apiPut("/api/settings", { current_pin: pinForm.current, new_pin: pinForm.next });
-      setPinMsg("✓ PINを変更しました。");
-      setPinForm({ current: "", next: "", confirm: "" });
+      await apiPut("/api/settings", { current_credential: ownCurrentCred, new_auth_method: ownNewMethod, new_credential: ownNewCred });
+      setPinMsg("✓ 認証方法を変更しました。");
+      setOwnCurrentCred("");
+      setOwnNewCred(null);
+      setOwnPickerKey((k) => k + 1);
+      refreshSettings();
     } catch (e) {
-      setPinMsg(e instanceof Error ? e.message : "PINの変更に失敗しました。");
+      setPinMsg(e instanceof Error ? e.message : "変更に失敗しました。");
     }
   };
 
   const setKioskPin = async () => {
     setKioskMsg("");
-    if (!/^\d{4,8}$/.test(kioskPinForm.next)) {
-      setKioskMsg("PINは4〜8桁の数字にしてください。");
-      return;
-    }
-    if (kioskPinForm.next !== kioskPinForm.confirm) {
-      setKioskMsg("確認用PINが一致しません。");
+    if (!kioskNewCred) {
+      setKioskMsg(kioskNewMethod === "pin" ? "PINを正しく入力してください。" : "パターンの設定が完了していません。");
       return;
     }
     try {
-      await apiPost("/api/settings/kiosk-pin", { pin: kioskPinForm.next });
-      setKioskMsg("✓ 設定しました。/kiosk からこのPINでログインできます。");
-      setKioskPinForm({ next: "", confirm: "" });
+      await apiPost("/api/settings/kiosk-pin", { auth_method: kioskNewMethod, credential: kioskNewCred });
+      setKioskMsg("✓ 設定しました。/kiosk からこの認証方法でログインできます。");
+      setKioskNewCred(null);
+      setKioskPickerKey((k) => k + 1);
       refreshSettings();
     } catch (e) {
       setKioskMsg(e instanceof Error ? e.message : "設定に失敗しました。");
@@ -120,13 +223,15 @@ export default function Settings() {
       setFamilyMsg("URLは半角英小文字・数字・ハイフンで3〜32文字にしてください。");
       return;
     }
-    if (!/^\d{4,8}$/.test(familyForm.pin)) {
-      setFamilyMsg("PINは4〜8桁の数字にしてください。");
+    if (!familyNewCred) {
+      setFamilyMsg(familyNewMethod === "pin" ? "PINを正しく入力してください。" : "パターンの設定が完了していません。");
       return;
     }
     try {
-      await apiPost("/api/family-accounts", familyForm);
+      await apiPost("/api/family-accounts", { ...familyForm, auth_method: familyNewMethod, credential: familyNewCred });
       setFamilyForm(emptyFamilyForm);
+      setFamilyNewCred(null);
+      setFamilyPickerKey((k) => k + 1);
       setShowFamilyForm(false);
       setFamilyMsg("✓ 家族アカウントを作成しました。");
       refreshSettings();
@@ -141,14 +246,15 @@ export default function Settings() {
   };
 
   const submitResetPin = async (id: string) => {
-    if (!/^\d{4,8}$/.test(resetPinValue)) {
-      setFamilyMsg("PINは4〜8桁の数字にしてください。");
+    if (!resetCred) {
+      setFamilyMsg(resetMethod === "pin" ? "PINを正しく入力してください。" : "パターンの設定が完了していません。");
       return;
     }
-    await apiPost(`/api/family-accounts/${id}/reset-pin`, { pin: resetPinValue });
+    await apiPost(`/api/family-accounts/${id}/reset-pin`, { auth_method: resetMethod, credential: resetCred });
     setResetPinTargetId(null);
-    setResetPinValue("");
-    setFamilyMsg("✓ PINをリセットしました。");
+    setResetCred(null);
+    setResetPickerKey((k) => k + 1);
+    setFamilyMsg("✓ 認証情報をリセットしました。");
   };
 
   return (
@@ -240,33 +346,34 @@ export default function Settings() {
       )}
 
       <div className="mf-panel">
-        <div className="mf-paneltitle">PIN変更</div>
-        <div className="mf-formgrid">
+        <div className="mf-paneltitle">認証方法の変更（現在: {settings.profile.authMethod === "pattern" ? "9点パターン" : "PIN"}）</div>
+        <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
+          暗証番号（PIN）と9点パターンのどちらか一方だけを使います。切り替えると、次回ログイン時からはこちらの画面だけが表示されます。
+        </div>
+        <div className="mf-hint" style={{ marginTop: 8, marginBottom: 4 }}>
+          本人確認（現在の{settings.profile.authMethod === "pattern" ? "パターン" : "PIN"}）
+        </div>
+        {settings.profile.authMethod === "pattern" ? (
+          <PatternGrid
+            key={ownPickerKey + "-current"}
+            onComplete={(nodes) => setOwnCurrentCred(isValidPatternSequence(nodes) ? patternToCode(nodes) : "")}
+            size={180}
+            hint={ownCurrentCred ? "✓ 入力済み（変更する場合はもう一度なぞる）" : "現在のパターンをなぞる"}
+          />
+        ) : (
           <input
             className="mf-input mf-mono"
             type="password"
             inputMode="numeric"
             placeholder="現在のPIN"
-            value={pinForm.current}
-            onChange={(e) => setPinForm({ ...pinForm, current: e.target.value })}
+            value={ownCurrentCred}
+            onChange={(e) => setOwnCurrentCred(e.target.value)}
           />
-          <input
-            className="mf-input mf-mono"
-            type="password"
-            inputMode="numeric"
-            placeholder="新しいPIN（4〜8桁）"
-            value={pinForm.next}
-            onChange={(e) => setPinForm({ ...pinForm, next: e.target.value })}
-          />
-          <input
-            className="mf-input mf-mono"
-            type="password"
-            inputMode="numeric"
-            placeholder="新しいPIN（確認）"
-            value={pinForm.confirm}
-            onChange={(e) => setPinForm({ ...pinForm, confirm: e.target.value })}
-          />
+        )}
+        <div className="mf-hint" style={{ marginTop: 14, marginBottom: 4 }}>
+          新しい認証方法
         </div>
+        <AuthMethodPicker key={ownPickerKey} onChange={(m, c) => { setOwnNewMethod(m); setOwnNewCred(c); }} />
         <div className="mf-row" style={{ marginTop: 10 }}>
           <button className="mf-btn primary" onClick={changePin}>
             変更する
@@ -276,28 +383,14 @@ export default function Settings() {
       </div>
 
       <div className="mf-panel">
-        <div className="mf-paneltitle">🖥 共用ダッシュボードのPIN {settings.kioskConfigured ? "（設定済み）" : "（未設定）"}</div>
+        <div className="mf-paneltitle">
+          🖥 共用ダッシュボードの認証{" "}
+          {settings.kioskConfigured ? `（設定済み・${settings.kioskAuthMethod === "pattern" ? "9点パターン" : "PIN"}）` : "（未設定）"}
+        </div>
         <div className="mf-hint" style={{ marginTop: 0, opacity: 0.75 }}>
-          iPad等に常時表示する「共用ダッシュボード」専用のPINです。個々の日記・支出明細など個別のデータには一切アクセスできず、買い物リスト・リマインダー・おおまかなお金の状況のみ見られます。設定後は「/kiosk」からこのPINでログインしてください。
+          iPad等に常時表示する「共用ダッシュボード」専用の認証です。個々の日記・支出明細など個別のデータには一切アクセスできず、買い物リスト・リマインダー・おおまかなお金の状況のみ見られます。設定後は「/kiosk」からこの認証方法でログインしてください。
         </div>
-        <div className="mf-formgrid">
-          <input
-            className="mf-input mf-mono"
-            type="password"
-            inputMode="numeric"
-            placeholder="新しいPIN（4〜8桁）"
-            value={kioskPinForm.next}
-            onChange={(e) => setKioskPinForm({ ...kioskPinForm, next: e.target.value })}
-          />
-          <input
-            className="mf-input mf-mono"
-            type="password"
-            inputMode="numeric"
-            placeholder="新しいPIN（確認）"
-            value={kioskPinForm.confirm}
-            onChange={(e) => setKioskPinForm({ ...kioskPinForm, confirm: e.target.value })}
-          />
-        </div>
+        <AuthMethodPicker key={kioskPickerKey} onChange={(m, c) => { setKioskNewMethod(m); setKioskNewCred(c); }} />
         <div className="mf-row" style={{ marginTop: 10 }}>
           <button className="mf-btn primary" onClick={setKioskPin}>
             {settings.kioskConfigured ? "変更する" : "設定する"}
@@ -387,30 +480,42 @@ export default function Settings() {
               <div key={f.id}>
                 <div className="mf-listrow">
                   <span className="mf-listcat">{f.name}</span>
-                  <span className="mf-listmemo">/{f.slug}</span>
-                  <button className="mf-btn ghost" style={{ padding: "4px 10px" }} onClick={() => { setResetPinTargetId(f.id); setResetPinValue(""); }}>
-                    PINリセット
+                  <span className="mf-listmemo">
+                    /{f.slug} ・ {f.auth_method === "pattern" ? "パターン" : "PIN"}
+                  </span>
+                  <button
+                    className="mf-btn ghost"
+                    style={{ padding: "4px 10px" }}
+                    onClick={() => {
+                      setResetPinTargetId(f.id);
+                      setResetCred(null);
+                      setResetPickerKey((k) => k + 1);
+                    }}
+                  >
+                    認証リセット
                   </button>
                   <button className="mf-del" onClick={() => deleteFamilyAccount(f.id)}>
                     削除
                   </button>
                 </div>
                 {resetPinTargetId === f.id && (
-                  <div className="mf-row" style={{ marginTop: 6 }}>
-                    <input
-                      className="mf-input mf-mono"
-                      type="password"
-                      inputMode="numeric"
-                      placeholder="新しいPIN（4〜8桁）"
-                      value={resetPinValue}
-                      onChange={(e) => setResetPinValue(e.target.value)}
+                  <div style={{ marginTop: 6 }}>
+                    <AuthMethodPicker
+                      key={resetPickerKey}
+                      size={180}
+                      onChange={(m, c) => {
+                        setResetMethod(m);
+                        setResetCred(c);
+                      }}
                     />
-                    <button className="mf-btn primary" onClick={() => submitResetPin(f.id)}>
-                      更新
-                    </button>
-                    <button className="mf-btn ghost" onClick={() => setResetPinTargetId(null)}>
-                      キャンセル
-                    </button>
+                    <div className="mf-row" style={{ marginTop: 8 }}>
+                      <button className="mf-btn primary" onClick={() => submitResetPin(f.id)}>
+                        更新
+                      </button>
+                      <button className="mf-btn ghost" onClick={() => setResetPinTargetId(null)}>
+                        キャンセル
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -418,22 +523,27 @@ export default function Settings() {
           </div>
         )}
         {!showFamilyForm ? (
-          <button className="mf-btn primary" style={{ marginTop: 10 }} onClick={() => setShowFamilyForm(true)}>
+          <button
+            className="mf-btn primary"
+            style={{ marginTop: 10 }}
+            onClick={() => {
+              setShowFamilyForm(true);
+              setFamilyNewCred(null);
+              setFamilyPickerKey((k) => k + 1);
+            }}
+          >
             ＋ 家族アカウントを作成
           </button>
         ) : (
-          <div className="mf-formgrid" style={{ marginTop: 8 }}>
-            <input className="mf-input" placeholder="URL（例: family-x7k2）" value={familyForm.slug} onChange={(e) => setFamilyForm({ ...familyForm, slug: e.target.value })} />
-            <input className="mf-input" placeholder="表示名（例: 坂家（家族用）)" value={familyForm.name} onChange={(e) => setFamilyForm({ ...familyForm, name: e.target.value })} />
-            <input
-              className="mf-input mf-mono"
-              type="password"
-              inputMode="numeric"
-              placeholder="PIN（4〜8桁）"
-              value={familyForm.pin}
-              onChange={(e) => setFamilyForm({ ...familyForm, pin: e.target.value })}
-            />
-            <div className="mf-row">
+          <div style={{ marginTop: 8 }}>
+            <div className="mf-formgrid">
+              <input className="mf-input" placeholder="URL（例: family-x7k2）" value={familyForm.slug} onChange={(e) => setFamilyForm({ ...familyForm, slug: e.target.value })} />
+              <input className="mf-input" placeholder="表示名（例: 坂家（家族用）)" value={familyForm.name} onChange={(e) => setFamilyForm({ ...familyForm, name: e.target.value })} />
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <AuthMethodPicker key={familyPickerKey} onChange={(m, c) => { setFamilyNewMethod(m); setFamilyNewCred(c); }} />
+            </div>
+            <div className="mf-row" style={{ marginTop: 8 }}>
               <button className="mf-btn primary" onClick={createFamilyAccount}>
                 作成
               </button>
