@@ -39,6 +39,7 @@ export default function PatternGrid({ onComplete, disabled, size = 300, hint }: 
   const draggingRef = useRef(false);
   const pathRef = useRef<number[]>([]);
   const [path, setPath] = useState<number[]>([]);
+  const [justReleased, setJustReleased] = useState(false);
 
   const localPoint = (e: React.PointerEvent) => {
     const rect = containerRef.current!.getBoundingClientRect();
@@ -80,6 +81,7 @@ export default function PatternGrid({ onComplete, disabled, size = 300, hint }: 
     if (disabled) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     draggingRef.current = true;
+    setJustReleased(false);
     const pt = localPoint(e);
     const hit = nearestNode(pt);
     pathRef.current = hit ? [hit] : [];
@@ -107,7 +109,13 @@ export default function PatternGrid({ onComplete, disabled, size = 300, hint }: 
     const final = pathRef.current;
     pathRef.current = [];
     setPath([]);
-    if (final.length > 0) onComplete(final);
+    // 指を離した瞬間に点を消し、「入力を受け取った」ことが一目で分かるようにする。
+    // 誤った/短すぎるパターンで再入力させる場合は呼び出し側がkeyを変えて再マウントさせるので、
+    // その際に自然と表示が戻る。
+    if (final.length > 0) {
+      setJustReleased(true);
+      onComplete(final);
+    }
   };
 
   const polyline = path.map((id) => {
@@ -119,7 +127,7 @@ export default function PatternGrid({ onComplete, disabled, size = 300, hint }: 
     <div className="pg-wrap">
       <div
         ref={containerRef}
-        className="pg-grid"
+        className={"pg-grid" + (justReleased ? " pg-released" : "")}
         style={{ width: size, height: size, touchAction: "none" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

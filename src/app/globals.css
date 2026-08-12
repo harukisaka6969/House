@@ -212,7 +212,8 @@ select.mf-input option { background: #181E25; }
 .mf-locklockout { color: #F5A524; font-size: 12.5px; margin-top: 4px; }
 
 .pg-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.pg-grid { position: relative; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; touch-action: none; user-select: none; }
+.pg-grid { position: relative; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; touch-action: none; user-select: none; opacity: 1; transform: scale(1); transition: opacity 0.22s ease, transform 0.22s ease; }
+.pg-grid.pg-released { opacity: 0; transform: scale(0.94); pointer-events: none; }
 .pg-svg { position: absolute; inset: 0; pointer-events: none; }
 .pg-line { stroke: #F5A524; stroke-width: 4; stroke-linecap: round; fill: none; opacity: 0.85; }
 .pg-dot { position: absolute; width: 16px; height: 16px; margin: -8px; border-radius: 50%; background: rgba(255,255,255,0.14); border: 2px solid rgba(255,255,255,0.28); pointer-events: none; transition: background 0.1s ease, border-color 0.1s ease, transform 0.1s ease; }
