@@ -30,6 +30,7 @@ export default function ExpensePanel() {
   });
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "" });
   const [currency, setCurrency] = useState("JPY");
+  const [showCustomCurrency, setShowCustomCurrency] = useState(false);
   const [foreignAmount, setForeignAmount] = useState("");
   const [rate, setRate] = useState<number | null>(null);
   const [rateErr, setRateErr] = useState("");
@@ -70,15 +71,16 @@ export default function ExpensePanel() {
   }, []);
 
   // 通貨を切り替えたら現在の為替レートを取得する（金額のプレビュー・登録額の根拠に使う）。
+  // 固定の対応通貨リストは持たないため、3文字のコードが揃うたびにその場でAPIに問い合わせて対応可否を判定する。
   useEffect(() => {
-    if (currency === "JPY") return;
+    if (currency === "JPY" || currency.trim().length !== 3) return;
     let cancelled = false;
     apiGet<CurrencyRateOut>(`/api/currency/rate?currency=${currency}`)
       .then((r) => {
         if (!cancelled) setRate(r.rate);
       })
       .catch(() => {
-        if (!cancelled) setRateErr("為替レートの取得に失敗しました。時間をおいて再試行してください。");
+        if (!cancelled) setRateErr("対応していない通貨か、為替レートの取得に失敗しました。コードを確認して時間をおいて再試行してください。");
       });
     return () => {
       cancelled = true;
@@ -87,7 +89,7 @@ export default function ExpensePanel() {
 
   if (!month) return null;
 
-  const isForeign = currency !== "JPY";
+  const isForeign = currency !== "JPY" && currency.trim().length === 3;
   const jpyPreview = isForeign && rate && foreignAmount ? Math.round(Number(foreignAmount) * rate) : null;
 
   const catOptions = categoriesForAccount(allCats, form.account);
@@ -204,6 +206,7 @@ export default function ExpensePanel() {
       if (valid.length === 1) {
         const p = valid[0];
         const foreign = p.currency && p.currency.toUpperCase() !== "JPY" ? p.currency.toUpperCase() : null;
+        setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
         setCurrency(foreign ?? "JPY");
         if (foreign) setForeignAmount(String(p.amount ?? ""));
         setForm((f) => ({
@@ -264,6 +267,7 @@ export default function ExpensePanel() {
         currency?: string;
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
+      setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
       setCurrency(foreign ?? "JPY");
       setForeignAmount(foreign ? String(parsed.total || "") : "");
       setForm((f) => {
@@ -505,11 +509,17 @@ export default function ExpensePanel() {
             <select
               id="mf-exp-currency"
               className="mf-input"
-              value={currency}
+              value={showCustomCurrency ? "__other__" : currency}
               onChange={(e) => {
-                setCurrency(e.target.value);
                 setRate(null);
                 setRateErr("");
+                if (e.target.value === "__other__") {
+                  setShowCustomCurrency(true);
+                  setCurrency("");
+                } else {
+                  setShowCustomCurrency(false);
+                  setCurrency(e.target.value);
+                }
               }}
             >
               <option value="JPY">円（JPY）</option>
@@ -518,7 +528,22 @@ export default function ExpensePanel() {
                   {c.label}（{c.code}）
                 </option>
               ))}
+              <option value="__other__">その他（通貨コードを直接入力）</option>
             </select>
+            {showCustomCurrency && (
+              <input
+                className="mf-input mf-mono"
+                style={{ marginTop: 6 }}
+                placeholder="通貨コード（例: VND）"
+                maxLength={3}
+                value={currency}
+                onChange={(e) => {
+                  setCurrency(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""));
+                  setRate(null);
+                  setRateErr("");
+                }}
+              />
+            )}
           </div>
           {isForeign ? (
             <div>

@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { todayStrJST, periodRange } from "./date";
-import { isSupportedCurrency, fetchJpyRate } from "./currency";
+import { fetchJpyRate } from "./currency";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -47,15 +47,18 @@ async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise
   let exchange_rate: number | null = null;
 
   if (input.original_currency) {
-    if (!isSupportedCurrency(input.original_currency)) {
-      throw new ValidationError(`unsupported currency: ${input.original_currency}`);
-    }
     const oa = Number(input.original_amount);
     if (!Number.isFinite(oa) || oa <= 0) throw new ValidationError(`invalid original_amount: ${input.original_amount}`);
     // 円換算額は常にサーバー側でその場取得したレート×元金額から計算する（クライアント申告値は信用しない）。
-    const rate = await fetchJpyRate(input.original_currency);
+    // 固定の対応通貨リストは持たず、レートAPIへの問い合わせ結果で対応可否を都度判定する（新しい通貨コードにも自動対応）。
+    let rate: number;
+    try {
+      rate = await fetchJpyRate(input.original_currency);
+    } catch (e) {
+      throw new ValidationError(e instanceof Error ? e.message : `unsupported currency: ${input.original_currency}`);
+    }
     amount = Math.round(oa * rate);
-    original_currency = input.original_currency;
+    original_currency = input.original_currency.trim().toUpperCase();
     original_amount = oa;
     exchange_rate = rate;
   }
