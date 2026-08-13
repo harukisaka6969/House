@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         estimated_saving: original.estimated_saving,
         reasoning: original.reasoning,
         keywords: original.keywords,
+        emoji: original.emoji,
       });
       return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
     }
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
       estimated_saving: estimate.estimated_saving,
       reasoning: estimate.reasoning,
       keywords: estimate.keywords,
+      emoji: estimate.emoji,
     });
     return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
   } catch (e) {

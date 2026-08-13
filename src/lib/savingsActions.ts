@@ -10,6 +10,7 @@ export interface SavingsActionRow {
   estimated_saving: number;
   reasoning: string;
   keywords: string[];
+  emoji: string;
   created_at: string;
 }
 
@@ -41,6 +42,7 @@ export async function createSavingsAction(input: {
   estimated_saving: number;
   reasoning: string;
   keywords: string[];
+  emoji: string;
 }): Promise<SavingsActionRow> {
   const { data, error } = await db().from("savings_actions").insert(input).select("*").single();
   if (error) throw error;

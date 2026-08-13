@@ -462,6 +462,7 @@ export interface SavingsEstimate {
   estimated_saving: number;
   reasoning: string;
   keywords: string[];
+  emoji: string;
 }
 
 /** 工夫して支出を抑えた行動の説明文から、その経済効果（節約額の推定）をAIで見積もる。
@@ -477,7 +478,7 @@ export async function estimateSavingsAction(description: string, todayStr: strin
 一般的な市場価格や相場をもとに、この行動によって節約できたと考えられる金額（円）を現実的に見積もってください。厳密な計算は不要ですが、根拠のある妥当な金額にしてください（例えば「自家製ヨーグルトを1.1kg作った」なら、同量の市販ヨーグルトの実勢価格を基準に考える。「ポイントで支払った」なら、使ったポイント分の金額をそのまま節約額とする）。何も節約になっていない・金額を見積もれない内容であれば0にしてください。
 
 次のJSONのみを返してください。前置きやコードブロックは不要です。
-{"title":"行動を表す短いタイトル（15文字程度、例: 自家製ヨーグルトで節約）","estimated_saving":節約額の数値（円、0以上の整数）,"reasoning":"金額の根拠を1〜2文の日本語で（例: 市販の同量のヨーグルトは通常500円前後のため）","keywords":["検索用の日本語キーワードを3〜6個程度。行動の種類・使った物・カテゴリなど"]}
+{"title":"行動を表す短いタイトル（15文字程度、例: 自家製ヨーグルトで節約）","estimated_saving":節約額の数値（円、0以上の整数）,"reasoning":"金額の根拠を1〜2文の日本語で（例: 市販の同量のヨーグルトは通常500円前後のため）","keywords":["検索用の日本語キーワードを3〜6個程度。行動の種類・使った物・カテゴリなど"],"emoji":"行動の内容を一目で表す絵文字を1つだけ（例: コーヒーの自炊なら☕、食品なら🥗、ポイント利用なら🎟️など）"}
 
 行動の説明: ${description}`,
       },
@@ -492,6 +493,7 @@ export async function estimateSavingsAction(description: string, todayStr: strin
     keywords: Array.isArray(parsed.keywords)
       ? parsed.keywords.map((k) => String(k).trim()).filter(Boolean).slice(0, 8)
       : [],
+    emoji: String(parsed.emoji ?? "").trim().slice(0, 8) || "💡",
   };
 }
 

@@ -15,6 +15,16 @@ export default function SavingsActions() {
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const load = () => {
     const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
@@ -77,7 +87,7 @@ export default function SavingsActions() {
       <SectionHead
         no="25"
         title="節約アクション"
-        sub="工夫して支出を抑えた行動を書くと、AIが経済効果を見積もってカードにします。キーワードで後から検索できます。"
+        sub="工夫して支出を抑えた行動を書くと、AIが経済効果を見積もってカードにします。タップで詳細を開閉でき、下に過去の履歴が並びます。キーワードで検索も可能です。"
       />
       <MoneyViewToggle />
 
@@ -119,41 +129,50 @@ export default function SavingsActions() {
         <div className="mf-empty">{actions.length === 0 ? "まだ登録がありません。" : "該当するカードがありません。"}</div>
       ) : (
         <div className="sv-cards">
-          {filtered.map((a) => (
-            <div key={a.id} className="sv-card">
-              <div className="sv-cardtop">
-                <span className="sv-cardtitle">{a.title}</span>
-                <span className="sv-cardamount">{fmt(a.estimated_saving)}</span>
-              </div>
-              <div className="sv-cardmeta">
-                {a.date} ・ {a.owner_name}
-              </div>
-              <div className="sv-carddesc">{a.description}</div>
-              <div className="sv-cardreason">{a.reasoning}</div>
-              {a.keywords.length > 0 && (
-                <div className="mf-chips" style={{ marginTop: 8 }}>
-                  {a.keywords.map((k) => (
-                    <button key={k} className="mf-chipbtn" style={{ cursor: "pointer" }} onClick={() => setQuery(k)}>
-                      {k}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="mf-row" style={{ marginTop: 8 }}>
-                <button
-                  className="mf-btn ghost"
-                  style={{ padding: "4px 10px", fontSize: 12 }}
-                  disabled={repeatingId === a.id}
-                  onClick={() => repeatToday(a.id)}
-                >
-                  {repeatingId === a.id ? "登録中…" : "🔁 今日も同じことをした"}
+          {filtered.map((a) => {
+            const expanded = expandedIds.has(a.id);
+            return (
+              <div key={a.id} className={`sv-card${expanded ? " sv-card-expanded" : ""}`}>
+                <button className="sv-cardhead" onClick={() => toggleExpanded(a.id)}>
+                  <span className="sv-cardemoji">{a.emoji || "💡"}</span>
+                  <span className="sv-cardtitle">{a.title}</span>
+                  <span className="sv-cardamount">{fmt(a.estimated_saving)}</span>
+                  <span className="sv-chevron">{expanded ? "︿" : "﹀"}</span>
                 </button>
-                <button className="mf-del" onClick={() => remove(a.id)}>
-                  削除
-                </button>
+                {expanded && (
+                  <div className="sv-cardbody">
+                    <div className="sv-cardmeta">
+                      {a.date} ・ {a.owner_name}
+                    </div>
+                    <div className="sv-carddesc">{a.description}</div>
+                    <div className="sv-cardreason">{a.reasoning}</div>
+                    {a.keywords.length > 0 && (
+                      <div className="mf-chips" style={{ marginTop: 8 }}>
+                        {a.keywords.map((k) => (
+                          <button key={k} className="mf-chipbtn" style={{ cursor: "pointer" }} onClick={() => setQuery(k)}>
+                            {k}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mf-row" style={{ marginTop: 8 }}>
+                      <button
+                        className="mf-btn ghost"
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                        disabled={repeatingId === a.id}
+                        onClick={() => repeatToday(a.id)}
+                      >
+                        {repeatingId === a.id ? "登録中…" : "🔁 今日も同じことをした"}
+                      </button>
+                      <button className="mf-del" onClick={() => remove(a.id)}>
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

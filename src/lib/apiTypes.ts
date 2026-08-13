@@ -618,5 +618,6 @@ export interface SavingsActionOut {
   estimated_saving: number;
   reasoning: string;
   keywords: string[];
+  emoji: string;
   created_at: string;
 }
