@@ -7,6 +7,23 @@ import type { SavingsActionOut } from "@/lib/apiTypes";
 import { SectionHead, StatCard, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 
+const BULK_PREFIX = "まとめ買いした: ";
+
+/** 過去の「まとめ買いを記録」カードの説明文（"商品名(数量)、商品名(数量)"形式）から、
+ * 商品名だけを重複なく取り出す。カード内での再選択用（同じ商品を毎回打ち直さなくて済むように）。 */
+function extractPastBulkItems(actions: SavingsActionOut[]): string[] {
+  const seen = new Set<string>();
+  for (const a of actions) {
+    if (!a.description.startsWith(BULK_PREFIX)) continue;
+    const rest = a.description.slice(BULK_PREFIX.length);
+    for (const seg of rest.split("、")) {
+      const name = seg.replace(/\([^)]*\)\s*$/, "").trim();
+      if (name) seen.add(name);
+    }
+  }
+  return Array.from(seen).slice(0, 24);
+}
+
 export default function SavingsActions() {
   const { ownerFilter } = useDashboard();
   const [actions, setActions] = useState<SavingsActionOut[] | null>(null);
@@ -16,6 +33,7 @@ export default function SavingsActions() {
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [bulkExpanded, setBulkExpanded] = useState(false);
   const [bulkItems, setBulkItems] = useState<{ product: string; qty: string }[]>([{ product: "", qty: "" }]);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
@@ -48,6 +66,8 @@ export default function SavingsActions() {
     );
   }, [actions, query]);
 
+  const pastBulkItems = useMemo(() => extractPastBulkItems(actions ?? []), [actions]);
+
   if (!actions) return <div className="mf-empty">読み込み中…</div>;
 
   const submit = async () => {
@@ -72,13 +92,22 @@ export default function SavingsActions() {
   const addBulkItem = () => setBulkItems((prev) => [...prev, { product: "", qty: "" }]);
   const removeBulkItem = (idx: number) => setBulkItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
+  /** 過去のまとめ買いで使った商品名をタップしたら、空いている商品欄に入れる（無ければ行を追加）。 */
+  const pickBulkItem = (name: string) => {
+    setBulkItems((prev) => {
+      const emptyIdx = prev.findIndex((it) => !it.product.trim());
+      if (emptyIdx !== -1) return prev.map((it, i) => (i === emptyIdx ? { ...it, product: name } : it));
+      return [...prev, { product: name, qty: "" }];
+    });
+  };
+
   /** まとめ買いは商品数に関わらず1件のカードにまとめる（商品ごとにカードを作らない）。
-   * 商品名・数量の入力から説明文を組み立て、既存のAI見積もりフローにそのまま流す。 */
+   * 商品名・数量の入力から説明文を組み立て、既存のAI見積もりフローにそのまま流す。
+   * "商品名(数量)"形式にしておくと、過去のまとめ買い履歴から商品名だけを再抽出できる（extractPastBulkItems）。 */
   const submitBulk = async () => {
     const valid = bulkItems.filter((it) => it.product.trim());
     if (valid.length === 0 || bulkSubmitting) return;
-    const text =
-      "まとめ買いした: " + valid.map((it) => `${it.product.trim()}${it.qty.trim() ? `を${it.qty.trim()}` : ""}`).join("、");
+    const text = BULK_PREFIX + valid.map((it) => `${it.product.trim()}${it.qty.trim() ? `(${it.qty.trim()})` : ""}`).join("、");
     setBulkSubmitting(true);
     setBulkMsg("");
     try {
@@ -125,6 +154,15 @@ export default function SavingsActions() {
         <StatCard label="累計節約額（推定）" value={fmt(totalSaving)} color="#45C48F" />
       </div>
 
+      <div className="mf-formgrid" style={{ marginBottom: 4 }}>
+        <input
+          className="mf-input"
+          placeholder="🔍 検索"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
       <div className="mf-panel">
         <label className="mf-fieldlabel" htmlFor="sv-desc">
           行動を登録
@@ -146,57 +184,71 @@ export default function SavingsActions() {
       </div>
 
       <div className="mf-panel">
-        <label className="mf-fieldlabel">📦 まとめ買いを記録</label>
-        <div className="mf-hint" style={{ margin: "0 0 8px" }}>
-          商品名と数量を入力してください。商品が複数あっても、まとめ買いとして1件のカードにまとめて登録します。
+        <div
+          className="sv-bulktoggle"
+          role="button"
+          tabIndex={0}
+          onClick={() => setBulkExpanded((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setBulkExpanded((v) => !v);
+          }}
+        >
+          <span className="mf-fieldlabel" style={{ margin: 0 }}>
+            📦 まとめ買いを記録
+          </span>
+          <span className="sv-chevron">{bulkExpanded ? "︿" : "﹀"}</span>
         </div>
-        {bulkItems.map((item, idx) => (
-          <div className="mf-row" key={idx}>
-            <input
-              className="mf-input"
-              style={{ flex: 2, minWidth: 140 }}
-              placeholder="商品名（例: トイレットペーパー）"
-              value={item.product}
-              onChange={(e) => updateBulkItem(idx, "product", e.target.value)}
-            />
-            <input
-              className="mf-input"
-              style={{ flex: 1, minWidth: 120 }}
-              placeholder="数量（例: 12ロール）"
-              value={item.qty}
-              onChange={(e) => updateBulkItem(idx, "qty", e.target.value)}
-            />
-            {bulkItems.length > 1 && (
-              <button className="mf-iconbtn" onClick={() => removeBulkItem(idx)} aria-label="この商品を削除">
-                ✕
-              </button>
+        {bulkExpanded && (
+          <div style={{ marginTop: 10 }}>
+            {pastBulkItems.length > 0 && (
+              <div className="mf-chips" style={{ marginBottom: 10 }}>
+                {pastBulkItems.map((name) => (
+                  <button key={name} className="mf-chipbtn" style={{ cursor: "pointer" }} onClick={() => pickBulkItem(name)}>
+                    {name}
+                  </button>
+                ))}
+              </div>
             )}
+            {bulkItems.map((item, idx) => (
+              <div className="mf-row" key={idx}>
+                <input
+                  className="mf-input"
+                  style={{ flex: 2, minWidth: 140 }}
+                  placeholder="商品名（例: トイレットペーパー）"
+                  value={item.product}
+                  onChange={(e) => updateBulkItem(idx, "product", e.target.value)}
+                />
+                <input
+                  className="mf-input"
+                  style={{ flex: 1, minWidth: 120 }}
+                  placeholder="数量（例: 12ロール）"
+                  value={item.qty}
+                  onChange={(e) => updateBulkItem(idx, "qty", e.target.value)}
+                />
+                {bulkItems.length > 1 && (
+                  <button className="mf-iconbtn" onClick={() => removeBulkItem(idx)} aria-label="この商品を削除">
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="mf-row">
+              <button className="mf-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={addBulkItem}>
+                + 商品を追加
+              </button>
+            </div>
+            <div className="mf-row" style={{ marginTop: 10 }}>
+              <button
+                className="mf-btn primary"
+                onClick={submitBulk}
+                disabled={bulkSubmitting || !bulkItems.some((it) => it.product.trim())}
+              >
+                {bulkSubmitting ? "AIが計算中…" : "まとめ買いを登録する"}
+              </button>
+            </div>
+            {bulkMsg && <div className="mf-hint">{bulkMsg}</div>}
           </div>
-        ))}
-        <div className="mf-row">
-          <button className="mf-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={addBulkItem}>
-            + 商品を追加
-          </button>
-        </div>
-        <div className="mf-row" style={{ marginTop: 10 }}>
-          <button
-            className="mf-btn primary"
-            onClick={submitBulk}
-            disabled={bulkSubmitting || !bulkItems.some((it) => it.product.trim())}
-          >
-            {bulkSubmitting ? "AIが計算中…" : "まとめ買いを登録する"}
-          </button>
-        </div>
-        {bulkMsg && <div className="mf-hint">{bulkMsg}</div>}
-      </div>
-
-      <div className="mf-formgrid" style={{ marginBottom: 4 }}>
-        <input
-          className="mf-input"
-          placeholder="🔍 検索"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        )}
       </div>
 
       {filtered.length === 0 ? (
