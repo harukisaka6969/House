@@ -10,6 +10,9 @@ export interface TipDef {
   time: string; // "HH:MM" (JST)
   label: string;
   useWebSearch: boolean;
+  /** 出典・具体例を含む長めのコーナーほど大きくする。小さすぎると</output>閉じタグの手前で
+   * 応答が途切れ、生の<output>タグがそのままLINEに表示される事故につながる。 */
+  maxTokens: number;
   buildPrompt: (recentFull: string[], olderSummaries: string[], todayStr: string) => string;
 }
 
@@ -38,12 +41,23 @@ function extractTag(text: string, tag: string): string {
   return (match ? match[1] : "").trim();
 }
 
+/** <output>本文を取り出す。万一トークン上限で応答が</output>閉じタグの手前で切れてしまった場合でも、
+ * 生の<output>タグをそのままLINEに表示してしまわないよう、開始タグの直後から末尾までを使う。 */
+function extractOutputContent(raw: string): string {
+  const closed = extractTag(raw, "output");
+  if (closed) return closed;
+  const openIdx = raw.indexOf("<output>");
+  if (openIdx !== -1) return raw.slice(openIdx + "<output>".length).trim();
+  return raw.trim();
+}
+
 export const TIP_DEFS: TipDef[] = [
   {
     category: "news",
     time: "06:00",
     label: "📰 昨日のニュースダイジェスト",
     useWebSearch: true,
+    maxTokens: 2000,
     buildPrompt: (recentFull, olderSummaries, today) => {
       const yesterday = prevDayStr(today);
       return `あなたは日本語のニュースダイジェストを書くライターです。web検索を使って、${yesterday}（${today}の前日）に日本国内外で報じられた重要なニュースの中から、家庭の生活に影響を与えるもの（物価・金利・税制・天候や災害・生活インフラなど）や、ビジネス・経済への影響が大きいものを中心に選び、2分程度で読める分量（800〜1000文字程度）の日本語のダイジェストとして自然な文章でまとめてください。箇条書きは使わず、読み物として自然につながる文章にしてください。
@@ -59,6 +73,7 @@ export const TIP_DEFS: TipDef[] = [
     time: "09:00",
     label: "☯️ 東洋の智恵",
     useWebSearch: false,
+    maxTokens: 1000,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたは中国古典・東洋思想と現代心理学の両方に精通した専門家です。易経（易学）、儒教、道教、諸子百家など、古代中国の哲学思想の中から1つのテーマ・言葉・逸話を選び、それを現代の認知バイアス・行動心理学・対人関係の心理学など、心理学の知見と結びつけて、日本語で5〜6文程度、じっくりと掘り下げて伝えてください（例: 老子の「上善若水」と返報性・協調行動の心理、儒教の「己所不欲、勿施於人」と共感・視点取得の心理学、易経の変化の思想と現状維持バイアスなど）。古代の智恵が現代の心理学的な知見とどうつながるかが伝わるようにし、読んだ人が今日、少し立ち止まって考えたくなるような深さのある内容にしてください。原典の言葉や心理学の知見を引用する場合は、正確な出典・研究がはっきりしているものだけを扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
@@ -67,6 +82,7 @@ export const TIP_DEFS: TipDef[] = [
     time: "12:00",
     label: "💪 健康Tips",
     useWebSearch: false,
+    maxTokens: 700,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたはスポーツ科学・栄養学の専門家で、パワーリフティングやボディビルの競技者も指導しています。筋力・筋肥大・トレーニングパフォーマンスの向上に関わるトピック（トレーニング方法、栄養、休養・リカバリー、サプリメントなど）から1つを選び、今日から実践できる具体的なワンポイントアドバイスを日本語で3文程度にまとめてください。
 必ず守ってほしい条件:
@@ -80,6 +96,7 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     time: "15:00",
     label: "💰 お金Tips",
     useWebSearch: false,
+    maxTokens: 700,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたはお金の専門家です。お金の使い方・投資・稼ぎ方・節約のいずれかについて、実践的なワンポイントアドバイスを日本語で3文程度にまとめてください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
@@ -88,6 +105,7 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     time: "18:00",
     label: "🪶 今日の哲学",
     useWebSearch: false,
+    maxTokens: 1000,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたは哲学者です。人生において非常に重要な問い、または考えることで人生にプラスになる哲学的な視点を1つ選び、日本語で5〜6文程度、じっくりと掘り下げて伝えてください。読んだ人が今日、少し立ち止まって考えたくなるような深さのある内容にしてください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
@@ -96,6 +114,7 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     time: "21:00",
     label: "🌿 ウェルビーイングTips",
     useWebSearch: false,
+    maxTokens: 700,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたはメンタルヘルス・ウェルビーイングの専門家です。精神的な健康について、今日から実践できる具体的なワンポイントアドバイスを日本語で3文程度にまとめてください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
@@ -104,6 +123,7 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     time: "23:00",
     label: "🌏 世界の異文化に学ぶ問い",
     useWebSearch: false,
+    maxTokens: 1000,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたは文化人類学・比較文化論の専門家です。世界のどこか（地域・民族・時代は問いません。日本や現代の主流な価値観以外であれば構いません）に見られる、時間の捉え方、死生観、個人と共同体の関係、成功や豊かさの定義、自然との向き合い方、家族やコミュニティのあり方などについての、独自のものの見方・考え方を1つ選んでください。その文化的背景を日本語で4〜5文程度で分かりやすく紹介したうえで、最後に改行してから、それを踏まえて読んだ人自身の価値観を振り返らせるような、一晩じっくり考えさせられる問いかけを1文だけ加えてください。事実として不正確な内容や、特定の文化への偏見・ステレオタイプ化は避け、敬意を持って扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
@@ -152,8 +172,8 @@ async function recordTip(category: TipCategory, date: string, content: string, s
 export async function generateAndRecordTip(def: TipDef, today: string): Promise<string> {
   const { recentFull, olderSummaries } = await getAntiRepeatContext(def.category);
   const prompt = def.buildPrompt(recentFull, olderSummaries, today);
-  const raw = await generateDailyTip(prompt, def.useWebSearch);
-  const content = extractTag(raw, "output") || raw.trim();
+  const raw = await generateDailyTip(prompt, def.useWebSearch, def.maxTokens);
+  const content = extractOutputContent(raw);
   const summary = extractTag(raw, "summary") || content.slice(0, 30);
   await recordTip(def.category, today, content, summary);
   return content;

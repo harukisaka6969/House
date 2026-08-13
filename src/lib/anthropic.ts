@@ -523,12 +523,14 @@ export async function runResearch(query: string): Promise<string> {
   return joinText(res.content) || "結果を取得できませんでした。";
 }
 
-/** LINEに1日5回送る生活tips用。useWebSearchがtrueならweb検索を使う（前日ニュースダイジェスト用）。
- * 呼び出し側（lib/lineDailyTips.ts）が<output>タグで本文を抽出する前提の、タグ込みの生テキストを返す。 */
-export async function generateDailyTip(prompt: string, useWebSearch: boolean): Promise<string> {
+/** LINEに1日数回送る生活tips用。useWebSearchがtrueならweb検索を使う（前日ニュースダイジェスト用）。
+ * maxTokensは呼び出し側（lib/lineDailyTips.ts）がコーナーごとの分量に応じて指定する
+ * （短すぎると、引用や具体例を含む長めのコーナーで</output>閉じタグの手前で応答が切れてしまうため）。
+ * 呼び出し側が<output>タグで本文を抽出する前提の、タグ込みの生テキストを返す。 */
+export async function generateDailyTip(prompt: string, useWebSearch: boolean, maxTokens: number): Promise<string> {
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: useWebSearch ? 1500 : 500,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
     ...(useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" }] } : {}),
   });
