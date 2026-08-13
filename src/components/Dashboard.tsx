@@ -46,6 +46,7 @@ const SplitEvents = dyn(() => import("./sections/SplitEvents"));
 const Anniversaries = dyn(() => import("./sections/Anniversaries"));
 const YearTimeline = dyn(() => import("./sections/YearTimeline"));
 const SavingsActions = dyn(() => import("./sections/SavingsActions"));
+const SavingsHistory = dyn(() => import("./sections/SavingsHistory"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
@@ -67,6 +68,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["flowAnalysis", "⑬ 資産フロー分析"],
       ["splitEvents", "㉒ 割り勘"],
       ["savingsActions", "㉕ 節約アクション"],
+      ["savingsHistory", "㉖ 節約履歴"],
     ],
   },
   {
@@ -277,6 +279,7 @@ function DashboardInner() {
             {view === "anniversaries" && <Anniversaries />}
             {view === "yearTimeline" && <YearTimeline />}
             {view === "savingsActions" && <SavingsActions />}
+            {view === "savingsHistory" && <SavingsHistory />}
             {view === "settings" && <Settings />}
           </>
         )}

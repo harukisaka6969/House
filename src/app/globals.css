@@ -238,6 +238,22 @@ select.mf-input option { background: #181E25; }
 .sv-cardreason { font-size: 12px; color: #93A0AE; margin-top: 6px; line-height: 1.5; }
 .sv-bulktoggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 
+.sv-weeklist { display: flex; flex-direction: column; gap: 6px; }
+.sv-weekrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #101418; border-radius: 8px; }
+.sv-weekrange { font-size: 13px; color: #C4CDD6; flex: 1; }
+.sv-weekcount { font-size: 11.5px; color: #6B7684; }
+.sv-weekamount { font-weight: 800; font-size: 14px; color: #45C48F; }
+
+.sv-daylist { display: flex; flex-direction: column; gap: 12px; }
+.sv-daygroup { display: flex; flex-direction: column; gap: 4px; }
+.sv-dayhead { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.sv-daydate { font-size: 12.5px; font-weight: 700; color: #93A0AE; }
+.sv-daytotal { font-size: 13px; font-weight: 800; color: #45C48F; }
+.sv-dayitem { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 13px; }
+.sv-dayitememoji { font-size: 15px; line-height: 1; flex-shrink: 0; }
+.sv-dayitemtitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #E7ECF2; }
+.sv-dayitemamount { color: #C4CDD6; white-space: nowrap; }
+
 .mf-modalbackdrop { position: fixed; inset: 0; background: rgba(8,10,13,0.72); display: flex; align-items: flex-end; justify-content: center; z-index: 100; padding: 0; }
 @media (min-width: 640px) { .mf-modalbackdrop { align-items: center; padding: 20px; } }
 .mf-modalcard { background: #181E25; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px 16px 0 0; padding: 20px; width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
