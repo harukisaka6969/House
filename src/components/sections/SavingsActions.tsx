@@ -34,7 +34,9 @@ export default function SavingsActions() {
   const [query, setQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [bulkExpanded, setBulkExpanded] = useState(false);
-  const [bulkItems, setBulkItems] = useState<{ product: string; qty: string }[]>([{ product: "", qty: "" }]);
+  const [bulkItems, setBulkItems] = useState<{ product: string; qty: string; price: string }[]>([
+    { product: "", qty: "", price: "" },
+  ]);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
 
@@ -86,10 +88,10 @@ export default function SavingsActions() {
     }
   };
 
-  const updateBulkItem = (idx: number, field: "product" | "qty", value: string) => {
+  const updateBulkItem = (idx: number, field: "product" | "qty" | "price", value: string) => {
     setBulkItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   };
-  const addBulkItem = () => setBulkItems((prev) => [...prev, { product: "", qty: "" }]);
+  const addBulkItem = () => setBulkItems((prev) => [...prev, { product: "", qty: "", price: "" }]);
   const removeBulkItem = (idx: number) => setBulkItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
   /** 過去のまとめ買いで使った商品名をタップしたら、空いている商品欄に入れる（無ければ行を追加）。 */
@@ -97,22 +99,30 @@ export default function SavingsActions() {
     setBulkItems((prev) => {
       const emptyIdx = prev.findIndex((it) => !it.product.trim());
       if (emptyIdx !== -1) return prev.map((it, i) => (i === emptyIdx ? { ...it, product: name } : it));
-      return [...prev, { product: name, qty: "" }];
+      return [...prev, { product: name, qty: "", price: "" }];
     });
   };
 
   /** まとめ買いは商品数に関わらず1件のカードにまとめる（商品ごとにカードを作らない）。
-   * 商品名・数量の入力から説明文を組み立て、既存のAI見積もりフローにそのまま流す。
-   * "商品名(数量)"形式にしておくと、過去のまとめ買い履歴から商品名だけを再抽出できる（extractPastBulkItems）。 */
+   * 商品名・数量・支払金額の入力から説明文を組み立て、既存のAI見積もりフローにそのまま流す。
+   * "商品名(数量・支払金額)"形式にしておくと、過去のまとめ買い履歴から商品名だけを再抽出できる（extractPastBulkItems）。
+   * 実際に支払った金額を渡すことで、AIが通常価格との差額から節約額をより正確に見積もれる。 */
   const submitBulk = async () => {
     const valid = bulkItems.filter((it) => it.product.trim());
     if (valid.length === 0 || bulkSubmitting) return;
-    const text = BULK_PREFIX + valid.map((it) => `${it.product.trim()}${it.qty.trim() ? `(${it.qty.trim()})` : ""}`).join("、");
+    const text =
+      BULK_PREFIX +
+      valid
+        .map((it) => {
+          const parts = [it.qty.trim(), it.price.trim() ? `支払${it.price.trim()}円` : ""].filter(Boolean);
+          return `${it.product.trim()}${parts.length ? `(${parts.join("・")})` : ""}`;
+        })
+        .join("、");
     setBulkSubmitting(true);
     setBulkMsg("");
     try {
       await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { description: text });
-      setBulkItems([{ product: "", qty: "" }]);
+      setBulkItems([{ product: "", qty: "", price: "" }]);
       load();
     } catch (e) {
       setBulkMsg(e instanceof Error ? e.message : "登録に失敗しました。");
@@ -220,10 +230,18 @@ export default function SavingsActions() {
                 />
                 <input
                   className="mf-input"
-                  style={{ flex: 1, minWidth: 120 }}
+                  style={{ flex: 1, minWidth: 110 }}
                   placeholder="数量（例: 12ロール）"
                   value={item.qty}
                   onChange={(e) => updateBulkItem(idx, "qty", e.target.value)}
+                />
+                <input
+                  className="mf-input mf-mono"
+                  style={{ flex: 1, minWidth: 110 }}
+                  type="number"
+                  placeholder="支払金額（例: 620）"
+                  value={item.price}
+                  onChange={(e) => updateBulkItem(idx, "price", e.target.value)}
                 />
                 {bulkItems.length > 1 && (
                   <button className="mf-iconbtn" onClick={() => removeBulkItem(idx)} aria-label="この商品を削除">
