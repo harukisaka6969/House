@@ -16,6 +16,9 @@ export default function SavingsActions() {
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [bulkItems, setBulkItems] = useState<{ product: string; qty: string }[]>([{ product: "", qty: "" }]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -60,6 +63,32 @@ export default function SavingsActions() {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const updateBulkItem = (idx: number, field: "product" | "qty", value: string) => {
+    setBulkItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
+  };
+  const addBulkItem = () => setBulkItems((prev) => [...prev, { product: "", qty: "" }]);
+  const removeBulkItem = (idx: number) => setBulkItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+
+  /** まとめ買いは商品数に関わらず1件のカードにまとめる（商品ごとにカードを作らない）。
+   * 商品名・数量の入力から説明文を組み立て、既存のAI見積もりフローにそのまま流す。 */
+  const submitBulk = async () => {
+    const valid = bulkItems.filter((it) => it.product.trim());
+    if (valid.length === 0 || bulkSubmitting) return;
+    const text =
+      "まとめ買いした: " + valid.map((it) => `${it.product.trim()}${it.qty.trim() ? `を${it.qty.trim()}` : ""}`).join("、");
+    setBulkSubmitting(true);
+    setBulkMsg("");
+    try {
+      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { description: text });
+      setBulkItems([{ product: "", qty: "" }]);
+      load();
+    } catch (e) {
+      setBulkMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    } finally {
+      setBulkSubmitting(false);
     }
   };
 
@@ -114,6 +143,51 @@ export default function SavingsActions() {
           </button>
         </div>
         {msg && <div className="mf-hint">{msg}</div>}
+      </div>
+
+      <div className="mf-panel">
+        <label className="mf-fieldlabel">📦 まとめ買いを記録</label>
+        <div className="mf-hint" style={{ margin: "0 0 8px" }}>
+          商品名と数量を入力してください。商品が複数あっても、まとめ買いとして1件のカードにまとめて登録します。
+        </div>
+        {bulkItems.map((item, idx) => (
+          <div className="mf-row" key={idx}>
+            <input
+              className="mf-input"
+              style={{ flex: 2, minWidth: 140 }}
+              placeholder="商品名（例: トイレットペーパー）"
+              value={item.product}
+              onChange={(e) => updateBulkItem(idx, "product", e.target.value)}
+            />
+            <input
+              className="mf-input"
+              style={{ flex: 1, minWidth: 120 }}
+              placeholder="数量（例: 12ロール）"
+              value={item.qty}
+              onChange={(e) => updateBulkItem(idx, "qty", e.target.value)}
+            />
+            {bulkItems.length > 1 && (
+              <button className="mf-iconbtn" onClick={() => removeBulkItem(idx)} aria-label="この商品を削除">
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+        <div className="mf-row">
+          <button className="mf-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={addBulkItem}>
+            + 商品を追加
+          </button>
+        </div>
+        <div className="mf-row" style={{ marginTop: 10 }}>
+          <button
+            className="mf-btn primary"
+            onClick={submitBulk}
+            disabled={bulkSubmitting || !bulkItems.some((it) => it.product.trim())}
+          >
+            {bulkSubmitting ? "AIが計算中…" : "まとめ買いを登録する"}
+          </button>
+        </div>
+        {bulkMsg && <div className="mf-hint">{bulkMsg}</div>}
       </div>
 
       <div className="mf-formgrid" style={{ marginBottom: 4 }}>
