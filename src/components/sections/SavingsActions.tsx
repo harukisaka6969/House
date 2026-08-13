@@ -10,6 +10,7 @@ export default function SavingsActions() {
   const [actions, setActions] = useState<SavingsActionOut[] | null>(null);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [query, setQuery] = useState("");
 
@@ -52,6 +53,20 @@ export default function SavingsActions() {
   const remove = async (id: string) => {
     await apiDelete(`/api/savings-actions/${id}`);
     setActions((prev) => (prev ?? []).filter((a) => a.id !== id));
+  };
+
+  const repeatToday = async (id: string) => {
+    if (repeatingId) return;
+    setRepeatingId(id);
+    setMsg("");
+    try {
+      const res = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { duplicate_of: id });
+      setActions((prev) => [res.action, ...(prev ?? [])]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    } finally {
+      setRepeatingId(null);
+    }
   };
 
   return (
@@ -120,9 +135,19 @@ export default function SavingsActions() {
                   ))}
                 </div>
               )}
-              <button className="mf-del" style={{ marginTop: 8 }} onClick={() => remove(a.id)}>
-                削除
-              </button>
+              <div className="mf-row" style={{ marginTop: 8 }}>
+                <button
+                  className="mf-btn ghost"
+                  style={{ padding: "4px 10px", fontSize: 12 }}
+                  disabled={repeatingId === a.id}
+                  onClick={() => repeatToday(a.id)}
+                >
+                  {repeatingId === a.id ? "登録中…" : "🔁 今日も同じことをした"}
+                </button>
+                <button className="mf-del" onClick={() => remove(a.id)}>
+                  削除
+                </button>
+              </div>
             </div>
           ))}
         </div>

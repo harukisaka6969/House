@@ -27,6 +27,12 @@ export async function listSavingsActions(): Promise<SavingsActionRow[]> {
   return (data ?? []) as SavingsActionRow[];
 }
 
+export async function getSavingsActionById(id: string): Promise<SavingsActionRow | null> {
+  const { data, error } = await db().from("savings_actions").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data as SavingsActionRow | null;
+}
+
 export async function createSavingsAction(input: {
   owner: string;
   date: string;
