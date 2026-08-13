@@ -599,3 +599,16 @@ export interface PendingExpenseSentimentOut {
   sentiment: "good" | "bad" | null;
   pending: boolean;
 }
+
+export interface SavingsActionOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  date: string;
+  description: string;
+  title: string;
+  estimated_saving: number;
+  reasoning: string;
+  keywords: string[];
+  created_at: string;
+}

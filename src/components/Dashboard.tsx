@@ -45,6 +45,7 @@ const SmartHome = dyn(() => import("./sections/SmartHome"));
 const SplitEvents = dyn(() => import("./sections/SplitEvents"));
 const Anniversaries = dyn(() => import("./sections/Anniversaries"));
 const YearTimeline = dyn(() => import("./sections/YearTimeline"));
+const SavingsActions = dyn(() => import("./sections/SavingsActions"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
@@ -65,6 +66,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["lifeEvents", "⑨ 将来設計"],
       ["flowAnalysis", "⑬ 資産フロー分析"],
       ["splitEvents", "㉒ 割り勘"],
+      ["savingsActions", "㉕ 節約アクション"],
     ],
   },
   {
@@ -274,6 +276,7 @@ function DashboardInner() {
             {view === "splitEvents" && <SplitEvents />}
             {view === "anniversaries" && <Anniversaries />}
             {view === "yearTimeline" && <YearTimeline />}
+            {view === "savingsActions" && <SavingsActions />}
             {view === "settings" && <Settings />}
           </>
         )}

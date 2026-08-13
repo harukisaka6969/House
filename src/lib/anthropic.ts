@@ -448,6 +448,44 @@ ${RECORD_JSON_FORMAT}
   return parseExtractedRecord(joinText(res.content));
 }
 
+export interface SavingsEstimate {
+  title: string;
+  estimated_saving: number;
+  reasoning: string;
+  keywords: string[];
+}
+
+/** 工夫して支出を抑えた行動の説明文から、その経済効果（節約額の推定）をAIで見積もる。
+ * 一般的な市場価格・相場をもとにした概算でよく、厳密な計算は求めない（多少の誤差は許容）。 */
+export async function estimateSavingsAction(description: string, todayStr: string): Promise<SavingsEstimate> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 500,
+    messages: [
+      {
+        role: "user",
+        content: `次は、工夫して支出を抑えた・節約した行動の説明です。今日の日付: ${todayStr}
+一般的な市場価格や相場をもとに、この行動によって節約できたと考えられる金額（円）を現実的に見積もってください。厳密な計算は不要ですが、根拠のある妥当な金額にしてください（例えば「自家製ヨーグルトを1.1kg作った」なら、同量の市販ヨーグルトの実勢価格を基準に考える。「ポイントで支払った」なら、使ったポイント分の金額をそのまま節約額とする）。何も節約になっていない・金額を見積もれない内容であれば0にしてください。
+
+次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"title":"行動を表す短いタイトル（15文字程度、例: 自家製ヨーグルトで節約）","estimated_saving":節約額の数値（円、0以上の整数）,"reasoning":"金額の根拠を1〜2文の日本語で（例: 市販の同量のヨーグルトは通常500円前後のため）","keywords":["検索用の日本語キーワードを3〜6個程度。行動の種類・使った物・カテゴリなど"]}
+
+行動の説明: ${description}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  const parsed = JSON.parse(t) as Partial<SavingsEstimate>;
+  return {
+    title: (String(parsed.title ?? "").trim() || "節約アクション").slice(0, 60),
+    estimated_saving: Math.max(0, Math.round(Number(parsed.estimated_saving) || 0)),
+    reasoning: String(parsed.reasoning ?? "").trim(),
+    keywords: Array.isArray(parsed.keywords)
+      ? parsed.keywords.map((k) => String(k).trim()).filter(Boolean).slice(0, 8)
+      : [],
+  };
+}
+
 /** 日次・週次ダイジェスト（前日/先週のまとめ）を生成する。promptはlib/digestContext.tsで構築したもの。 */
 export async function generateDigest(prompt: string, maxTokens: number): Promise<string> {
   const res = await anthropic().messages.create({
