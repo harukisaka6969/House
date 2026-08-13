@@ -93,16 +93,27 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
     await reply(event, "支出の内容を読み取れませんでした。金額を含めて送ってください。（例: コンビニで480円）");
     return;
   }
-  const entries = valid.map((p) => ({
-    date: p.date,
-    account_id: accounts.some((a) => a.id === p.account) ? p.account! : (accounts[0]?.id ?? "a1"),
-    category: p.category && categories.includes(p.category) ? p.category : "その他",
-    amount: Number(p.amount),
-    memo: p.memo || "",
-  }));
-  await addExpenseEntries(profileId, entries, categories);
-  const total = entries.reduce((s, e) => s + e.amount, 0);
-  const summary = entries.map((e) => `・${e.memo || e.category} ${e.amount.toLocaleString()}円`).join("\n");
+  const entries = valid.map((p) => {
+    const currency = p.currency && p.currency.toUpperCase() !== "JPY" ? p.currency.toUpperCase() : null;
+    return {
+      date: p.date,
+      account_id: accounts.some((a) => a.id === p.account) ? p.account! : (accounts[0]?.id ?? "a1"),
+      category: p.category && categories.includes(p.category) ? p.category : "その他",
+      amount: Number(p.amount),
+      memo: p.memo || "",
+      original_currency: currency,
+      original_amount: currency ? Number(p.amount) : null,
+    };
+  });
+  const { entries: resolved } = await addExpenseEntries(profileId, entries, categories);
+  const total = resolved.reduce((s, e) => s + e.amount, 0);
+  const summary = resolved
+    .map((e) =>
+      e.original_currency
+        ? `・${e.memo || e.category} ${e.amount.toLocaleString()}円（${e.original_amount}${e.original_currency}）`
+        : `・${e.memo || e.category} ${e.amount.toLocaleString()}円`
+    )
+    .join("\n");
   await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}`);
 }
 
@@ -194,12 +205,25 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         return;
       }
       const category = categories.includes(ocr.category) ? ocr.category : "その他";
-      await addExpenseEntries(
+      const currency = ocr.currency && ocr.currency.toUpperCase() !== "JPY" ? ocr.currency.toUpperCase() : null;
+      const { entries: resolved } = await addExpenseEntries(
         profileId,
-        [{ date: ocr.date ?? undefined, account_id: account.id, category, amount: ocr.total, memo: ocr.store || "" }],
+        [
+          {
+            date: ocr.date ?? undefined,
+            account_id: account.id,
+            category,
+            amount: ocr.total,
+            memo: ocr.store || "",
+            original_currency: currency,
+            original_amount: currency ? ocr.total : null,
+          },
+        ],
         categories
       );
-      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${ocr.total.toLocaleString()}円（${category} / ${account.name}）`);
+      const jpyAmount = resolved[0]?.amount ?? ocr.total;
+      const currencyNote = currency ? `（${ocr.total}${currency}）` : "";
+      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）`);
       return;
     }
 

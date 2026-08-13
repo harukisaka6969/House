@@ -36,9 +36,12 @@ export interface OcrResult {
   total: number;
   category: string;
   account?: string;
+  /** レシートに記載の通貨のISO 4217コード（例: USD, EUR, KRW）。日本円なら"JPY"。
+   * totalは常にこの通貨での金額そのもの（円への換算はサーバーが別途行うため、AIは換算しない）。 */
+  currency: string;
 }
 
-/** レシート画像 → {date, store, total, category, account}（現行版 ocrReceipt を移植） */
+/** レシート画像 → {date, store, total, category, account, currency}（現行版 ocrReceipt を移植） */
 export async function ocrReceipt(
   base64: string,
   mediaType: string,
@@ -58,14 +61,16 @@ export async function ocrReceipt(
             type: "text",
             text: `このレシート画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
 ${accountRuleText(acctList)}
-{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値,"category":"${categories.join("|")} のいずれか","account":"口座id"}`,
+海外のレシート（日本円以外の通貨）の場合、totalはレシートに印字された金額そのままの数値にしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにはISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円のレシートならcurrencyは"JPY"にしてください。
+{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\""}`,
           },
         ],
       },
     ],
   });
   const text = stripFence(joinText(res.content));
-  return JSON.parse(text) as OcrResult;
+  const parsed = JSON.parse(text) as Partial<OcrResult>;
+  return { ...parsed, currency: (parsed.currency || "JPY").toUpperCase() } as OcrResult;
 }
 
 export interface ParsedExpenseEntry {
@@ -74,6 +79,9 @@ export interface ParsedExpenseEntry {
   category?: string;
   amount?: number;
   memo?: string;
+  /** 海外通貨での支出と読み取れた場合のISO 4217コード（例: USD）。日本円ならJPYまたは省略。
+   * amountはこの通貨での金額そのもの（円への換算はサーバーが行うため、AIは換算しない）。 */
+  currency?: string;
 }
 
 /** 文章 → 支出エントリ配列（現行版 parseExpenseText を移植。口座推定ルールは §8-2 準拠） */
@@ -94,7 +102,8 @@ export async function parseExpenseText(
 今日の日付: ${todayStr}（「昨日」等の相対表現はここから計算）
 ${accountRuleText(acctList)}
 カテゴリ候補: ${categories.join("|")}
-形式: [{"date":"YYYY-MM-DD","account":"口座id","category":"カテゴリ","amount":金額の数値,"memo":"店名や品名"}]
+海外通貨（ドル・ユーロ・ウォンなど）での支出と読み取れる場合、amountはその通貨での金額そのままにしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円ならcurrencyは省略するか"JPY"にしてください。
+形式: [{"date":"YYYY-MM-DD","account":"口座id","category":"カテゴリ","amount":金額の数値（外貨ならその通貨のまま、換算しない）,"memo":"店名や品名","currency":"外貨の場合のみISO 4217コード"}]
 文章: ${text}`,
       },
     ],

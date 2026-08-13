@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { todayStrJST, periodRange } from "./date";
-import { isSupportedCurrency } from "./currency";
+import { isSupportedCurrency, fetchJpyRate } from "./currency";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -13,15 +13,13 @@ export interface NewExpenseInput {
   sub?: string | null;
   amount: number;
   memo?: string | null;
-  /** 海外通貨で入力した場合の元通貨・元金額・入力時点の円換算レート。指定時はamountをこれらから再計算する。 */
+  /** 海外通貨で入力した場合の元通貨・元金額。指定時はamountを無視し、そのつど取得した為替レートから再計算する
+   * （クライアントやAIが申告したレートは信用しない）。 */
   original_currency?: string | null;
   original_amount?: number | null;
-  exchange_rate?: number | null;
 }
 
-export class ValidationError extends Error {}
-
-function validateEntry(input: NewExpenseInput, allCats: string[]): {
+export interface PreparedExpense {
   date: string;
   account_id: AccountId;
   category: string;
@@ -31,7 +29,11 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
   original_currency: string | null;
   original_amount: number | null;
   exchange_rate: number | null;
-} {
+}
+
+export class ValidationError extends Error {}
+
+async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise<PreparedExpense> {
   if (!VALID_ACCOUNTS.includes(input.account_id as AccountId)) {
     throw new ValidationError(`invalid account_id: ${input.account_id}`);
   }
@@ -49,10 +51,9 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
       throw new ValidationError(`unsupported currency: ${input.original_currency}`);
     }
     const oa = Number(input.original_amount);
-    const rate = Number(input.exchange_rate);
     if (!Number.isFinite(oa) || oa <= 0) throw new ValidationError(`invalid original_amount: ${input.original_amount}`);
-    if (!Number.isFinite(rate) || rate <= 0) throw new ValidationError(`invalid exchange_rate: ${input.exchange_rate}`);
-    // 円換算額はクライアントの申告値ではなく、常に元金額×レートから再計算する。
+    // 円換算額は常にサーバー側でその場取得したレート×元金額から計算する（クライアント申告値は信用しない）。
+    const rate = await fetchJpyRate(input.original_currency);
     amount = Math.round(oa * rate);
     original_currency = input.original_currency;
     original_amount = oa;
@@ -77,20 +78,21 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
   };
 }
 
-/** Adds one or more expenses for `ownerId`, applying the §7 "その他"→カスタムカテゴリ promotion rule atomically via a DB function. */
+/** Adds one or more expenses for `ownerId`, applying the §7 "その他"→カスタムカテゴリ promotion rule atomically via a DB function.
+ * 戻り値のentriesは実際に円換算された最終金額を含む（外貨入力時の確認メッセージ表示などに使う）。 */
 export async function addExpenseEntries(
   ownerId: string,
   entries: NewExpenseInput[],
   allCats: string[]
-): Promise<{ promoted: string[] }> {
-  if (entries.length === 0) return { promoted: [] };
-  const prepared = entries.map((e) => validateEntry(e, allCats));
+): Promise<{ promoted: string[]; entries: PreparedExpense[] }> {
+  if (entries.length === 0) return { promoted: [], entries: [] };
+  const prepared = await Promise.all(entries.map((e) => validateEntry(e, allCats)));
   const { data, error } = await db().rpc("add_expense_entries", {
     p_owner: ownerId,
     p_entries: prepared,
   });
   if (error) throw error;
-  return { promoted: (data as string[] | null) ?? [] };
+  return { promoted: (data as string[] | null) ?? [], entries: prepared };
 }
 
 export async function deleteExpense(id: string, ownerId: string): Promise<boolean> {

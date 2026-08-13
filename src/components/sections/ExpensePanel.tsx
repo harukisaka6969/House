@@ -196,36 +196,45 @@ export default function ExpensePanel() {
     setTextBusy(true);
     setMsg("文章を解析中…");
     try {
-      const { entries } = await apiPost<{ entries: { date?: string; account?: string; category?: string; amount?: number; memo?: string }[] }>(
-        "/api/ai/parse-text",
-        { text: textIn }
-      );
+      const { entries } = await apiPost<{
+        entries: { date?: string; account?: string; category?: string; amount?: number; memo?: string; currency?: string }[];
+      }>("/api/ai/parse-text", { text: textIn });
       const valid = entries.filter((p) => Number(p.amount) > 0);
       if (valid.length === 0) throw new Error("no entries");
       if (valid.length === 1) {
         const p = valid[0];
-        setCurrency("JPY");
+        const foreign = p.currency && p.currency.toUpperCase() !== "JPY" ? p.currency.toUpperCase() : null;
+        setCurrency(foreign ?? "JPY");
+        if (foreign) setForeignAmount(String(p.amount ?? ""));
         setForm((f) => ({
           ...f,
           date: p.date || f.date,
           account: accounts.some((a) => a.id === p.account) ? (p.account as string) : f.account,
-          amount: String(p.amount ?? f.amount),
+          amount: foreign ? "" : String(p.amount ?? f.amount),
           category: p.category && allCats.includes(p.category) ? p.category : f.category,
           memo: p.memo || f.memo,
         }));
-        setMsg(`解析成功: ${p.memo || ""} ${fmt(p.amount || 0)}（${p.category}）。内容を確認して「追加する」を押してください。`);
+        setMsg(
+          foreign
+            ? `解析成功: ${p.memo || ""} ${p.amount}${foreign}（${p.category}）。円換算を確認して「追加する」を押してください。`
+            : `解析成功: ${p.memo || ""} ${fmt(p.amount || 0)}（${p.category}）。内容を確認して「追加する」を押してください。`
+        );
       } else {
         const { promoted } = await apiPost<{ promoted: string[] }>("/api/expenses", {
-          entries: valid.map((p) => ({
-            date: p.date,
-            account_id: accounts.some((a) => a.id === p.account) ? p.account : accounts[0]?.id,
-            category: p.category && allCats.includes(p.category) ? p.category : "その他",
-            amount: Number(p.amount),
-            memo: p.memo || "",
-          })),
+          entries: valid.map((p) => {
+            const foreign = p.currency && p.currency.toUpperCase() !== "JPY" ? p.currency.toUpperCase() : null;
+            return {
+              date: p.date,
+              account_id: accounts.some((a) => a.id === p.account) ? p.account : accounts[0]?.id,
+              category: p.category && allCats.includes(p.category) ? p.category : "その他",
+              amount: Number(p.amount),
+              memo: p.memo || "",
+              ...(foreign ? { original_currency: foreign, original_amount: Number(p.amount) } : {}),
+            };
+          }),
         });
         setMsg(
-          `${valid.length}件を追加しました: ${valid.map((p) => `${p.memo || p.category} ${fmt(p.amount || 0)}`).join(" / ")}。明細から修正できます。` +
+          `${valid.length}件を追加しました: ${valid.map((p) => `${p.memo || p.category} ${p.currency && p.currency.toUpperCase() !== "JPY" ? `${p.amount}${p.currency.toUpperCase()}` : fmt(p.amount || 0)}`).join(" / ")}。明細から修正できます。` +
             promoMsg(promoted)
         );
         refreshMonth();
@@ -246,21 +255,34 @@ export default function ExpensePanel() {
       fd.append("image", file);
       const res = await fetch("/api/ai/ocr", { method: "POST", body: fd });
       if (!res.ok) throw new Error("failed");
-      const parsed = (await res.json()) as { date: string | null; store: string; total: number; category: string; account?: string };
-      setCurrency("JPY");
+      const parsed = (await res.json()) as {
+        date: string | null;
+        store: string;
+        total: number;
+        category: string;
+        account?: string;
+        currency?: string;
+      };
+      const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
+      setCurrency(foreign ?? "JPY");
+      setForeignAmount(foreign ? String(parsed.total || "") : "");
       setForm((f) => {
         const account = accounts.some((a) => a.id === parsed.account) ? (parsed.account as string) : f.account;
         const nextCats = categoriesForAccount(allCats, account);
         return {
           ...f,
           date: parsed.date || f.date,
-          amount: String(parsed.total || f.amount),
+          amount: foreign ? "" : String(parsed.total || f.amount),
           account,
           category: nextCats.includes(parsed.category) ? parsed.category : nextCats.includes(f.category) ? f.category : nextCats[0] ?? f.category,
           memo: parsed.store || f.memo,
         };
       });
-      setMsg(`読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`);
+      setMsg(
+        foreign
+          ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}。円換算を確認して追加してください。`
+          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`
+      );
     } catch {
       setMsg("読み取りに失敗しました。手入力するか、別の写真で試してください。");
     }
