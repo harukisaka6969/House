@@ -11,6 +11,9 @@ const entrySchema = z.object({
   sub: z.string().optional().nullable(),
   amount: z.number(),
   memo: z.string().optional().nullable(),
+  original_currency: z.string().optional().nullable(),
+  original_amount: z.number().optional().nullable(),
+  exchange_rate: z.number().optional().nullable(),
 });
 const bodySchema = z.object({ entries: z.array(entrySchema).min(1).max(50) });
 

@@ -63,3 +63,37 @@ export const TONE_COLOR: Record<string, string> = {
   bad: "#F26D5F",
   muted: "#93A0AE",
 };
+
+/** Frankfurter（ECB参照レート、APIキー不要）が対応する通貨のうち、旅行先として一般的なもの。
+ * 支出入力フォーム（クライアント）と為替レート取得（サーバー）の両方から参照する。 */
+export const CURRENCIES: { code: string; label: string }[] = [
+  { code: "USD", label: "米ドル" },
+  { code: "EUR", label: "ユーロ" },
+  { code: "GBP", label: "英ポンド" },
+  { code: "KRW", label: "韓国ウォン" },
+  { code: "CNY", label: "中国元" },
+  { code: "THB", label: "タイバーツ" },
+  { code: "SGD", label: "シンガポールドル" },
+  { code: "HKD", label: "香港ドル" },
+  { code: "AUD", label: "豪ドル" },
+  { code: "CAD", label: "カナダドル" },
+  { code: "CHF", label: "スイスフラン" },
+  { code: "INR", label: "インドルピー" },
+  { code: "IDR", label: "インドネシアルピア" },
+  { code: "MYR", label: "マレーシアリンギット" },
+  { code: "PHP", label: "フィリピンペソ" },
+  { code: "NZD", label: "NZドル" },
+  { code: "TRY", label: "トルコリラ" },
+  { code: "ZAR", label: "南アフリカランド" },
+  { code: "MXN", label: "メキシコペソ" },
+  { code: "DKK", label: "デンマーククローネ" },
+  { code: "NOK", label: "ノルウェークローネ" },
+  { code: "SEK", label: "スウェーデンクローナ" },
+  { code: "PLN", label: "ポーランドズウォティ" },
+  { code: "CZK", label: "チェココルナ" },
+  { code: "HUF", label: "ハンガリーフォリント" },
+  { code: "ISK", label: "アイスランドクローナ" },
+  { code: "ILS", label: "イスラエルシェケル" },
+  { code: "BRL", label: "ブラジルレアル" },
+  { code: "RON", label: "ルーマニアレウ" },
+];

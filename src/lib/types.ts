@@ -30,6 +30,11 @@ export interface ExpenseRow {
   created_at: string;
   /** 'manual'（通常入力・文章解析・OCR含む）| 'journal'（日記本文からAI自動抽出）。 */
   source: string;
+  /** 海外通貨で入力した場合の元通貨（例: "USD"）。円入力ならnull。amountは常に円換算後の値。 */
+  original_currency: string | null;
+  original_amount: number | null;
+  /** original_currency 1単位あたりの円換算レート（入力時点）。 */
+  exchange_rate: number | null;
 }
 
 /** Expense as returned by the API — may be masked for the partner's private-account rows. */

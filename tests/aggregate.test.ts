@@ -33,6 +33,9 @@ function row(overrides: Partial<ExpenseRow>): ExpenseRow {
     memo: "",
     created_at: "2026-07-01T00:00:00Z",
     source: "manual",
+    original_currency: null,
+    original_amount: null,
+    exchange_rate: null,
     ...overrides,
   };
 }

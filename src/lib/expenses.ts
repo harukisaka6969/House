@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { todayStrJST, periodRange } from "./date";
+import { isSupportedCurrency } from "./currency";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -12,6 +13,10 @@ export interface NewExpenseInput {
   sub?: string | null;
   amount: number;
   memo?: string | null;
+  /** 海外通貨で入力した場合の元通貨・元金額・入力時点の円換算レート。指定時はamountをこれらから再計算する。 */
+  original_currency?: string | null;
+  original_amount?: number | null;
+  exchange_rate?: number | null;
 }
 
 export class ValidationError extends Error {}
@@ -23,6 +28,9 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
   sub: string | null;
   amount: number;
   memo: string;
+  original_currency: string | null;
+  original_amount: number | null;
+  exchange_rate: number | null;
 } {
   if (!VALID_ACCOUNTS.includes(input.account_id as AccountId)) {
     throw new ValidationError(`invalid account_id: ${input.account_id}`);
@@ -30,7 +38,27 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
   if (!allCats.includes(input.category)) {
     throw new ValidationError(`invalid category: ${input.category}`);
   }
-  const amount = Math.round(Number(input.amount));
+
+  let amount = Math.round(Number(input.amount));
+  let original_currency: string | null = null;
+  let original_amount: number | null = null;
+  let exchange_rate: number | null = null;
+
+  if (input.original_currency) {
+    if (!isSupportedCurrency(input.original_currency)) {
+      throw new ValidationError(`unsupported currency: ${input.original_currency}`);
+    }
+    const oa = Number(input.original_amount);
+    const rate = Number(input.exchange_rate);
+    if (!Number.isFinite(oa) || oa <= 0) throw new ValidationError(`invalid original_amount: ${input.original_amount}`);
+    if (!Number.isFinite(rate) || rate <= 0) throw new ValidationError(`invalid exchange_rate: ${input.exchange_rate}`);
+    // 円換算額はクライアントの申告値ではなく、常に元金額×レートから再計算する。
+    amount = Math.round(oa * rate);
+    original_currency = input.original_currency;
+    original_amount = oa;
+    exchange_rate = rate;
+  }
+
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ValidationError(`invalid amount: ${input.amount}`);
   }
@@ -43,6 +71,9 @@ function validateEntry(input: NewExpenseInput, allCats: string[]): {
     sub: input.category === "その他" && input.sub?.trim() ? input.sub.trim() : null,
     amount,
     memo: input.memo?.trim() ?? "",
+    original_currency,
+    original_amount,
+    exchange_rate,
   };
 }
 

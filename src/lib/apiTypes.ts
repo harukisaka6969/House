@@ -27,8 +27,16 @@ export type ExpenseOut =
       owner_name: string;
       masked: false;
       source: string;
+      original_currency: string | null;
+      original_amount: number | null;
+      exchange_rate: number | null;
     }
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
+
+export interface CurrencyRateOut {
+  currency: string;
+  rate: number;
+}
 
 export interface IncomeOut {
   id: string;

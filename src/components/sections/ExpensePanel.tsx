@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
-import { CAT_COLORS, categoriesForAccount } from "@/lib/constants";
+import { CAT_COLORS, CURRENCIES, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import type { SplitEventOut, SplitEventDetailOut } from "@/lib/apiTypes";
+import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut } from "@/lib/apiTypes";
 import { TT, fmtTooltip, MoneyViewToggle, ownerFilterName } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
@@ -29,6 +29,10 @@ export default function ExpensePanel() {
     sub: "",
   });
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "" });
+  const [currency, setCurrency] = useState("JPY");
+  const [foreignAmount, setForeignAmount] = useState("");
+  const [rate, setRate] = useState<number | null>(null);
+  const [rateErr, setRateErr] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -65,7 +69,26 @@ export default function ExpensePanel() {
       .catch(() => setSplitEvents([]));
   }, []);
 
+  // 通貨を切り替えたら現在の為替レートを取得する（金額のプレビュー・登録額の根拠に使う）。
+  useEffect(() => {
+    if (currency === "JPY") return;
+    let cancelled = false;
+    apiGet<CurrencyRateOut>(`/api/currency/rate?currency=${currency}`)
+      .then((r) => {
+        if (!cancelled) setRate(r.rate);
+      })
+      .catch(() => {
+        if (!cancelled) setRateErr("為替レートの取得に失敗しました。時間をおいて再試行してください。");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currency]);
+
   if (!month) return null;
+
+  const isForeign = currency !== "JPY";
+  const jpyPreview = isForeign && rate && foreignAmount ? Math.round(Number(foreignAmount) * rate) : null;
 
   const catOptions = categoriesForAccount(allCats, form.account);
 
@@ -94,8 +117,13 @@ export default function ExpensePanel() {
   };
 
   const addExpense = async () => {
-    if (!form.amount || Number(form.amount) <= 0) {
-      setMsg("金額を入力してください。");
+    const amountToUse = isForeign ? jpyPreview : Number(form.amount);
+    if (!amountToUse || amountToUse <= 0) {
+      setMsg(isForeign ? "外貨の金額を入力してください。" : "金額を入力してください。");
+      return;
+    }
+    if (isForeign && !rate) {
+      setMsg(rateErr || "為替レートを取得中です。少し待ってから再試行してください。");
       return;
     }
     setBusy(true);
@@ -106,9 +134,10 @@ export default function ExpensePanel() {
             date: form.date || undefined,
             account_id: form.account,
             category: form.category,
-            amount: Number(form.amount),
+            amount: amountToUse,
             memo: form.memo,
             sub: form.category === "その他" ? form.sub.trim() : undefined,
+            ...(isForeign ? { original_currency: currency, original_amount: Number(foreignAmount), exchange_rate: rate } : {}),
           },
         ],
       });
@@ -120,7 +149,7 @@ export default function ExpensePanel() {
             await apiPost(`/api/split/${linkEvent.share_token}/expenses`, {
               payerId: payer.id,
               beneficiaryIds: linkBeneficiaryIds,
-              amount: Number(form.amount),
+              amount: amountToUse,
               memo: form.memo,
               date: form.date || todayStrJST(),
             });
@@ -131,6 +160,7 @@ export default function ExpensePanel() {
         }
       }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
+      setForeignAmount("");
       setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote);
       refreshMonth();
       if (promoted.length) refreshSettings();
@@ -174,6 +204,7 @@ export default function ExpensePanel() {
       if (valid.length === 0) throw new Error("no entries");
       if (valid.length === 1) {
         const p = valid[0];
+        setCurrency("JPY");
         setForm((f) => ({
           ...f,
           date: p.date || f.date,
@@ -216,6 +247,7 @@ export default function ExpensePanel() {
       const res = await fetch("/api/ai/ocr", { method: "POST", body: fd });
       if (!res.ok) throw new Error("failed");
       const parsed = (await res.json()) as { date: string | null; store: string; total: number; category: string; account?: string };
+      setCurrency("JPY");
       setForm((f) => {
         const account = accounts.some((a) => a.id === parsed.account) ? (parsed.account as string) : f.account;
         const nextCats = categoriesForAccount(allCats, account);
@@ -447,9 +479,52 @@ export default function ExpensePanel() {
             </select>
           </div>
           <div>
-            <label className="mf-fieldlabel required" htmlFor="mf-exp-amount">金額（円）</label>
-            <input id="mf-exp-amount" className="mf-input mf-mono" type="number" placeholder="例: 480" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            <label className="mf-fieldlabel" htmlFor="mf-exp-currency">通貨</label>
+            <select
+              id="mf-exp-currency"
+              className="mf-input"
+              value={currency}
+              onChange={(e) => {
+                setCurrency(e.target.value);
+                setRate(null);
+                setRateErr("");
+              }}
+            >
+              <option value="JPY">円（JPY）</option>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}（{c.code}）
+                </option>
+              ))}
+            </select>
           </div>
+          {isForeign ? (
+            <div>
+              <label className="mf-fieldlabel required" htmlFor="mf-exp-famount">
+                金額（{currency}）
+              </label>
+              <input
+                id="mf-exp-famount"
+                className="mf-input mf-mono"
+                type="number"
+                placeholder="例: 42.50"
+                value={foreignAmount}
+                onChange={(e) => setForeignAmount(e.target.value)}
+              />
+              <div className="mf-hint" style={{ margin: "4px 0 0" }}>
+                {rateErr
+                  ? rateErr
+                  : rate
+                    ? `1 ${currency} = ${rate.toFixed(2)}円 ／ ${jpyPreview !== null ? `≈ ${fmt(jpyPreview)}` : "金額を入力すると円換算を表示"}`
+                    : "為替レートを取得中…"}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="mf-fieldlabel required" htmlFor="mf-exp-amount">金額（円）</label>
+              <input id="mf-exp-amount" className="mf-input mf-mono" type="number" placeholder="例: 480" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+            </div>
+          )}
           <div>
             <label className="mf-fieldlabel" htmlFor="mf-exp-memo">メモ（任意）</label>
             <input id="mf-exp-memo" className="mf-input" placeholder="例: コンビニ" value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} />
@@ -711,7 +786,14 @@ export default function ExpensePanel() {
                   </span>
                   {e.owner_name !== meName && <span className="mf-ownerchip">{e.owner_name}</span>}
                   <span className="mf-listmemo">{e.memo}</span>
-                  <span className="mf-mono mf-listamt">{fmt(e.amount)}</span>
+                  <span className="mf-mono mf-listamt">
+                    {fmt(e.amount)}
+                    {e.original_currency && (
+                      <span style={{ display: "block", fontSize: 10, color: "#6B7684", fontWeight: 400 }}>
+                        {e.original_amount} {e.original_currency}
+                      </span>
+                    )}
+                  </span>
                   <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
                     編集
                   </button>
