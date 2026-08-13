@@ -127,13 +127,13 @@ export default function SavingsActions() {
 
       <div className="mf-panel">
         <label className="mf-fieldlabel" htmlFor="sv-desc">
-          今日の行動
+          行動を登録
         </label>
         <textarea
           id="sv-desc"
           className="mf-input"
           rows={3}
-          placeholder="例: ブルガリアヨーグルトを買う代わりに自家培養ヨーグルトを1.1キロ作った / お金の代わりに楽天ポイントを800円分使った"
+          placeholder="節約した行動を書く"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
@@ -193,7 +193,7 @@ export default function SavingsActions() {
       <div className="mf-formgrid" style={{ marginBottom: 4 }}>
         <input
           className="mf-input"
-          placeholder="🔍 キーワードで検索（例: ヨーグルト、ポイント）"
+          placeholder="🔍 検索"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -207,12 +207,32 @@ export default function SavingsActions() {
             const expanded = expandedIds.has(a.id);
             return (
               <div key={a.id} className={`sv-card${expanded ? " sv-card-expanded" : ""}`}>
-                <button className="sv-cardhead" onClick={() => toggleExpanded(a.id)}>
+                <div
+                  className="sv-cardhead"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleExpanded(a.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") toggleExpanded(a.id);
+                  }}
+                >
                   <span className="sv-cardemoji">{a.emoji || "💡"}</span>
                   <span className="sv-cardtitle">{a.title}</span>
                   <span className="sv-cardamount">{fmt(a.estimated_saving)}</span>
+                  <button
+                    className="mf-iconbtn sv-cardquick"
+                    disabled={repeatingId === a.id}
+                    title="今日の行動として追加"
+                    aria-label="今日の行動として追加"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      repeatToday(a.id);
+                    }}
+                  >
+                    {repeatingId === a.id ? "…" : "🔁"}
+                  </button>
                   <span className="sv-chevron">{expanded ? "︿" : "﹀"}</span>
-                </button>
+                </div>
                 {expanded && (
                   <div className="sv-cardbody">
                     <div className="sv-cardmeta">
@@ -230,14 +250,6 @@ export default function SavingsActions() {
                       </div>
                     )}
                     <div className="mf-row" style={{ marginTop: 8 }}>
-                      <button
-                        className="mf-btn ghost"
-                        style={{ padding: "4px 10px", fontSize: 12 }}
-                        disabled={repeatingId === a.id}
-                        onClick={() => repeatToday(a.id)}
-                      >
-                        {repeatingId === a.id ? "登録中…" : "🔁 今日も同じことをした"}
-                      </button>
                       <button className="mf-del" onClick={() => remove(a.id)}>
                         削除
                       </button>

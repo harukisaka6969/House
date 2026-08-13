@@ -230,6 +230,7 @@ select.mf-input option { background: #181E25; }
 .sv-cardemoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
 .sv-cardtitle { font-weight: 800; font-size: 14.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sv-cardamount { font-family: var(--font-num), monospace; font-weight: 800; font-size: 15px; color: #45C48F; white-space: nowrap; flex-shrink: 0; }
+.sv-cardquick { width: 28px; height: 28px; font-size: 14px; flex-shrink: 0; }
 .sv-chevron { font-size: 11px; color: #6B7684; flex-shrink: 0; width: 14px; text-align: center; }
 .sv-cardbody { padding: 0 16px 14px; }
 .sv-cardmeta { font-size: 11.5px; color: #6B7684; margin-top: 2px; }
