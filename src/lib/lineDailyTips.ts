@@ -3,7 +3,7 @@ import { db } from "./db";
 import { generateDailyTip } from "./anthropic";
 import { prevDayStr } from "./date";
 
-export type TipCategory = "news" | "health" | "money" | "philosophy" | "wellbeing" | "chinese_philosophy";
+export type TipCategory = "news" | "health" | "money" | "philosophy" | "wellbeing" | "chinese_philosophy" | "world_culture";
 
 export interface TipDef {
   category: TipCategory;
@@ -60,7 +60,7 @@ export const TIP_DEFS: TipDef[] = [
     label: "☯️ 東洋の智恵",
     useWebSearch: false,
     buildPrompt: (recentFull, olderSummaries) =>
-      `あなたは中国古典・東洋思想の専門家です。易経（易学）、儒教、道教、諸子百家など、古代中国の哲学思想の中から1つのテーマ・言葉・逸話を選び、その意味と、現代の生活や考え方にどう活かせるかを日本語で5〜6文程度、じっくりと掘り下げて伝えてください。読んだ人が今日、少し立ち止まって考えたくなるような深さのある内容にしてください。原典の言葉を引用する場合は、正確な出典（書名など）がはっきりしているものだけを扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
+      `あなたは中国古典・東洋思想と現代心理学の両方に精通した専門家です。易経（易学）、儒教、道教、諸子百家など、古代中国の哲学思想の中から1つのテーマ・言葉・逸話を選び、それを現代の認知バイアス・行動心理学・対人関係の心理学など、心理学の知見と結びつけて、日本語で5〜6文程度、じっくりと掘り下げて伝えてください（例: 老子の「上善若水」と返報性・協調行動の心理、儒教の「己所不欲、勿施於人」と共感・視点取得の心理学、易経の変化の思想と現状維持バイアスなど）。古代の智恵が現代の心理学的な知見とどうつながるかが伝わるようにし、読んだ人が今日、少し立ち止まって考えたくなるような深さのある内容にしてください。原典の言葉や心理学の知見を引用する場合は、正確な出典・研究がはっきりしているものだけを扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
   {
     category: "health",
@@ -98,6 +98,14 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     useWebSearch: false,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたはメンタルヘルス・ウェルビーイングの専門家です。精神的な健康について、今日から実践できる具体的なワンポイントアドバイスを日本語で3文程度にまとめてください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
+  },
+  {
+    category: "world_culture",
+    time: "23:00",
+    label: "🌏 世界の異文化に学ぶ問い",
+    useWebSearch: false,
+    buildPrompt: (recentFull, olderSummaries) =>
+      `あなたは文化人類学・比較文化論の専門家です。世界のどこか（地域・民族・時代は問いません。日本や現代の主流な価値観以外であれば構いません）に見られる、時間の捉え方、死生観、個人と共同体の関係、成功や豊かさの定義、自然との向き合い方、家族やコミュニティのあり方などについての、独自のものの見方・考え方を1つ選んでください。その文化的背景を日本語で4〜5文程度で分かりやすく紹介したうえで、最後に改行してから、それを踏まえて読んだ人自身の価値観を振り返らせるような、一晩じっくり考えさせられる問いかけを1文だけ加えてください。事実として不正確な内容や、特定の文化への偏見・ステレオタイプ化は避け、敬意を持って扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
 ];
 
