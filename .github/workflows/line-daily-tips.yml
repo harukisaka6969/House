@@ -1,6 +1,6 @@
 name: LINE daily life tips
 
-# 15分おきに /api/cron/line-daily-tips を叩く。09:00/12:00/15:00/18:00/21:00(JST)のいずれかに一致した
+# 15分おきに /api/cron/line-daily-tips を叩く。06:00/09:00/12:00/15:00/18:00/21:00(JST)のいずれかに一致した
 # ときだけ、その時刻担当のtipsが生成・送信される（サーバー側で時刻判定・冪等性チェックを行う）。
 on:
   schedule:

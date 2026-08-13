@@ -3,7 +3,7 @@ import { db } from "./db";
 import { generateDailyTip } from "./anthropic";
 import { prevDayStr } from "./date";
 
-export type TipCategory = "news" | "health" | "money" | "philosophy" | "wellbeing";
+export type TipCategory = "news" | "health" | "money" | "philosophy" | "wellbeing" | "chinese_philosophy";
 
 export interface TipDef {
   category: TipCategory;
@@ -41,13 +41,26 @@ function extractTag(text: string, tag: string): string {
 export const TIP_DEFS: TipDef[] = [
   {
     category: "news",
-    time: "09:00",
+    time: "06:00",
     label: "📰 昨日のニュースダイジェスト",
     useWebSearch: true,
     buildPrompt: (recentFull, olderSummaries, today) => {
       const yesterday = prevDayStr(today);
-      return `あなたは日本語のニュースダイジェストを書くライターです。web検索を使って、${yesterday}（${today}の前日）に日本国内外で報じられた重要なニュースの中から、家庭の生活に影響を与えるもの（物価・金利・税制・天候や災害・生活インフラなど）や、ビジネス・経済への影響が大きいものを中心に選び、2分程度で読める分量（800〜1000文字程度）の日本語のダイジェストとして自然な文章でまとめてください。箇条書きは使わず、読み物として自然につながる文章にしてください。検索中である旨や「検索結果をもとに作成します」のような、作成プロセスに関する言葉は一切含めないでください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`;
+      return `あなたは日本語のニュースダイジェストを書くライターです。web検索を使って、${yesterday}（${today}の前日）に日本国内外で報じられた重要なニュースの中から、家庭の生活に影響を与えるもの（物価・金利・税制・天候や災害・生活インフラなど）や、ビジネス・経済への影響が大きいものを中心に選び、2分程度で読める分量（800〜1000文字程度）の日本語のダイジェストとして自然な文章でまとめてください。箇条書きは使わず、読み物として自然につながる文章にしてください。
+
+ダイジェスト本文の最後に、1行空けてから「🧠 今日の豆知識」という見出しを付けた段落を追加してください。この豆知識はニュースの内容とは無関係で構いません。科学、歴史、言語学、宇宙、生物、数学、美術、建築、地理、経済学、心理学など幅広い専門分野の中から、日によって異なる分野を選び、その分野について一般にはあまり知られていない、少し専門的だけれど分かりやすく説明すれば「へえ」と思えるような面白い豆知識を2〜3文で紹介してください。事実として正確なものだけを扱い、不確かな内容は含めないでください。
+
+検索中である旨や「検索結果をもとに作成します」のような、作成プロセスに関する言葉は一切含めないでください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}
+（豆知識についても、直近に取り上げた分野・話題と重複しないようにしてください。）`;
     },
+  },
+  {
+    category: "chinese_philosophy",
+    time: "09:00",
+    label: "☯️ 東洋の智恵",
+    useWebSearch: false,
+    buildPrompt: (recentFull, olderSummaries) =>
+      `あなたは中国古典・東洋思想の専門家です。易経（易学）、儒教、道教、諸子百家など、古代中国の哲学思想の中から1つのテーマ・言葉・逸話を選び、その意味と、現代の生活や考え方にどう活かせるかを日本語で5〜6文程度、じっくりと掘り下げて伝えてください。読んだ人が今日、少し立ち止まって考えたくなるような深さのある内容にしてください。原典の言葉を引用する場合は、正確な出典（書名など）がはっきりしているものだけを扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
   {
     category: "health",

@@ -4,7 +4,7 @@ import { tipsDueForTime, hasTipSentToday, generateAndRecordTip } from "@/lib/lin
 import { getLineRecipients } from "@/lib/profiles";
 import { sendLineMessage } from "@/lib/lineNotify";
 
-/** GitHub Actionsからおおよそ15分おきに呼ばれる（実際の発火間隔は保証されない）。09:00/12:00/15:00/
+/** GitHub Actionsからおおよそ15分おきに呼ばれる（実際の発火間隔は保証されない）。06:00/09:00/12:00/15:00/
  * 18:00/21:00(JST)のうち、予定時刻を過ぎていて今日まだ送っていないものを都度追いつき送信する
  * （1カテゴリ1日1回・冪等）。 */
 export async function GET(req: Request) {
