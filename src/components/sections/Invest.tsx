@@ -2,7 +2,7 @@
 
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { fmt } from "@/lib/judge";
-import { SectionHead, StatCard, TT, fmtTooltip } from "../common";
+import { SectionHead, StatCard, TT, fmtTooltip, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 import InvestPanel from "./InvestPanel";
 
@@ -21,6 +21,7 @@ export default function Invest() {
   return (
     <section className="mf-section">
       <SectionHead no="05" title="投資" sub="今月の投資額・累計・銘柄別内訳と、銘柄リサーチ。" />
+      <MoneyViewToggle />
       <div className="mf-cards4" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
         <StatCard label="今月の投資" value={fmt(invest)} color="#8B7CF6" sub={dsub(invest, prev?.invest)} />
         <StatCard label="累計投資額（記録全期間）" value={fmt(month.aggregates.cumInvest)} color="#E7ECF2" />

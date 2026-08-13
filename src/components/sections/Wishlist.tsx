@@ -5,7 +5,7 @@ import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { WishlistItemOut } from "@/lib/apiTypes";
-import { SectionHead } from "../common";
+import { SectionHead, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
 
@@ -30,7 +30,7 @@ const emptyForm = {
 };
 
 export default function Wishlist() {
-  const { month, settings, me } = useDashboard();
+  const { month, settings, me, ownerFilter } = useDashboard();
   const [items, setItems] = useState<WishlistItemOut[] | null>(null);
   const [tab, setTab] = useState<Tab>("saving");
   const [showForm, setShowForm] = useState(false);
@@ -44,9 +44,10 @@ export default function Wishlist() {
   const [contributeErr, setContributeErr] = useState("");
 
   const load = () => {
-    apiGet<{ items: WishlistItemOut[] }>("/api/wishlist").then((r) => setItems(r.items)).catch(() => setItems([]));
+    const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
+    apiGet<{ items: WishlistItemOut[] }>(`/api/wishlist${qs}`).then((r) => setItems(r.items)).catch(() => setItems([]));
   };
-  useEffect(load, []);
+  useEffect(load, [ownerFilter]);
 
   if (!items) return <div className="mf-empty">読み込み中…</div>;
 
@@ -171,6 +172,7 @@ export default function Wishlist() {
   return (
     <section className="mf-section">
       <SectionHead no="08" title="買いたいもの" sub="車・ワインセラー等のラグジュアリー購入の計画と進捗。" />
+      <MoneyViewToggle />
 
       <div className="mf-panel">
         <div className="mf-paneltitle">貯蓄中アイテムの状況</div>

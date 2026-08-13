@@ -4,12 +4,16 @@ import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAllWishlistItems, visibleWishlistItems, createWishlistItem } from "@/lib/wishlist";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await requireOwnerSession();
+    const { searchParams } = new URL(req.url);
+    const owner = searchParams.get("owner") || undefined;
     const [rows, profiles] = await Promise.all([getAllWishlistItems(), getAllProfiles()]);
     const nameOf = makeNameLookup(profiles);
-    const items = visibleWishlistItems(rows, session.profile_id).map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
+    const visible = visibleWishlistItems(rows, session.profile_id);
+    const scoped = owner ? visible.filter((r) => r.owner === owner) : visible;
+    const items = scoped.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
     return NextResponse.json({ items });
   } catch (e) {
     return errorResponse(e);

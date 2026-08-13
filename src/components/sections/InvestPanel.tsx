@@ -5,21 +5,23 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recha
 import { fmt } from "@/lib/judge";
 import { CAT_COLORS } from "@/lib/constants";
 import { apiDelete, apiPost } from "@/lib/apiClient";
-import { TT, fmtTooltip } from "../common";
+import { TT, fmtTooltip, ownerFilterName } from "../common";
 import { useDashboard } from "../DashboardContext";
 
 export default function InvestPanel() {
-  const { month, refreshMonth, me } = useDashboard();
+  const { month, refreshMonth, me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const filterName = ownerFilterName(me, ownerFilter);
   const [form, setForm] = useState({ date: "", name: "", amount: "", memo: "" });
   const [query, setQuery] = useState("");
   const [research, setResearch] = useState({ busy: false, text: "", err: "" });
 
   if (!month) return null;
   const { invest } = month.aggregates.monthTotals;
+  const investments = filterName ? month.investments.filter((iv) => iv.owner_name === filterName) : month.investments;
 
   const perStock = new Map<string, number>();
-  month.investments.forEach((iv) => perStock.set(iv.name, (perStock.get(iv.name) ?? 0) + (Number(iv.amount) || 0)));
+  investments.forEach((iv) => perStock.set(iv.name, (perStock.get(iv.name) ?? 0) + (Number(iv.amount) || 0)));
   const perStockData = [...perStock.entries()].map(([name, value]) => ({ name, value }));
 
   const addInvest = async () => {
@@ -50,7 +52,7 @@ export default function InvestPanel() {
     }
   };
 
-  const sorted = [...month.investments].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...investments].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <>

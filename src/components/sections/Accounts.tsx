@@ -2,18 +2,20 @@
 
 import { fmt } from "@/lib/judge";
 import { TONE_COLOR, PRIVATE_ACCOUNT } from "@/lib/constants";
-import { SectionHead } from "../common";
+import { SectionHead, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AccountDetail from "./AccountDetail";
 
 export default function Accounts() {
-  const { month, me } = useDashboard();
+  const { month, me, ownerFilter } = useDashboard();
   if (!month) return null;
   const meName = me?.profile.name ?? "";
+  const showMineNote = ownerFilter === null || ownerFilter === me?.profile.id;
 
   return (
     <section className="mf-section">
       <SectionHead no="03" title="口座別の状況" sub="4つの口座それぞれの予算消化と判定。" />
+      <MoneyViewToggle />
       <div className="mf-acctgrid">
         {month.aggregates.perAccount.map((a) => {
           const rate = a.budget ? Math.min(a.spent / a.budget, 1.5) : 0;
@@ -36,7 +38,7 @@ export default function Accounts() {
               <div className="mf-numsub" style={{ marginTop: 4 }}>
                 残り {fmt(Math.max(a.budget - a.spent, 0))}
                 {a.spent > a.budget && ` ／ 超過 ${fmt(a.spent - a.budget)}`}
-                {a.id === PRIVATE_ACCOUNT && (
+                {a.id === PRIVATE_ACCOUNT && showMineNote && (
                   <span>
                     {" "}
                     ／ うち{meName}の分 {fmt(a.spentMine)} 🔒

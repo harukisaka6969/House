@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiDelete } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import type { SavingsActionOut } from "@/lib/apiTypes";
-import { SectionHead, StatCard } from "../common";
+import { SectionHead, StatCard, MoneyViewToggle } from "../common";
+import { useDashboard } from "../DashboardContext";
 
 export default function SavingsActions() {
+  const { ownerFilter } = useDashboard();
   const [actions, setActions] = useState<SavingsActionOut[] | null>(null);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -15,11 +17,12 @@ export default function SavingsActions() {
   const [query, setQuery] = useState("");
 
   const load = () => {
-    apiGet<{ actions: SavingsActionOut[] }>("/api/savings-actions")
+    const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
+    apiGet<{ actions: SavingsActionOut[] }>(`/api/savings-actions${qs}`)
       .then((r) => setActions(r.actions))
       .catch(() => setActions([]));
   };
-  useEffect(load, []);
+  useEffect(load, [ownerFilter]);
 
   const totalSaving = useMemo(() => (actions ?? []).reduce((s, a) => s + a.estimated_saving, 0), [actions]);
 
@@ -40,9 +43,9 @@ export default function SavingsActions() {
     setSubmitting(true);
     setMsg("");
     try {
-      const res = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { description: text });
-      setActions((prev) => [res.action, ...(prev ?? [])]);
+      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { description: text });
       setDescription("");
+      load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
     } finally {
@@ -60,8 +63,8 @@ export default function SavingsActions() {
     setRepeatingId(id);
     setMsg("");
     try {
-      const res = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { duplicate_of: id });
-      setActions((prev) => [res.action, ...(prev ?? [])]);
+      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", { duplicate_of: id });
+      load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
     } finally {
@@ -76,6 +79,7 @@ export default function SavingsActions() {
         title="節約アクション"
         sub="工夫して支出を抑えた行動を書くと、AIが経済効果を見積もってカードにします。キーワードで後から検索できます。"
       />
+      <MoneyViewToggle />
 
       <div className="mf-cards4">
         <StatCard label="登録件数" value={`${actions.length}件`} color="#E7ECF2" />

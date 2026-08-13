@@ -10,8 +10,9 @@ export interface TrendPoint {
   invest: number;
 }
 
-/** 直近12ヶ月の月別 収入/支出/投資（世帯合計・spec §6 GET /api/trend）。 */
-export async function getTrend(): Promise<TrendPoint[]> {
+/** 直近12ヶ月の月別 収入/支出/投資（既定は世帯合計・spec §6 GET /api/trend）。
+ * ownerFilterを指定すると、その人の分（＋owner無しの共有収入）だけに絞る。 */
+export async function getTrend(ownerFilter?: string): Promise<TrendPoint[]> {
   const months: string[] = [];
   let cursor = nowMonthKeyJST();
   for (let i = 0; i < 12; i++) {
@@ -20,19 +21,27 @@ export async function getTrend(): Promise<TrendPoint[]> {
   }
   const fromDate = periodRange(months[0]).from;
 
-  const [{ data: incomeRows, error: incErr }, { data: expenseRows, error: expErr }, { data: investRows, error: invErr }] =
-    await Promise.all([
-      db().from("incomes").select("month, amount").in("month", months),
-      db().from("expenses").select("date, amount").gte("date", fromDate),
-      db().from("investments").select("date, amount").gte("date", fromDate),
-    ]);
+  const incomeQuery = db().from("incomes").select("month, amount, owner").in("month", months);
+  let expenseQuery = db().from("expenses").select("date, amount, owner").gte("date", fromDate);
+  let investQuery = db().from("investments").select("date, amount, owner").gte("date", fromDate);
+  if (ownerFilter) {
+    expenseQuery = expenseQuery.eq("owner", ownerFilter);
+    investQuery = investQuery.eq("owner", ownerFilter);
+  }
+
+  const [{ data: incomeRowsRaw, error: incErr }, { data: expenseRows, error: expErr }, { data: investRows, error: invErr }] =
+    await Promise.all([incomeQuery, expenseQuery, investQuery]);
   if (incErr) throw incErr;
   if (expErr) throw expErr;
   if (invErr) throw invErr;
 
+  const incomeRows = ownerFilter
+    ? (incomeRowsRaw ?? []).filter((r) => r.owner === ownerFilter || r.owner === null)
+    : incomeRowsRaw ?? [];
+
   return months.map((month) => ({
     month,
-    income: sumAmount((incomeRows ?? []).filter((r) => r.month === month)),
+    income: sumAmount(incomeRows.filter((r) => r.month === month)),
     expense: sumAmount((expenseRows ?? []).filter((r) => periodKeyOfDate(r.date as string) === month)),
     invest: sumAmount((investRows ?? []).filter((r) => periodKeyOfDate(r.date as string) === month)),
   }));

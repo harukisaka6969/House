@@ -42,8 +42,10 @@ export async function getInvestmentsInRange(fromDate: string, toDateExclusive: s
   return (data ?? []) as InvestmentRow[];
 }
 
-export async function getCumulativeInvestment(): Promise<number> {
-  const { data, error } = await db().from("investments").select("amount");
+export async function getCumulativeInvestment(ownerId?: string): Promise<number> {
+  let query = db().from("investments").select("amount");
+  if (ownerId) query = query.eq("owner", ownerId);
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
 }

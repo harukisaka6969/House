@@ -16,7 +16,8 @@ import {
 import { fmt } from "@/lib/judge";
 import { apiGet } from "@/lib/apiClient";
 import type { FlowAnalysisResponse, FlowMonthPoint } from "@/lib/apiTypes";
-import { SectionHead, StatCard, TT } from "../common";
+import { SectionHead, StatCard, TT, MoneyViewToggle } from "../common";
+import { useDashboard } from "../DashboardContext";
 
 // dataviz skill: 固定順の検証済みカテゴリカルパレット（ダーク面 #181E25 で全隣接ペアが基準を満たす、node scripts/validate_palette.jsで検証済み）
 const SERIES_COLORS = ["#3987e5", "#008300", "#d55181", "#c98500", "#199e70", "#d95926"];
@@ -37,13 +38,15 @@ function monthLabel(m: string): string {
 }
 
 export default function FlowAnalysis() {
+  const { ownerFilter } = useDashboard();
   const [data, setData] = useState<FlowAnalysisResponse | null>(null);
   const [range, setRange] = useState<RangeKey>("12");
   const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
-    apiGet<FlowAnalysisResponse>("/api/flow-analysis").then(setData).catch(() => {});
-  }, []);
+    const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
+    apiGet<FlowAnalysisResponse>(`/api/flow-analysis${qs}`).then(setData).catch(() => {});
+  }, [ownerFilter]);
 
   const categories = useMemo(() => {
     if (!data) return [];
@@ -114,6 +117,7 @@ export default function FlowAnalysis() {
   return (
     <section className="mf-section">
       <SectionHead no="13" title="資産フロー分析" sub="収入・支出・資産の推移をまとめて見る。過去のログも含む。" />
+      <MoneyViewToggle />
 
       <div className="mf-chips">
         {RANGES.map((r) => (

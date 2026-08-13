@@ -6,10 +6,13 @@ import { estimateSavingsAction } from "@/lib/anthropic";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { todayStrJST, isValidDateStr } from "@/lib/date";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireOwnerSession();
-    const [rows, profiles] = await Promise.all([listSavingsActions(), getAllProfiles()]);
+    const { searchParams } = new URL(req.url);
+    const owner = searchParams.get("owner") || undefined;
+    const [allRows, profiles] = await Promise.all([listSavingsActions(), getAllProfiles()]);
+    const rows = owner ? allRows.filter((r) => r.owner === owner) : allRows;
     const nameOf = makeNameLookup(profiles);
     const actions = rows.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
     const totalSaving = rows.reduce((s, r) => s + r.estimated_saving, 0);

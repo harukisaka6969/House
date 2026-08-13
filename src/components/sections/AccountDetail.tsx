@@ -5,13 +5,15 @@ import { fmt } from "@/lib/judge";
 import { PRIVATE_ACCOUNT } from "@/lib/constants";
 import type { AccountOut, ExpenseOut } from "@/lib/apiTypes";
 import { useDashboard } from "../DashboardContext";
+import { ownerFilterName } from "../common";
 
 export default function AccountDetail({ accounts, expenses }: { accounts: AccountOut[]; expenses: ExpenseOut[] }) {
-  const { me } = useDashboard();
+  const { me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const filterName = ownerFilterName(me, ownerFilter);
   const [sel, setSel] = useState(accounts[0]?.id ?? "a1");
   const acct = accounts.find((a) => a.id === sel) ?? accounts[0];
-  const rows = expenses.filter((e) => e.account_id === sel);
+  const rows = expenses.filter((e) => e.account_id === sel && (!filterName || e.owner_name === filterName));
   const visible = rows.filter((e) => !e.masked);
 
   const cats = new Map<string, number>();

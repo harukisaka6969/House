@@ -14,7 +14,7 @@ export async function GET() {
 
     return NextResponse.json({
       profile: { id: profile.id, slug: profile.slug, name: profile.name, role: profile.role },
-      partner: partner ? { name: partner.name, slug: partner.slug } : null,
+      partner: partner ? { id: partner.id, name: partner.name, slug: partner.slug } : null,
     });
   } catch (e) {
     return errorResponse(e);

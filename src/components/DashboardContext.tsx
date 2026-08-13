@@ -9,6 +9,9 @@ import type { MeResponse, MonthResponse, SettingsResponse, TrendPoint, Inventory
 interface DashboardState {
   slug: string;
   me: MeResponse | null;
+  /** お金関連セクション共通の「誰の視点で見るか」フィルタ。nullは家族全体（世帯合計）。 */
+  ownerFilter: string | null;
+  setOwnerFilter: (owner: string | null) => void;
   monthKey: string;
   setMonthKey: (m: string) => void;
   month: MonthResponse | null;
@@ -41,6 +44,7 @@ export function DashboardProvider({
   children: React.ReactNode;
 }) {
   const [me, setMe] = useState<MeResponse | null>(initialMe ?? null);
+  const [ownerFilter, setOwnerFilter] = useState<string | null>(null);
   const [monthKey, setMonthKey] = useState(nowMonthKeyJST());
   const [month, setMonth] = useState<MonthResponse | null>(null);
   const [prevMonth, setPrevMonth] = useState<MonthResponse | null>(null);
@@ -60,14 +64,16 @@ export function DashboardProvider({
   }, []);
 
   useEffect(() => {
-    apiGet<{ trend: TrendPoint[] }>("/api/trend").then((r) => setTrend(r.trend)).catch(() => {});
-  }, [monthTick]);
+    const ownerQs = ownerFilter ? `&owner=${ownerFilter}` : "";
+    apiGet<{ trend: TrendPoint[] }>(`/api/trend?${ownerQs.slice(1)}`).then((r) => setTrend(r.trend)).catch(() => {});
+  }, [monthTick, ownerFilter]);
 
   useEffect(() => {
     let cancelled = false;
+    const ownerQs = ownerFilter ? `&owner=${ownerFilter}` : "";
     Promise.all([
-      apiGet<MonthResponse>(`/api/month?m=${monthKey}`),
-      apiGet<MonthResponse>(`/api/month?m=${shiftMonth(monthKey, -1)}`),
+      apiGet<MonthResponse>(`/api/month?m=${monthKey}${ownerQs}`),
+      apiGet<MonthResponse>(`/api/month?m=${shiftMonth(monthKey, -1)}${ownerQs}`),
     ]).then(([cur, prev]) => {
       if (cancelled) return;
       setMonth(cur);
@@ -76,7 +82,7 @@ export function DashboardProvider({
     return () => {
       cancelled = true;
     };
-  }, [monthKey, monthTick]);
+  }, [monthKey, monthTick, ownerFilter]);
 
   // 導出値: 表示中の月とmonthKeyが一致するまで（初回・月切替の直後）ローディング扱い
   const loading = !month || month.month !== monthKey;
@@ -108,6 +114,8 @@ export function DashboardProvider({
   const value: DashboardState = {
     slug,
     me,
+    ownerFilter,
+    setOwnerFilter,
     monthKey,
     setMonthKey,
     month,

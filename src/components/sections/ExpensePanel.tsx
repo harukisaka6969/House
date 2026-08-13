@@ -7,7 +7,7 @@ import { todayStrJST } from "@/lib/date";
 import { CAT_COLORS, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import type { SplitEventOut, SplitEventDetailOut } from "@/lib/apiTypes";
-import { TT, fmtTooltip } from "../common";
+import { TT, fmtTooltip, MoneyViewToggle, ownerFilterName } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
 import RecurringExpenses from "./RecurringExpenses";
@@ -15,8 +15,9 @@ import RecurringExpenses from "./RecurringExpenses";
 const SPLIT_RECENT_LIMIT = 5;
 
 export default function ExpensePanel() {
-  const { month, monthKey, allCats, refreshMonth, refreshSettings, me } = useDashboard();
+  const { month, monthKey, allCats, refreshMonth, refreshSettings, me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const filterName = ownerFilterName(me, ownerFilter);
   const accounts = month?.aggregates.perAccount ?? [];
   const [entryMode, setEntryMode] = useState<"expense" | "income">("expense");
   const [form, setForm] = useState<{ date: string; account: string; category: string; amount: string; memo: string; sub: string }>({
@@ -236,6 +237,7 @@ export default function ExpensePanel() {
 
   const sorted = [...month.expenses]
     .filter((e) => filterAcct === "all" || e.account_id === filterAcct)
+    .filter((e) => !filterName || e.owner_name === filterName)
     .sort((a, b) => {
       const ad = a.masked ? "" : a.date;
       const bd = b.masked ? "" : b.date;
@@ -550,6 +552,7 @@ export default function ExpensePanel() {
         </div>
       )}
 
+      <MoneyViewToggle />
       <div className="mf-panel">
         <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <div className="mf-paneltitle" style={{ margin: 0 }}>

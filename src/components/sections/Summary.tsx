@@ -6,7 +6,7 @@ import { fmt, monthJudge } from "@/lib/judge";
 import { TONE_COLOR } from "@/lib/constants";
 import { apiGet } from "@/lib/apiClient";
 import type { UpcomingSummary } from "@/lib/apiTypes";
-import { SectionHead, StatCard, TT, fmtTooltip } from "../common";
+import { SectionHead, StatCard, TT, fmtTooltip, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 
 function dsub(cur: number, pv: number | null | undefined): string | null {
@@ -47,6 +47,7 @@ export default function Summary() {
   return (
     <section className="mf-section">
       <SectionHead no="01" title="今月のサマリー" sub="いちばん大きい視点。この月がどうだったか。" />
+      <MoneyViewToggle />
       <div className="mf-cards4">
         <StatCard label="収入" value={fmt(income)} color="#E7ECF2" sub={dsub(income, prev?.income)} />
         <StatCard label="支出" value={fmt(expense)} color="#F26D5F" sub={dsub(expense, prev?.expense)} />

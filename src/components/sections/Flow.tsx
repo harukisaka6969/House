@@ -2,7 +2,7 @@
 
 import { fmt } from "@/lib/judge";
 import { TONE_COLOR } from "@/lib/constants";
-import { SectionHead } from "../common";
+import { SectionHead, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 import FlowDiagram from "./FlowDiagram";
 import SpendCalendar from "./SpendCalendar";
@@ -16,6 +16,7 @@ export default function Flow() {
   return (
     <section className="mf-section">
       <SectionHead no="02" title="お金の流れ" sub="収入がどの口座に配分され、どれだけ使われたか。" />
+      <MoneyViewToggle />
       <FlowDiagram income={income} accounts={perAccount} />
       <div className="mf-panel">
         <div className="mf-paneltitle">配分の詳細</div>

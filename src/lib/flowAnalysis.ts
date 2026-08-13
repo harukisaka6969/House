@@ -53,8 +53,9 @@ async function earliestMonth(): Promise<string> {
   return candidates.sort()[0];
 }
 
-/** 家計の月次フロー分析（spec外・資産フロー分析ダッシュボード用）。開始月は記録済みデータの最古月〜今月。 */
-export async function getFlowAnalysis(viewerProfileId: string): Promise<FlowAnalysis> {
+/** 家計の月次フロー分析（spec外・資産フロー分析ダッシュボード用）。開始月は記録済みデータの最古月〜今月。
+ * ownerFilterを指定すると、集計をその人の分（＋owner無しの共有収入）だけに絞る。 */
+export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: string): Promise<FlowAnalysis> {
   const nowMonth = nowMonthKeyJST();
   const startMonth = await earliestMonth();
 
@@ -66,13 +67,16 @@ export async function getFlowAnalysis(viewerProfileId: string): Promise<FlowAnal
   const fromDate = periodRange(months[0]).from;
   const toDateExclusive = periodRange(nowMonth).toExclusive;
 
-  const [incomeRows, expenseRows, investRows, profiles] = await Promise.all([
+  const [incomeRowsAll, expenseRowsAll, investRowsAll, profiles] = await Promise.all([
     getIncomesInMonthRange(months[0], nowMonth),
     getExpensesInRange(fromDate, toDateExclusive),
     getInvestmentsInRange(fromDate, toDateExclusive),
     getAllProfiles(),
   ]);
   const nameOf = makeNameLookup(profiles);
+  const incomeRows = ownerFilter ? incomeRowsAll.filter((r) => r.owner === ownerFilter || r.owner === null) : incomeRowsAll;
+  const expenseRows = ownerFilter ? expenseRowsAll.filter((r) => r.owner === ownerFilter) : expenseRowsAll;
+  const investRows = ownerFilter ? investRowsAll.filter((r) => r.owner === ownerFilter) : investRowsAll;
 
   const categorySet = new Set<string>();
   let cumulativeNet = 0;

@@ -14,6 +14,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const m = searchParams.get("m") ?? nowMonthKeyJST();
     if (!isValidMonthKey(m)) throw new ApiError(400, "invalid month");
+    // 「誰の視点で見るか」フィルタ（お金グループ共通のトグル）。集計にのみ影響させ、
+    // incomes等の生配列はそのまま返す — 収入の全置き換え編集フロー（addIncome）が
+    // month.incomesを基準にするため、ここを絞ると他方の収入が消えてしまう。
+    const owner = searchParams.get("owner") || undefined;
 
     const { from, toExclusive } = monthRange(m);
     const [expenseRows, incomeRows, investmentRows, accounts, profiles, cumInvest] = await Promise.all([
@@ -22,7 +26,7 @@ export async function GET(req: Request) {
       getInvestmentsInRange(from, toExclusive),
       getAccounts(),
       getAllProfiles(),
-      getCumulativeInvestment(),
+      getCumulativeInvestment(owner),
     ]);
     const nameOf = makeNameLookup(profiles);
 
@@ -30,11 +34,15 @@ export async function GET(req: Request) {
     const incomes = incomeRows.map((i) => ({ ...i, owner_name: i.owner ? nameOf(i.owner) : null }));
     const investments = investmentRows.map((iv) => ({ ...iv, owner_name: nameOf(iv.owner) }));
 
+    const aggExpenses = owner ? expenseRows.filter((e) => e.owner === owner) : expenseRows;
+    const aggIncomes = owner ? incomeRows.filter((i) => i.owner === owner || i.owner === null) : incomeRows;
+    const aggInvestments = owner ? investmentRows.filter((iv) => iv.owner === owner) : investmentRows;
+
     const aggregates = {
-      perAccount: buildPerAccount(accounts, expenseRows, session.profile_id),
-      monthTotals: buildMonthTotals(incomeRows, expenseRows, investmentRows),
-      perCategory: buildPerCategory(expenseRows, session.profile_id),
-      perDay: buildPerDay(expenseRows, session.profile_id),
+      perAccount: buildPerAccount(accounts, aggExpenses, session.profile_id),
+      monthTotals: buildMonthTotals(aggIncomes, aggExpenses, aggInvestments),
+      perCategory: buildPerCategory(aggExpenses, session.profile_id),
+      perDay: buildPerDay(aggExpenses, session.profile_id),
       cumInvest,
     };
 

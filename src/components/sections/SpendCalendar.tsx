@@ -5,6 +5,7 @@ import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import type { AccountOut, ExpenseOut } from "@/lib/apiTypes";
 import { useDashboard } from "../DashboardContext";
+import { ownerFilterName } from "../common";
 import PeriodCalendar from "../PeriodCalendar";
 
 function fmtShort(n: number): string {
@@ -27,8 +28,9 @@ export default function SpendCalendar({
   perDay: Record<string, number>;
   accounts: AccountOut[];
 }) {
-  const { me } = useDashboard();
+  const { me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const filterName = ownerFilterName(me, ownerFilter);
   const [selDay, setSelDay] = useState<string | null>(null);
   const today = todayStrJST();
 
@@ -39,7 +41,7 @@ export default function SpendCalendar({
 
   const dayRows = selDay
     ? expenses
-        .filter((e): e is Extract<ExpenseOut, { masked: false }> => !e.masked && e.date === selDay)
+        .filter((e): e is Extract<ExpenseOut, { masked: false }> => !e.masked && e.date === selDay && (!filterName || e.owner_name === filterName))
         .sort((a, b) => (b.amount || 0) - (a.amount || 0))
     : [];
   const maskedCount = selDay ? expenses.filter((e) => e.masked).length : 0;

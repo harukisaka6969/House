@@ -6,7 +6,7 @@ import { fmt } from "@/lib/judge";
 import { apiGet } from "@/lib/apiClient";
 import type { LifeEventOut, WishlistItemOut } from "@/lib/apiTypes";
 import { nowMonthKeyJST } from "@/lib/date";
-import { SectionHead, TT, fmtTooltip } from "../common";
+import { SectionHead, TT, fmtTooltip, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 
 interface SimParams {
@@ -199,6 +199,7 @@ export default function Sim() {
   return (
     <section className="mf-section">
       <SectionHead no="06" title="将来シミュレーション" sub="このペースが続いたら資産はどうなるか。楽観・悲観シナリオ付き。" />
+      <MoneyViewToggle />
       <SimPanelInner defaultIncome={totals?.income ?? 0} defaultExpense={totals?.expense ?? 0} />
     </section>
   );

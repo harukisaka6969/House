@@ -148,7 +148,7 @@ export interface ShoppingItemOut {
 
 export interface MeResponse {
   profile: { id: string; slug: string; name: string; role: "owner" | "family" | "kiosk" };
-  partner: { name: string; slug: string } | null;
+  partner: { id: string; name: string; slug: string } | null;
 }
 
 export interface FamilyAccountOut {
