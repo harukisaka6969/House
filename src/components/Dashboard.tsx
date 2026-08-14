@@ -49,6 +49,8 @@ const SavingsActions = dyn(() => import("./sections/SavingsActions"));
 const SavingsHistory = dyn(() => import("./sections/SavingsHistory"));
 const Settings = dyn(() => import("./sections/Settings"));
 
+const PYTHON_LEARN_URL = "https://python-learn-lilac.vercel.app/";
+
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
   {
     label: "🏡 ホーム",
@@ -209,6 +211,9 @@ function DashboardInner() {
               <button className="mf-drawitem" onClick={() => router.push(`/${slug}/kiosk`)}>
                 🖥 常設ダッシュボード
               </button>
+              <a className="mf-drawitem" href={PYTHON_LEARN_URL} onClick={() => setMenuOpen(false)}>
+                🐍 Python学習
+              </a>
               <button className="mf-drawitem" onClick={logout}>
                 ログアウト
               </button>
