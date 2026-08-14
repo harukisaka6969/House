@@ -3,7 +3,15 @@ import { db } from "./db";
 import { generateDailyTip } from "./anthropic";
 import { prevDayStr } from "./date";
 
-export type TipCategory = "news" | "health" | "money" | "philosophy" | "wellbeing" | "chinese_philosophy" | "world_culture";
+export type TipCategory =
+  | "news"
+  | "health"
+  | "money"
+  | "philosophy"
+  | "wellbeing"
+  | "chinese_philosophy"
+  | "world_culture"
+  | "fashion";
 
 export interface TipDef {
   category: TipCategory;
@@ -13,6 +21,9 @@ export interface TipDef {
   /** 出典・具体例を含む長めのコーナーほど大きくする。小さすぎると</output>閉じタグの手前で
    * 応答が途切れ、生の<output>タグがそのままLINEに表示される事故につながる。 */
   maxTokens: number;
+  /** 指定時は、そのslugのプロフィールだけに送る（世帯全員ではなく特定の1人向けのコーナー用）。
+   * 省略時は従来通り家族全員（LINE連携済みowner全員）に送る。 */
+  onlyForSlug?: string;
   buildPrompt: (recentFull: string[], olderSummaries: string[], todayStr: string) => string;
 }
 
@@ -126,6 +137,16 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
     maxTokens: 1000,
     buildPrompt: (recentFull, olderSummaries) =>
       `あなたは文化人類学・比較文化論の専門家です。世界のどこか（地域・民族・時代は問いません。日本や現代の主流な価値観以外であれば構いません）に見られる、時間の捉え方、死生観、個人と共同体の関係、成功や豊かさの定義、自然との向き合い方、家族やコミュニティのあり方などについての、独自のものの見方・考え方を1つ選んでください。その文化的背景を日本語で4〜5文程度で分かりやすく紹介したうえで、最後に改行してから、それを踏まえて読んだ人自身の価値観を振り返らせるような、一晩じっくり考えさせられる問いかけを1文だけ加えてください。事実として不正確な内容や、特定の文化への偏見・ステレオタイプ化は避け、敬意を持って扱ってください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
+  },
+  {
+    category: "fashion",
+    time: "23:30",
+    label: "👔 今日のファッション提案",
+    useWebSearch: false,
+    maxTokens: 700,
+    onlyForSlug: "haruki",
+    buildPrompt: (recentFull, olderSummaries) =>
+      `あなたはメンズファッションスタイリストです。ユーザーは25歳男性で、体型は少し筋肉質でやや恰幅の良い（がっしりして少しふくよかな）体型です。この体型を活かして格好よく見せるための、今日から意識できる具体的なファッション提案を1つ、日本語で3〜4文程度で伝えてください。色の組み合わせ、シルエット・服の形（例: Vネック、テーパードシルエット、ハイウエスト、ジャストサイズなど）、素材感といった観点から、体型を良く見せる実践的なポイントを含めてください。特定のブランド名・商品名・具体的な商品の購入案内は一切含めず、あくまで色や形の提案にとどめてください。読んだ人が今日、鏡の前でちょっと試したくなるような、前向きで自信を持てる内容にしてください。${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
 ];
 

@@ -31,13 +31,15 @@ export async function getLineUserId(profileId: string): Promise<string | null> {
   }
 }
 
-/** LINE通知の送信対象（line_user_id設定済みのowner）一覧。同様に独立クエリで、失敗時は空配列を返す。 */
-export async function getLineRecipients(): Promise<{ id: string; line_user_id: string }[]> {
+/** LINE通知の送信対象（line_user_id設定済みのowner）一覧。同様に独立クエリで、失敗時は空配列を返す。
+ * slugも返すのは、特定の1人だけに送りたい生活tips（例: 個人の体型に合わせたファッション提案）を
+ * 宛先で絞り込めるようにするため。 */
+export async function getLineRecipients(): Promise<{ id: string; slug: string; line_user_id: string }[]> {
   try {
-    const { data, error } = await db().from("profiles").select("id, line_user_id").eq("role", "owner");
+    const { data, error } = await db().from("profiles").select("id, slug, line_user_id").eq("role", "owner");
     if (error) throw error;
-    return ((data ?? []) as { id: string; line_user_id: string | null }[]).filter(
-      (p): p is { id: string; line_user_id: string } => !!p.line_user_id
+    return ((data ?? []) as { id: string; slug: string; line_user_id: string | null }[]).filter(
+      (p): p is { id: string; slug: string; line_user_id: string } => !!p.line_user_id
     );
   } catch (e) {
     console.error("getLineRecipients failed", e);
