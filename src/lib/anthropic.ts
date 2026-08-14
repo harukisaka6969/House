@@ -39,9 +39,12 @@ export interface OcrResult {
   /** レシートに記載の通貨のISO 4217コード（例: USD, EUR, KRW）。日本円なら"JPY"。
    * totalは常にこの通貨での金額そのもの（円への換算はサーバーが別途行うため、AIは換算しない）。 */
   currency: string;
+  /** レシートに割引（○%OFF、定価と割引後価格の併記など）が読み取れる場合のみ割引率(%)。読み取れなければnull。
+   * 節約額そのものはAIに計算させず、サーバー側でtotal（支払額）とこの割引率から逆算する。 */
+  discount_percent: number | null;
 }
 
-/** レシート画像 → {date, store, total, category, account, currency}（現行版 ocrReceipt を移植） */
+/** レシート画像 → {date, store, total, category, account, currency, discount_percent}（現行版 ocrReceipt を移植） */
 export async function ocrReceipt(
   base64: string,
   mediaType: string,
@@ -62,7 +65,8 @@ export async function ocrReceipt(
             text: `このレシート画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
 ${accountRuleText(acctList)}
 海外のレシート（日本円以外の通貨）の場合、totalはレシートに印字された金額そのままの数値にしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにはISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円のレシートならcurrencyは"JPY"にしてください。
-{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\""}`,
+レシートに「○%OFF」「定価○○円→○○円」のような割引の表示がある場合は、discount_percentにその割引率（0〜99の数値）を入れてください。割引の表示が無ければdiscount_percentはnullにしてください。割引額そのものの計算は不要です（率だけでよい）。
+{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\"","discount_percent":割引率の数値、読み取れなければnull}`,
           },
         ],
       },
@@ -70,7 +74,12 @@ ${accountRuleText(acctList)}
   });
   const text = stripFence(joinText(res.content));
   const parsed = JSON.parse(text) as Partial<OcrResult>;
-  return { ...parsed, currency: (parsed.currency || "JPY").toUpperCase() } as OcrResult;
+  const discount = Number(parsed.discount_percent);
+  return {
+    ...parsed,
+    currency: (parsed.currency || "JPY").toUpperCase(),
+    discount_percent: Number.isFinite(discount) && discount > 0 && discount < 100 ? discount : null,
+  } as OcrResult;
 }
 
 export interface ParsedExpenseEntry {
@@ -251,9 +260,9 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
   return "other";
 }
 
-export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "unknown";
+export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "savings" | "unknown";
 
-/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」「家電操作」のどれについての話かを判定する（自動振り分け用）。 */
+/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」「家電操作」「節約アクション」のどれについての話かを判定する（自動振り分け用）。 */
 export async function classifyLineText(text: string): Promise<LineTextIntent> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -261,16 +270,63 @@ export async function classifyLineText(text: string): Promise<LineTextIntent> {
     messages: [
       {
         role: "user",
-        content: `次のメッセージは「食事の内容」「支出（買い物などお金を使った内容）」「収入（お金が入った内容）」「家電の操作やシーンの実行（照明・エアコン・鍵など）」「それ以外」のどれに一番近いですか。meal / expense / income / smarthome / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
+        content: `次のメッセージは「食事の内容」「支出（単に買い物などお金を使った内容）」「収入（お金が入った内容）」「家電の操作やシーンの実行（照明・エアコン・鍵など）」「節約アクション（工夫して支出を抑えた・安く買った・ポイントを使ったなど、節約につながる行動の報告）」「それ以外」のどれに一番近いですか。単なる買い物の報告はexpense、割引で買った・自炊で節約した・ポイントで支払ったなど「工夫して安くした」という要素があればsavingsです。meal / expense / income / smarthome / savings / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
       },
     ],
   });
   const t = stripFence(joinText(res.content)).toLowerCase().replace(/\s+/g, "");
   if (t.includes("smarthome")) return "smarthome";
+  if (t.includes("savings")) return "savings";
   if (t.includes("meal")) return "meal";
   if (t.includes("expense")) return "expense";
   if (t.includes("income")) return "income";
   return "unknown";
+}
+
+/** 節約アクションの説明文が、既存の節約アクション一覧のどれかと同じ行動の繰り返しかどうかを判定する。
+ * 一致すればそのidを、新しい種類の行動なら null を返す。既存の習慣を毎回別カード・別金額として
+ * 登録してしまわないように、LINEからの登録時に使う（既存カードへの複製登録に振り分けるため）。 */
+export async function matchSavingsAction(
+  text: string,
+  existing: { id: string; title: string; keywords: string[] }[]
+): Promise<string | null> {
+  if (existing.length === 0) return null;
+  const listing = existing.map((e) => `${e.id}: ${e.title}（${e.keywords.join("、")}）`).join("\n");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 50,
+    messages: [
+      {
+        role: "user",
+        content: `次のメッセージが、下の「既存の節約アクション一覧」のどれかと同じ種類の行動の繰り返しだと判断できる場合は、そのidだけを返してください。厳密に同一である必要はなく、同じ習慣・同じ工夫の繰り返しとみなせれば一致とみなしてください。どれとも一致しない新しい種類の行動であれば、"none"とだけ返してください。id、または"none"以外の文字は一切含めないでください。
+
+既存の節約アクション一覧:
+${listing}
+
+メッセージ: ${text}`,
+      },
+    ],
+  });
+  const raw = joinText(res.content).trim();
+  const match = existing.find((e) => raw.includes(e.id));
+  return match ? match.id : null;
+}
+
+/** 商品名・行動の内容を一目で表す絵文字を1つだけ選ぶ（割引購入カードなど、金額計算をAIに頼らない
+ * 節約アクション登録経路で使う軽量な補助呼び出し）。 */
+export async function pickEmoji(text: string): Promise<string> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 20,
+    messages: [
+      {
+        role: "user",
+        content: `次の商品・行動の内容を一目で表す絵文字を1つだけ返してください。絵文字以外の文字は一切含めないでください。\n内容: ${text}`,
+      },
+    ],
+  });
+  const raw = joinText(res.content).trim();
+  return raw.slice(0, 8) || "🏷️";
 }
 
 export interface SmartHomeCommandResult {

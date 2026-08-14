@@ -6,7 +6,7 @@ import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import { CAT_COLORS, CURRENCIES, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut } from "@/lib/apiTypes";
+import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut, SavingsActionOut } from "@/lib/apiTypes";
 import { TT, fmtTooltip, MoneyViewToggle, ownerFilterName } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
@@ -34,6 +34,7 @@ export default function ExpensePanel() {
   const [foreignAmount, setForeignAmount] = useState("");
   const [rate, setRate] = useState<number | null>(null);
   const [rateErr, setRateErr] = useState("");
+  const [ocrDiscountPercent, setOcrDiscountPercent] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -161,9 +162,23 @@ export default function ExpensePanel() {
           }
         }
       }
+      let discountNote = "";
+      if (ocrDiscountPercent) {
+        try {
+          const { action: savingsRow } = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+            item: form.memo.trim() || "購入品",
+            discount_percent: ocrDiscountPercent,
+            price_paid: amountToUse,
+          });
+          discountNote = ` ／ 節約アクションにも登録: ${savingsRow.emoji} ${savingsRow.title}（${fmt(savingsRow.estimated_saving)}節約）`;
+        } catch {
+          discountNote = " ／ 節約アクションへの登録は失敗しました";
+        }
+      }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
       setForeignAmount("");
-      setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote);
+      setOcrDiscountPercent(null);
+      setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote + discountNote);
       refreshMonth();
       if (promoted.length) refreshSettings();
     } catch (e) {
@@ -196,6 +211,7 @@ export default function ExpensePanel() {
   const runText = async () => {
     if (!textIn.trim() || textBusy) return;
     setTextBusy(true);
+    setOcrDiscountPercent(null);
     setMsg("文章を解析中…");
     try {
       const { entries } = await apiPost<{
@@ -252,6 +268,7 @@ export default function ExpensePanel() {
 
   const runOcr = async (file: File) => {
     setBusy(true);
+    setOcrDiscountPercent(null);
     setMsg("レシートを読み取り中…");
     try {
       const fd = new FormData();
@@ -265,11 +282,13 @@ export default function ExpensePanel() {
         category: string;
         account?: string;
         currency?: string;
+        discount_percent?: number | null;
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
       setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
       setCurrency(foreign ?? "JPY");
       setForeignAmount(foreign ? String(parsed.total || "") : "");
+      setOcrDiscountPercent(parsed.discount_percent && parsed.discount_percent > 0 && parsed.discount_percent < 100 ? parsed.discount_percent : null);
       setForm((f) => {
         const account = accounts.some((a) => a.id === parsed.account) ? (parsed.account as string) : f.account;
         const nextCats = categoriesForAccount(allCats, account);
@@ -282,10 +301,14 @@ export default function ExpensePanel() {
           memo: parsed.store || f.memo,
         };
       });
+      const discountNote =
+        parsed.discount_percent && parsed.discount_percent > 0 && parsed.discount_percent < 100
+          ? `（${parsed.discount_percent}%オフを検出。追加時に節約アクションにも登録します）`
+          : "";
       setMsg(
-        foreign
+        (foreign
           ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}。円換算を確認して追加してください。`
-          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`
+          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`) + discountNote
       );
     } catch {
       setMsg("読み取りに失敗しました。手入力するか、別の写真で試してください。");

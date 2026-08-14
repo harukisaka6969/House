@@ -1,5 +1,7 @@
 import "server-only";
 import { db } from "./db";
+import { computeDiscountSaving } from "./discountMath";
+import { pickEmoji } from "./anthropic";
 
 export interface SavingsActionRow {
   id: string;
@@ -47,6 +49,26 @@ export async function createSavingsAction(input: {
   const { data, error } = await db().from("savings_actions").insert(input).select("*").single();
   if (error) throw error;
   return data as SavingsActionRow;
+}
+
+/** 「○○を○%オフで○○円で買った」という割引購入の節約アクションを登録する。節約額はAIに推測させず、
+ * サーバー側で支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。 */
+export async function createDiscountSavingsAction(
+  owner: string,
+  input: { item: string; discountPercent: number; pricePaid: number; date: string }
+): Promise<SavingsActionRow> {
+  const { originalPrice, saving } = computeDiscountSaving(input.pricePaid, input.discountPercent);
+  const emoji = await pickEmoji(input.item).catch(() => "🏷️");
+  return createSavingsAction({
+    owner,
+    date: input.date,
+    description: `${input.item}を${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入した`,
+    title: `${input.item}を${input.discountPercent}%オフで購入`,
+    estimated_saving: saving,
+    reasoning: `定価${originalPrice.toLocaleString()}円のところ${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入。差額${saving.toLocaleString()}円が節約分。`,
+    keywords: [input.item, "割引", `${input.discountPercent}%オフ`],
+    emoji,
+  });
 }
 
 export async function deleteSavingsAction(id: string): Promise<boolean> {

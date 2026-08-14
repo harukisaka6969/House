@@ -39,6 +39,12 @@ export default function SavingsActions() {
   ]);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
+  const [discountExpanded, setDiscountExpanded] = useState(false);
+  const [discountItem, setDiscountItem] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [discountPrice, setDiscountPrice] = useState("");
+  const [discountSubmitting, setDiscountSubmitting] = useState(false);
+  const [discountMsg, setDiscountMsg] = useState("");
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -128,6 +134,32 @@ export default function SavingsActions() {
       setBulkMsg(e instanceof Error ? e.message : "登録に失敗しました。");
     } finally {
       setBulkSubmitting(false);
+    }
+  };
+
+  /** 「○○を○%オフで○○円で買った」を登録する。節約額はAIに推測させず、サーバー側で
+   * 支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。 */
+  const submitDiscount = async () => {
+    const item = discountItem.trim();
+    const percent = Number(discountPercent);
+    const price = Number(discountPrice);
+    if (!item || !(percent > 0 && percent < 100) || !(price > 0) || discountSubmitting) return;
+    setDiscountSubmitting(true);
+    setDiscountMsg("");
+    try {
+      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+        item,
+        discount_percent: percent,
+        price_paid: price,
+      });
+      setDiscountItem("");
+      setDiscountPercent("");
+      setDiscountPrice("");
+      load();
+    } catch (e) {
+      setDiscountMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    } finally {
+      setDiscountSubmitting(false);
     }
   };
 
@@ -267,6 +299,58 @@ export default function SavingsActions() {
             {bulkMsg && <div className="mf-hint">{bulkMsg}</div>}
           </div>
         )}
+      </div>
+
+      <div className="mf-panel">
+        <div
+          className="sv-bulktoggle"
+          role="button"
+          tabIndex={0}
+          onClick={() => setDiscountExpanded((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setDiscountExpanded((v) => !v);
+          }}
+        >
+          <span className="mf-fieldlabel" style={{ margin: 0 }}>
+            🏷️ 割引購入を記録
+          </span>
+          <span className="sv-chevron">{discountExpanded ? "︿" : "﹀"}</span>
+        </div>
+        {discountExpanded && (
+          <div className="mf-row" style={{ marginTop: 10 }}>
+            <input
+              className="mf-input"
+              style={{ flex: 2, minWidth: 140 }}
+              placeholder="商品名（例: コーヒー豆）"
+              value={discountItem}
+              onChange={(e) => setDiscountItem(e.target.value)}
+            />
+            <input
+              className="mf-input mf-mono"
+              style={{ flex: 1, minWidth: 90 }}
+              type="number"
+              placeholder="割引率（例: 20）"
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(e.target.value)}
+            />
+            <input
+              className="mf-input mf-mono"
+              style={{ flex: 1, minWidth: 110 }}
+              type="number"
+              placeholder="支払金額（例: 800）"
+              value={discountPrice}
+              onChange={(e) => setDiscountPrice(e.target.value)}
+            />
+            <button
+              className="mf-btn primary"
+              onClick={submitDiscount}
+              disabled={discountSubmitting || !discountItem.trim() || !discountPercent || !discountPrice}
+            >
+              {discountSubmitting ? "登録中…" : "登録する"}
+            </button>
+          </div>
+        )}
+        {discountMsg && <div className="mf-hint">{discountMsg}</div>}
       </div>
 
       {filtered.length === 0 ? (

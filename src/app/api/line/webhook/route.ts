@@ -13,6 +13,8 @@ import {
   ocrReceipt,
   parseExpenseText,
   extractIncomeFromText,
+  estimateSavingsAction,
+  matchSavingsAction,
 } from "@/lib/anthropic";
 import { createMealLog } from "@/lib/mealLog";
 import { isDuplicateLineMessage } from "@/lib/lineDedup";
@@ -20,6 +22,7 @@ import { addExpenseEntries, ValidationError as ExpenseValidationError } from "@/
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAccounts } from "@/lib/accounts";
 import { getAllCategories } from "@/lib/categories";
+import { listSavingsActions, getSavingsActionById, createSavingsAction, createDiscountSavingsAction } from "@/lib/savingsActions";
 import { todayStrJST, nowMonthKeyJST } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
@@ -31,10 +34,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・節約アクション・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -134,6 +137,43 @@ async function handleIncomeText(event: LineEvent, profileId: string, text: strin
   await reply(event, `💰 収入を記録しました: ${parsed.name || "収入"} ${amount.toLocaleString()}円（${monthKey}分）`);
 }
 
+/** 節約アクションの報告。既存の節約アクション一覧（直近100件）と照らし合わせ、同じ習慣の繰り返しと
+ * 判断できれば既存カードを複製（同じ金額・タイトル）、新しい種類の行動ならAIで新規に見積もる。
+ * 同じ習慣を毎回別々の金額で登録してしまわないようにするための分岐。 */
+async function handleSavingsText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const existing = (await listSavingsActions()).slice(0, 100).map((a) => ({ id: a.id, title: a.title, keywords: a.keywords }));
+  const matchedId = await matchSavingsAction(text, existing);
+  if (matchedId) {
+    const original = await getSavingsActionById(matchedId);
+    if (original) {
+      const row = await createSavingsAction({
+        owner: profileId,
+        date: todayStrJST(),
+        description: original.description,
+        title: original.title,
+        estimated_saving: original.estimated_saving,
+        reasoning: original.reasoning,
+        keywords: original.keywords,
+        emoji: original.emoji,
+      });
+      await reply(event, `♻️ 節約アクションを記録しました（前回と同じ内容）: ${row.emoji} ${row.title} ${row.estimated_saving.toLocaleString()}円`);
+      return;
+    }
+  }
+  const estimate = await estimateSavingsAction(text, todayStrJST());
+  const row = await createSavingsAction({
+    owner: profileId,
+    date: todayStrJST(),
+    description: text,
+    title: estimate.title,
+    estimated_saving: estimate.estimated_saving,
+    reasoning: estimate.reasoning,
+    keywords: estimate.keywords,
+    emoji: estimate.emoji,
+  });
+  await reply(event, `💡 節約アクションを記録しました: ${row.emoji} ${row.title} ${row.estimated_saving.toLocaleString()}円`);
+}
+
 /** 「承認」以外のテキストメッセージ: 食事・支出・収入のどれについてかをAIで判定し、それぞれ自動で記録する。 */
 async function handleFreeText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const limited = rateLimit(`ai:${profileId}`, 60, 60 * 60 * 1000);
@@ -146,6 +186,7 @@ async function handleFreeText(event: LineEvent, profileId: string, text: string)
     if (intent === "meal") return await handleMealText(event, profileId, text);
     if (intent === "expense") return await handleExpenseText(event, profileId, text);
     if (intent === "income") return await handleIncomeText(event, profileId, text);
+    if (intent === "savings") return await handleSavingsText(event, profileId, text);
     if (intent === "smarthome") return await reply(event, await runSmartHomeTextCommand(text));
     await reply(event, USAGE_HINT);
   } catch (e) {
@@ -223,7 +264,23 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       );
       const jpyAmount = resolved[0]?.amount ?? ocr.total;
       const currencyNote = currency ? `（${ocr.total}${currency}）` : "";
-      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）`);
+      let discountNote = "";
+      // レシートに割引表示（○%OFFなど）が読み取れた場合は、支出とは別に節約アクションのカードも登録する。
+      // 節約額はAIに推測させず、実際の支払額(円換算後)と割引率からサーバー側で確定計算する。
+      if (ocr.discount_percent) {
+        try {
+          const savingsRow = await createDiscountSavingsAction(profileId, {
+            item: ocr.store || "購入品",
+            discountPercent: ocr.discount_percent,
+            pricePaid: jpyAmount,
+            date: ocr.date ?? todayStrJST(),
+          });
+          discountNote = `\n${savingsRow.emoji} 節約アクションにも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約）`;
+        } catch (e) {
+          console.error("receipt discount savings action failed", e);
+        }
+      }
+      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}`);
       return;
     }
 
