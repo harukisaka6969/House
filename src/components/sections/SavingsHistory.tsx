@@ -5,7 +5,7 @@ import { apiGet } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import { periodRange } from "@/lib/date";
 import { groupSavingsByDay, groupSavingsByWeek, savingsPerDayMap } from "@/lib/savingsHistory";
-import type { SavingsActionOut } from "@/lib/apiTypes";
+import type { SavingsHistoryOut } from "@/lib/apiTypes";
 import { SectionHead, StatCard, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 import PeriodCalendar from "../PeriodCalendar";
@@ -26,20 +26,20 @@ function fmtWeekRange(weekStart: string, weekEnd: string): string {
 
 export default function SavingsHistory() {
   const { ownerFilter, monthKey } = useDashboard();
-  const [actions, setActions] = useState<SavingsActionOut[] | null>(null);
+  const [history, setHistory] = useState<SavingsHistoryOut[] | null>(null);
   const [selDay, setSelDay] = useState<string | null>(null);
 
   useEffect(() => {
     const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
-    apiGet<{ actions: SavingsActionOut[] }>(`/api/savings-actions${qs}`)
-      .then((r) => setActions(r.actions))
-      .catch(() => setActions([]));
+    apiGet<{ history: SavingsHistoryOut[] }>(`/api/savings-actions${qs}`)
+      .then((r) => setHistory(r.history))
+      .catch(() => setHistory([]));
   }, [ownerFilter]);
 
   const { from, toExclusive } = periodRange(monthKey);
   const periodActions = useMemo(
-    () => (actions ?? []).filter((a) => a.date >= from && a.date < toExclusive),
-    [actions, from, toExclusive]
+    () => (history ?? []).filter((a) => a.date >= from && a.date < toExclusive),
+    [history, from, toExclusive]
   );
 
   const dayGroups = useMemo(() => groupSavingsByDay(periodActions), [periodActions]);
@@ -48,7 +48,7 @@ export default function SavingsHistory() {
   const maxDay = Math.max(1, ...Object.values(perDay));
   const periodTotal = periodActions.reduce((s, a) => s + a.estimated_saving, 0);
 
-  if (!actions) return <div className="mf-empty">読み込み中…</div>;
+  if (!history) return <div className="mf-empty">読み込み中…</div>;
 
   const visibleDayGroups = selDay ? dayGroups.filter((g) => g.date === selDay) : dayGroups;
 

@@ -376,8 +376,8 @@ export default function SavingsActions() {
                   <button
                     className="mf-iconbtn sv-cardquick"
                     disabled={repeatingId === a.id}
-                    title="今日の行動として追加"
-                    aria-label="今日の行動として追加"
+                    title="今日も実施（カードは増やさず履歴に追加）"
+                    aria-label="今日も実施（カードは増やさず履歴に追加）"
                     onClick={(e) => {
                       e.stopPropagation();
                       repeatToday(a.id);
@@ -390,7 +390,8 @@ export default function SavingsActions() {
                 {expanded && (
                   <div className="sv-cardbody">
                     <div className="sv-cardmeta">
-                      {a.date} ・ {a.owner_name}
+                      {a.last_date} ・ {a.owner_name}
+                      {a.occurrence_count > 1 && ` ・ ${a.occurrence_count}回実施（累計）`}
                     </div>
                     <div className="sv-carddesc">{a.description}</div>
                     <div className="sv-cardreason">{a.reasoning}</div>

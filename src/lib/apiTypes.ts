@@ -615,9 +615,26 @@ export interface SavingsActionOut {
   date: string;
   description: string;
   title: string;
+  /** カード作成分＋履歴の累積節約額。 */
   estimated_saving: number;
   reasoning: string;
   keywords: string[];
   emoji: string;
   created_at: string;
+  /** 同じ習慣を実施した回数（カード自身の初回分を含む）。 */
+  occurrence_count: number;
+  /** 最後に実施した日付。 */
+  last_date: string;
+}
+
+/** 節約履歴（カレンダー・日ごとの一覧）用の1件。カードの初回分＋各実施ログを平坦化したもの。 */
+export interface SavingsHistoryOut {
+  id: string;
+  action_id: string;
+  owner: string;
+  owner_name: string;
+  date: string;
+  title: string;
+  emoji: string;
+  estimated_saving: number;
 }

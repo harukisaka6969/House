@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, ApiError, errorResponse } from "@/lib/apiAuth";
-import { listSavingsActions, createSavingsAction, createDiscountSavingsAction, getSavingsActionById } from "@/lib/savingsActions";
-import { estimateSavingsAction } from "@/lib/anthropic";
+import {
+  listSavingsActions,
+  listSavingsHistory,
+  createSavingsAction,
+  createDiscountSavingsAction,
+  getSavingsActionById,
+  logSavingsActionOccurrence,
+} from "@/lib/savingsActions";
+import { estimateSavingsAction, matchSavingsAction } from "@/lib/anthropic";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { todayStrJST, isValidDateStr } from "@/lib/date";
 
@@ -11,12 +18,14 @@ export async function GET(req: Request) {
     await requireOwnerSession();
     const { searchParams } = new URL(req.url);
     const owner = searchParams.get("owner") || undefined;
-    const [allRows, profiles] = await Promise.all([listSavingsActions(), getAllProfiles()]);
-    const rows = owner ? allRows.filter((r) => r.owner === owner) : allRows;
+    const [allCards, allHistory, profiles] = await Promise.all([listSavingsActions(), listSavingsHistory(), getAllProfiles()]);
+    const cards = owner ? allCards.filter((r) => r.owner === owner) : allCards;
+    const historyRows = owner ? allHistory.filter((r) => r.owner === owner) : allHistory;
     const nameOf = makeNameLookup(profiles);
-    const actions = rows.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
-    const totalSaving = rows.reduce((s, r) => s + r.estimated_saving, 0);
-    return NextResponse.json({ actions, totalSaving });
+    const actions = cards.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
+    const history = historyRows.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
+    const totalSaving = cards.reduce((s, r) => s + r.estimated_saving, 0);
+    return NextResponse.json({ actions, history, totalSaving });
   } catch (e) {
     return errorResponse(e);
   }
@@ -39,11 +48,12 @@ const bodySchema = z.union([
   }),
 ]);
 
-/** 新規: 節約になった行動の説明文をAIで見積もってカード化する。
- * duplicate_of指定時: 既存カードと同じ内容（タイトル・金額・根拠・キーワード）で、
- * 別の日（既定は今日）の行動として複製する — 同じ行動を後日も繰り返した場合用。AIは呼ばない。
+/** 新規: 節約になった行動の説明文を、既存カード（直近100件）と照らし合わせる。同じ習慣の繰り返しと
+ * AIが判断すれば、新しいカードは作らずそのカードの履歴に1件積む。新しい種類の行動ならAIで見積もって新規カード化する。
+ * duplicate_of指定時: 既存カードの「今日も繰り返した」記録。カードは増やさず履歴にだけ積む（AIは呼ばない）。
  * item/discount_percent/price_paid指定時: 「○○を○%オフで○○円で買った」という割引購入。節約額は
- * AIに推測させず、支払額と割引率からサーバー側で確定計算する（絵文字の選定だけAIに任せる）。 */
+ * AIに推測させず、支払額と割引率からサーバー側で確定計算する（絵文字の選定だけAIに任せる）。購入ごとに
+ * 金額が変わるため、既存カードとの照合はせず常に新規カードとして登録する。 */
 export async function POST(req: Request) {
   try {
     const session = await requireOwnerSession();
@@ -62,19 +72,28 @@ export async function POST(req: Request) {
     }
 
     if ("duplicate_of" in body) {
-      const original = await getSavingsActionById(body.duplicate_of);
-      if (!original) throw new ApiError(404, "元のカードが見つかりません");
-      const row = await createSavingsAction({
+      const { card } = await logSavingsActionOccurrence({
+        action_id: body.duplicate_of,
         owner: session.profile_id,
         date: body.date ?? todayStrJST(),
-        description: original.description,
-        title: original.title,
-        estimated_saving: original.estimated_saving,
-        reasoning: original.reasoning,
-        keywords: original.keywords,
-        emoji: original.emoji,
+      }).catch((e) => {
+        throw new ApiError(404, e instanceof Error ? e.message : "元のカードが見つかりません");
       });
-      return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
+      return NextResponse.json({ action: { ...card, owner_name: nameOf(card.owner) } });
+    }
+
+    const existing = (await listSavingsActions()).slice(0, 100).map((a) => ({ id: a.id, title: a.title, keywords: a.keywords }));
+    const matchedId = await matchSavingsAction(body.description, existing).catch(() => null);
+    if (matchedId) {
+      const original = await getSavingsActionById(matchedId);
+      if (original) {
+        const { card } = await logSavingsActionOccurrence({
+          action_id: matchedId,
+          owner: session.profile_id,
+          date: body.date ?? todayStrJST(),
+        });
+        return NextResponse.json({ action: { ...card, owner_name: nameOf(card.owner) } });
+      }
     }
 
     const estimate = await estimateSavingsAction(body.description, todayStrJST());

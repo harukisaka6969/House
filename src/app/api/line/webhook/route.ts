@@ -22,7 +22,12 @@ import { addExpenseEntries, ValidationError as ExpenseValidationError } from "@/
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAccounts } from "@/lib/accounts";
 import { getAllCategories } from "@/lib/categories";
-import { listSavingsActions, getSavingsActionById, createSavingsAction, createDiscountSavingsAction } from "@/lib/savingsActions";
+import {
+  listSavingsActions,
+  createSavingsAction,
+  createDiscountSavingsAction,
+  logSavingsActionOccurrence,
+} from "@/lib/savingsActions";
 import { todayStrJST, nowMonthKeyJST } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
@@ -137,27 +142,19 @@ async function handleIncomeText(event: LineEvent, profileId: string, text: strin
   await reply(event, `💰 収入を記録しました: ${parsed.name || "収入"} ${amount.toLocaleString()}円（${monthKey}分）`);
 }
 
-/** 節約アクションの報告。既存の節約アクション一覧（直近100件）と照らし合わせ、同じ習慣の繰り返しと
- * 判断できれば既存カードを複製（同じ金額・タイトル）、新しい種類の行動ならAIで新規に見積もる。
- * 同じ習慣を毎回別々の金額で登録してしまわないようにするための分岐。 */
+/** 節約アクションの報告。既存カード一覧（直近100件）と照らし合わせ、同じ習慣の繰り返しと
+ * 判断できれば新しいカードは作らず、既存カードの履歴に1件積む（カード枚数を増やさない）。
+ * 新しい種類の行動ならAIで新規に見積もってカード化する。 */
 async function handleSavingsText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const existing = (await listSavingsActions()).slice(0, 100).map((a) => ({ id: a.id, title: a.title, keywords: a.keywords }));
   const matchedId = await matchSavingsAction(text, existing);
   if (matchedId) {
-    const original = await getSavingsActionById(matchedId);
-    if (original) {
-      const row = await createSavingsAction({
-        owner: profileId,
-        date: todayStrJST(),
-        description: original.description,
-        title: original.title,
-        estimated_saving: original.estimated_saving,
-        reasoning: original.reasoning,
-        keywords: original.keywords,
-        emoji: original.emoji,
-      });
-      await reply(event, `♻️ 節約アクションを記録しました（前回と同じ内容）: ${row.emoji} ${row.title} ${row.estimated_saving.toLocaleString()}円`);
+    try {
+      const { card } = await logSavingsActionOccurrence({ action_id: matchedId, owner: profileId, date: todayStrJST() });
+      await reply(event, `♻️ 節約履歴に追加しました（前回と同じ内容）: ${card.emoji} ${card.title} ${card.estimated_saving.toLocaleString()}円`);
       return;
+    } catch (e) {
+      console.error("logSavingsActionOccurrence failed, falling back to new card", e);
     }
   }
   const estimate = await estimateSavingsAction(text, todayStrJST());
