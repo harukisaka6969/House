@@ -16,13 +16,20 @@ export interface SavingsActionRow {
   created_at: string;
 }
 
+/** カードに紐づく履歴（action_idあり）と、カード化しない単独記録（action_id無し、割引購入など
+ * 毎回内容が変わり「次に同じものを選ぶ」意味が無いもの）の両方を表す。単独記録はtitle等を自前で持つ。 */
 export interface SavingsActionLogRow {
   id: string;
-  action_id: string;
+  action_id: string | null;
   owner: string;
   date: string;
   estimated_saving: number;
   created_at: string;
+  title: string | null;
+  description: string | null;
+  reasoning: string | null;
+  keywords: string[];
+  emoji: string | null;
 }
 
 /** カード一覧に付与する集計情報。同じ習慣を繰り返した回数と、累積の節約額。 */
@@ -31,10 +38,10 @@ export interface SavingsActionWithStats extends SavingsActionRow {
   last_date: string;
 }
 
-/** 節約履歴（カレンダー・日ごとの一覧用）の1件。カード自身の初回分＋各履歴ログを合わせたもの。 */
+/** 節約履歴（カレンダー・日ごとの一覧用）の1件。カード自身の初回分＋各履歴ログ＋単独記録を合わせたもの。 */
 export interface SavingsHistoryEntry {
   id: string;
-  action_id: string;
+  action_id: string | null;
   owner: string;
   date: string;
   title: string;
@@ -61,12 +68,14 @@ async function fetchCardsAndLogs(): Promise<{ cards: SavingsActionRow[]; logs: S
 }
 
 /** 世帯で共有する節約アクションのカード一覧（誰が記録したかに関わらず全件）。新しい順。
- * 同じ習慣を繰り返し記録してもカードは増えず、代わりに estimated_saving が履歴分の累積額に、
- * occurrence_count が実施回数になる。 */
+ * カードは「次に同じものを選びやすくする」ためのものなので、同じ習慣を繰り返し記録してもカードは増えず、
+ * estimated_saving が履歴分の累積額に、occurrence_count が実施回数になる。割引購入などカード化しない
+ * 単独記録（action_id無し）はここには含まれない。 */
 export async function listSavingsActions(): Promise<SavingsActionWithStats[]> {
   const { cards, logs } = await fetchCardsAndLogs();
   const logsByAction = new Map<string, SavingsActionLogRow[]>();
   for (const log of logs) {
+    if (!log.action_id) continue;
     const arr = logsByAction.get(log.action_id) ?? [];
     arr.push(log);
     logsByAction.set(log.action_id, arr);
@@ -79,7 +88,8 @@ export async function listSavingsActions(): Promise<SavingsActionWithStats[]> {
   });
 }
 
-/** カレンダー・日ごとの節約履歴表示用に、カード自身の初回分＋全履歴ログを1本の一覧に平坦化する。新しい順。 */
+/** カレンダー・日ごとの節約履歴表示用に、カード自身の初回分＋カードの履歴ログ＋単独記録（割引購入など）を
+ * 1本の一覧に平坦化する。新しい順。 */
 export async function listSavingsHistory(): Promise<SavingsHistoryEntry[]> {
   const { cards, logs } = await fetchCardsAndLogs();
   const cardById = new Map(cards.map((c) => [c.id, c]));
@@ -94,17 +104,13 @@ export async function listSavingsHistory(): Promise<SavingsHistoryEntry[]> {
   }));
   const fromLogs: SavingsHistoryEntry[] = [];
   for (const l of logs) {
-    const card = cardById.get(l.action_id);
-    if (!card) continue;
-    fromLogs.push({
-      id: l.id,
-      action_id: l.action_id,
-      owner: l.owner,
-      date: l.date,
-      title: card.title,
-      emoji: card.emoji,
-      estimated_saving: l.estimated_saving,
-    });
+    if (l.action_id) {
+      const card = cardById.get(l.action_id);
+      if (!card) continue;
+      fromLogs.push({ id: l.id, action_id: l.action_id, owner: l.owner, date: l.date, title: card.title, emoji: card.emoji, estimated_saving: l.estimated_saving });
+    } else if (l.title && l.emoji) {
+      fromLogs.push({ id: l.id, action_id: null, owner: l.owner, date: l.date, title: l.title, emoji: l.emoji, estimated_saving: l.estimated_saving });
+    }
   }
   return [...fromCards, ...fromLogs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
@@ -151,24 +157,31 @@ export async function logSavingsActionOccurrence(input: {
 }
 
 /** 「○○を○%オフで○○円で買った」という割引購入の節約アクションを登録する。節約額はAIに推測させず、
- * サーバー側で支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。購入ごとに金額が変わるため、
- * 常に新規カードとして扱う（既存カードとの照合はしない）。 */
+ * サーバー側で支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。購入ごとに商品も金額も変わり
+ * 「次に同じものを選ぶ」意味を持たないため、カードは作らず節約履歴に単独記録として残す。 */
 export async function createDiscountSavingsAction(
   owner: string,
   input: { item: string; discountPercent: number; pricePaid: number; date: string }
-): Promise<SavingsActionRow> {
+): Promise<SavingsActionLogRow> {
   const { originalPrice, saving } = computeDiscountSaving(input.pricePaid, input.discountPercent);
   const emoji = await pickEmoji(input.item).catch(() => "🏷️");
-  return createSavingsAction({
-    owner,
-    date: input.date,
-    description: `${input.item}を${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入した`,
-    title: `${input.item}を${input.discountPercent}%オフで購入`,
-    estimated_saving: saving,
-    reasoning: `定価${originalPrice.toLocaleString()}円のところ${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入。差額${saving.toLocaleString()}円が節約分。`,
-    keywords: [input.item, "割引", `${input.discountPercent}%オフ`],
-    emoji,
-  });
+  const { data, error } = await db()
+    .from("savings_action_logs")
+    .insert({
+      action_id: null,
+      owner,
+      date: input.date,
+      estimated_saving: saving,
+      title: `${input.item}を${input.discountPercent}%オフで購入`,
+      description: `${input.item}を${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入した`,
+      reasoning: `定価${originalPrice.toLocaleString()}円のところ${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入。差額${saving.toLocaleString()}円が節約分。`,
+      keywords: [input.item, "割引", `${input.discountPercent}%オフ`],
+      emoji,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as SavingsActionLogRow;
 }
 
 /** カードを削除する（紐づく履歴ログもcascadeで一緒に削除される）。 */

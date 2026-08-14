@@ -170,9 +170,9 @@ export default function ExpensePanel() {
             discount_percent: ocrDiscountPercent,
             price_paid: amountToUse,
           });
-          discountNote = ` ／ 節約アクションにも登録: ${savingsRow.emoji} ${savingsRow.title}（${fmt(savingsRow.estimated_saving)}節約）`;
+          discountNote = ` ／ 節約履歴にも登録: ${savingsRow.emoji} ${savingsRow.title}（${fmt(savingsRow.estimated_saving)}節約）`;
         } catch {
-          discountNote = " ／ 節約アクションへの登録は失敗しました";
+          discountNote = " ／ 節約履歴への登録は失敗しました";
         }
       }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));

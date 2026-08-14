@@ -262,7 +262,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       const jpyAmount = resolved[0]?.amount ?? ocr.total;
       const currencyNote = currency ? `（${ocr.total}${currency}）` : "";
       let discountNote = "";
-      // レシートに割引表示（○%OFFなど）が読み取れた場合は、支出とは別に節約アクションのカードも登録する。
+      // レシートに割引表示（○%OFFなど）が読み取れた場合は、支出とは別に節約履歴にも記録する（カードは作らない）。
       // 節約額はAIに推測させず、実際の支払額(円換算後)と割引率からサーバー側で確定計算する。
       if (ocr.discount_percent) {
         try {
@@ -272,7 +272,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             pricePaid: jpyAmount,
             date: ocr.date ?? todayStrJST(),
           });
-          discountNote = `\n${savingsRow.emoji} 節約アクションにも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約）`;
+          discountNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約）`;
         } catch (e) {
           console.error("receipt discount savings action failed", e);
         }
