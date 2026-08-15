@@ -20,6 +20,17 @@ export async function deleteSplit(id: string, ownerId: string): Promise<boolean>
   return (data?.length ?? 0) > 0;
 }
 
+const LINE_SPLIT_CODE = "LINE";
+
+/** LINEから新しい種目を記録した際、既存のどの種目名にも一致しなかった場合の受け皿スプリット。
+ * 無ければ自動作成する（ユーザーが作った部位別スプリットを勝手に汚さないため）。 */
+export async function getOrCreateLineSplit(ownerId: string): Promise<GymSplitRow> {
+  const splits = await getSplits(ownerId);
+  const existing = splits.find((s) => s.code === LINE_SPLIT_CODE);
+  if (existing) return existing;
+  return createSplit(ownerId, LINE_SPLIT_CODE, "LINEから記録", splits.length);
+}
+
 export async function getExercises(ownerId: string): Promise<GymExerciseRow[]> {
   const { data, error } = await db().from("gym_exercises").select("*").eq("owner", ownerId).order("sort", { ascending: true });
   if (error) throw error;
@@ -40,6 +51,13 @@ export async function createExercise(
     .single();
   if (error) throw error;
   return data as GymExerciseRow;
+}
+
+/** 種目名で既存の種目を探す（前後空白・大小文字の違いは無視した完全一致）。AIのmatched_exercise_id判定が
+ * 外れた場合の保険として、LINEからの記録登録時に使う。 */
+export function findExerciseByName(exercises: GymExerciseRow[], name: string): GymExerciseRow | null {
+  const norm = name.trim().toLowerCase();
+  return exercises.find((e) => e.name.trim().toLowerCase() === norm) ?? null;
 }
 
 export async function deleteExercise(id: string, ownerId: string): Promise<boolean> {

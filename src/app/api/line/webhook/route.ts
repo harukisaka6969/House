@@ -15,8 +15,14 @@ import {
   extractIncomeFromText,
   estimateSavingsAction,
   matchSavingsAction,
+  extractGymLogFromPhoto,
+  extractGymLogFromText,
+  type ExtractedGymItem,
 } from "@/lib/anthropic";
 import { createMealLog } from "@/lib/mealLog";
+import { getExercises, createExercise, createLog as createGymLog, getOrCreateLineSplit, findExerciseByName } from "@/lib/gymLog";
+import { formatSets } from "@/lib/gymSuggestion";
+import type { GymExerciseRow } from "@/lib/types";
 import { isDuplicateLineMessage } from "@/lib/lineDedup";
 import { addExpenseEntries, ValidationError as ExpenseValidationError } from "@/lib/expenses";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
@@ -39,10 +45,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・節約アクション・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事の写真・レシートの写真もそのまま送れます）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事・レシート・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -171,6 +177,52 @@ async function handleSavingsText(event: LineEvent, profileId: string, text: stri
   await reply(event, `💡 節約アクションを記録しました: ${row.emoji} ${row.title} ${row.estimated_saving.toLocaleString()}円`);
 }
 
+/** AIが抽出した種目ごとの記録を実際に登録する。既存の種目名と一致すればそのまま積み、一致しなければ
+ * LINE専用の受け皿スプリット（getOrCreateLineSplit）に新規種目として追加する（アプリで作った部位別
+ * スプリットを勝手に汚さないため）。写真・文章どちらの記録もここに合流する。 */
+async function handleGymItems(event: LineEvent, profileId: string, exercises: GymExerciseRow[], items: ExtractedGymItem[]): Promise<void> {
+  const usable = items.filter((it) => it.exercise_name && (it.sets.length > 0 || it.duration_minutes || it.distance_km));
+  if (usable.length === 0) {
+    await reply(event, "筋トレ・運動の内容を読み取れませんでした。種目名と重量・回数（または時間・距離）が分かるように送ってみてください。");
+    return;
+  }
+
+  const exerciseById = new Map(exercises.map((e) => [e.id, e]));
+  let lineSplitId: string | null = null;
+  const today = todayStrJST();
+  const summaries: string[] = [];
+
+  for (const item of usable) {
+    let exercise = item.matched_exercise_id ? exerciseById.get(item.matched_exercise_id) ?? null : null;
+    if (!exercise) exercise = findExerciseByName(exercises, item.exercise_name);
+    if (!exercise) {
+      if (!lineSplitId) lineSplitId = (await getOrCreateLineSplit(profileId)).id;
+      exercise = await createExercise(profileId, lineSplitId, item.exercise_name, exercises.length, item.type);
+      exercises.push(exercise);
+      exerciseById.set(exercise.id, exercise);
+    }
+    await createGymLog(profileId, exercise.id, today, {
+      sets: item.sets,
+      durationMinutes: item.duration_minutes,
+      distanceKm: item.distance_km,
+      note: item.note,
+    });
+    const summary =
+      exercise.type === "cardio"
+        ? [item.duration_minutes ? `${item.duration_minutes}分` : null, item.distance_km ? `${item.distance_km}km` : null].filter(Boolean).join(" ")
+        : formatSets(item.sets);
+    summaries.push(`${exercise.name}: ${summary}`);
+  }
+
+  await reply(event, `💪 筋トレを記録しました:\n${summaries.map((s) => `・${s}`).join("\n")}`);
+}
+
+async function handleGymText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const exercises = await getExercises(profileId);
+  const items = await extractGymLogFromText(text, exercises.map((e) => ({ id: e.id, name: e.name })));
+  await handleGymItems(event, profileId, exercises, items);
+}
+
 /** 「承認」以外のテキストメッセージ: 食事・支出・収入のどれについてかをAIで判定し、それぞれ自動で記録する。 */
 async function handleFreeText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const limited = rateLimit(`ai:${profileId}`, 60, 60 * 60 * 1000);
@@ -184,6 +236,7 @@ async function handleFreeText(event: LineEvent, profileId: string, text: string)
     if (intent === "expense") return await handleExpenseText(event, profileId, text);
     if (intent === "income") return await handleIncomeText(event, profileId, text);
     if (intent === "savings") return await handleSavingsText(event, profileId, text);
+    if (intent === "gym") return await handleGymText(event, profileId, text);
     if (intent === "smarthome") return await reply(event, await runSmartHomeTextCommand(text));
     await reply(event, USAGE_HINT);
   } catch (e) {
@@ -227,6 +280,13 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         carb_g: Number(estimate.carb_g) || 0,
       });
       await reply(event, `🍚 食事を記録しました: ${estimate.description || "内容不明"}（約${Math.round(estimate.calories) || 0}kcal）`);
+      return;
+    }
+
+    if (kind === "gym") {
+      const exercises = await getExercises(profileId);
+      const items = await extractGymLogFromPhoto(content.base64, content.mediaType, exercises.map((e) => ({ id: e.id, name: e.name })));
+      await handleGymItems(event, profileId, exercises, items);
       return;
     }
 
@@ -281,7 +341,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       return;
     }
 
-    await reply(event, "写真の内容を認識できませんでした。食事の写真かレシートを送ってください。");
+    await reply(event, "写真の内容を認識できませんでした。食事・レシート・トレーニングノートなどの写真を送ってください。");
   } catch (e) {
     if (e instanceof ExpenseValidationError) {
       await reply(event, `記録に失敗しました: ${e.message}`);

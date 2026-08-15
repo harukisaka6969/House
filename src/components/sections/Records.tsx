@@ -87,11 +87,16 @@ export default function Records() {
     }
   };
 
-  const onFile = async (file: File) => {
+  const onFiles = async (files: FileList) => {
+    const list = Array.from(files);
     setBusy(true);
-    const fd = new FormData();
-    fd.append("image", file);
-    await submitRecord(fd);
+    let ok = 0;
+    for (const file of list) {
+      const fd = new FormData();
+      fd.append("image", file);
+      if (await submitRecord(fd)) ok++;
+    }
+    if (list.length > 1) setMsg(`✓ ${ok}/${list.length}件を記録しました。`);
     setBusy(false);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -144,9 +149,19 @@ export default function Records() {
       />
 
       <div className="mf-panel">
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) onFiles(files);
+          }}
+        />
         <button className="mf-photobox" disabled={busy} onClick={() => fileRef.current?.click()}>
-          {busy ? "解析中…" : "📷 記録を撮影・アップロード"}
+          {busy ? "解析中…" : "📷 記録を撮影・アップロード（複数可）"}
         </button>
 
         <div className="mf-row" style={{ marginTop: 10 }}>

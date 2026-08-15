@@ -234,9 +234,9 @@ export interface MealEstimate {
   carb_g: number;
 }
 
-export type LinePhotoKind = "meal" | "receipt" | "other";
+export type LinePhotoKind = "meal" | "receipt" | "gym" | "other";
 
-/** LINEに送られてきた写真が「食事」か「レシート」かそれ以外かを判定する（自動振り分け用）。 */
+/** LINEに送られてきた写真が「食事」「レシート」「筋トレ・運動の記録」かそれ以外かを判定する（自動振り分け用）。 */
 export async function classifyLinePhoto(base64: string, mediaType: string): Promise<LinePhotoKind> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -248,7 +248,7 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
           { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
           {
             type: "text",
-            text: "この画像は「食事・料理の写真」「レシート・領収書」「それ以外」のどれですか。meal / receipt / other のいずれか1単語のみを返してください。",
+            text: "この画像は「食事・料理の写真」「レシート・領収書」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。meal / receipt / gym / other のいずれか1単語のみを返してください。",
           },
         ],
       },
@@ -257,12 +257,13 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
   const text = stripFence(joinText(res.content)).toLowerCase();
   if (text.includes("meal")) return "meal";
   if (text.includes("receipt")) return "receipt";
+  if (text.includes("gym")) return "gym";
   return "other";
 }
 
-export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "savings" | "unknown";
+export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "savings" | "gym" | "unknown";
 
-/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」「家電操作」「節約アクション」のどれについての話かを判定する（自動振り分け用）。 */
+/** LINEに送られてきた文章メッセージが「食事」「支出」「収入」「家電操作」「節約アクション」「筋トレ・運動」のどれについての話かを判定する（自動振り分け用）。 */
 export async function classifyLineText(text: string): Promise<LineTextIntent> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -270,13 +271,14 @@ export async function classifyLineText(text: string): Promise<LineTextIntent> {
     messages: [
       {
         role: "user",
-        content: `次のメッセージは「食事の内容」「支出（単に買い物などお金を使った内容）」「収入（お金が入った内容）」「家電の操作やシーンの実行（照明・エアコン・鍵など）」「節約アクション（工夫して支出を抑えた・安く買った・ポイントを使ったなど、節約につながる行動の報告）」「それ以外」のどれに一番近いですか。単なる買い物の報告はexpense、割引で買った・自炊で節約した・ポイントで支払ったなど「工夫して安くした」という要素があればsavingsです。meal / expense / income / smarthome / savings / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
+        content: `次のメッセージは「食事の内容」「支出（単に買い物などお金を使った内容）」「収入（お金が入った内容）」「家電の操作やシーンの実行（照明・エアコン・鍵など）」「節約アクション（工夫して支出を抑えた・安く買った・ポイントを使ったなど、節約につながる行動の報告）」「筋トレ・運動の記録（種目名と重量・回数、または時間・距離などの報告）」「それ以外」のどれに一番近いですか。単なる買い物の報告はexpense、割引で買った・自炊で節約した・ポイントで支払ったなど「工夫して安くした」という要素があればsavingsです。meal / expense / income / smarthome / savings / gym / unknown のいずれか1単語のみを返してください。\nメッセージ: ${text}`,
       },
     ],
   });
   const t = stripFence(joinText(res.content)).toLowerCase().replace(/\s+/g, "");
   if (t.includes("smarthome")) return "smarthome";
   if (t.includes("savings")) return "savings";
+  if (t.includes("gym")) return "gym";
   if (t.includes("meal")) return "meal";
   if (t.includes("expense")) return "expense";
   if (t.includes("income")) return "income";
@@ -511,6 +513,93 @@ ${RECORD_JSON_FORMAT}
     ],
   });
   return parseExtractedRecord(joinText(res.content));
+}
+
+export interface ExtractedGymItem {
+  exercise_name: string;
+  matched_exercise_id: string | null;
+  type: "strength" | "cardio";
+  sets: { weight: number; reps: number }[];
+  duration_minutes: number | null;
+  distance_km: number | null;
+  note: string;
+}
+
+function gymExerciseHint(existing: { id: string; name: string }[]): string {
+  return existing.length > 0
+    ? `既存の種目一覧: ${existing.map((e) => `${e.id}=${e.name}`).join("、")}。読み取った種目名が既存のいずれかと明らかに同じ種目であれば、matched_exercise_idにそのidをそのまま入れてください（表記ゆれは同一とみなしてよい）。どれにも当てはまらなければmatched_exercise_idはnullにしてください。`
+    : "既存の種目はまだ登録されていません。matched_exercise_idは常にnullにしてください。";
+}
+
+function parseExtractedGymItems(text: string): ExtractedGymItem[] {
+  const parsed = JSON.parse(stripFence(text)) as { items?: Partial<ExtractedGymItem>[] };
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  return items
+    .filter((it): it is Partial<ExtractedGymItem> & { exercise_name: string } => !!it && typeof it.exercise_name === "string" && it.exercise_name.trim() !== "")
+    .map((it) => ({
+      exercise_name: it.exercise_name.trim(),
+      matched_exercise_id: typeof it.matched_exercise_id === "string" ? it.matched_exercise_id : null,
+      type: it.type === "cardio" ? "cardio" : "strength",
+      sets: Array.isArray(it.sets)
+        ? it.sets.filter((s): s is { weight: number; reps: number } => !!s && typeof s.weight === "number" && typeof s.reps === "number")
+        : [],
+      duration_minutes: typeof it.duration_minutes === "number" ? it.duration_minutes : null,
+      distance_km: typeof it.distance_km === "number" ? it.distance_km : null,
+      note: typeof it.note === "string" ? it.note : "",
+    }));
+}
+
+const GYM_JSON_FORMAT =
+  '{"items":[{"exercise_name":"種目名","matched_exercise_id":"一致する既存種目のid、無ければnull","type":"strength または cardio","sets":[{"weight":重量kgの数値（自重なら0）,"reps":回数の数値}],"duration_minutes":有酸素の時間（分）の数値、無ければnull,"distance_km":有酸素の距離(km)の数値、無ければnull,"note":"補足メモ（無ければ空文字）"}]}';
+
+/** 筋トレ・運動の記録の写真（トレーニングノート、マシンの表示画面、ホワイトボード等）から、
+ * 種目ごとの重量・回数（または時間・距離）を抽出する。複数種目が写っていればすべて拾う。 */
+export async function extractGymLogFromPhoto(
+  base64: string,
+  mediaType: string,
+  existing: { id: string; name: string }[]
+): Promise<ExtractedGymItem[]> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1200,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: `この画像は筋トレ・運動の記録です（トレーニングノート、マシンの表示画面、ホワイトボード等）。写っている種目ごとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
+重量×回数を使う筋トレならtype="strength"でsetsに各セットの重量・回数を入れてください（自重トレーニングはweightを0にしてください）。時間・距離を使う有酸素運動ならtype="cardio"でduration_minutes/distance_kmを入れ、setsは空配列にしてください。
+${gymExerciseHint(existing)}
+${GYM_JSON_FORMAT}
+複数の種目が写っていればitemsに複数含めてください。内容がほとんど読み取れない画像ならitemsは空配列にしてください。`,
+          },
+        ],
+      },
+    ],
+  });
+  return parseExtractedGymItems(joinText(res.content));
+}
+
+/** 筋トレ・運動の記録の文章（写真が無いとき）から、種目ごとの重量・回数（または時間・距離）を抽出する。 */
+export async function extractGymLogFromText(text: string, existing: { id: string; name: string }[]): Promise<ExtractedGymItem[]> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 1200,
+    messages: [
+      {
+        role: "user",
+        content: `次の文章は筋トレ・運動の記録の報告です。内容から読み取れる種目ごとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
+重量×回数を使う筋トレならtype="strength"でsetsに各セットの重量・回数を入れてください（例:「ベンチプレス60kg10回8回8回」→3セット。自重トレーニングはweightを0に）。時間・距離を使う有酸素運動ならtype="cardio"でduration_minutes/distance_kmを入れ、setsは空配列にしてください。
+${gymExerciseHint(existing)}
+${GYM_JSON_FORMAT}
+複数の種目が書かれていればitemsに複数含めてください。
+記録の内容: ${text}`,
+      },
+    ],
+  });
+  return parseExtractedGymItems(joinText(res.content));
 }
 
 export interface SavingsEstimate {

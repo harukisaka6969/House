@@ -82,23 +82,29 @@ export default function MealLog() {
     { calories: 0, protein_g: 0, fat_g: 0, carb_g: 0 }
   );
 
-  const onFile = async (file: File) => {
+  const onFiles = async (files: FileList) => {
+    const list = Array.from(files);
     setBusy(true);
-    setMsg("写真を解析中…");
-    try {
-      const fd = new FormData();
-      fd.append("image", file);
-      fd.append("date", date);
-      const res = await fetch("/api/meal-logs", { method: "POST", body: fd });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error((body && body.error) || "failed");
+    let ok = 0;
+    let lastError = "";
+    for (let i = 0; i < list.length; i++) {
+      setMsg(list.length > 1 ? `写真を解析中…（${i + 1}/${list.length}）` : "写真を解析中…");
+      try {
+        const fd = new FormData();
+        fd.append("image", list[i]);
+        fd.append("date", date);
+        const res = await fetch("/api/meal-logs", { method: "POST", body: fd });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error((body && body.error) || "failed");
+        }
+        ok++;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : "解析に失敗しました。";
       }
-      setMsg("✓ 記録しました。");
-      loadLogs();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "解析に失敗しました。");
     }
+    setMsg(list.length > 1 ? `✓ ${ok}/${list.length}件を記録しました。${ok < list.length ? lastError : ""}` : ok > 0 ? "✓ 記録しました。" : lastError);
+    loadLogs();
     setBusy(false);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -207,14 +213,15 @@ export default function MealLog() {
           ref={fileRef}
           type="file"
           accept="image/*"
+          multiple
           style={{ display: "none" }}
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
+            const files = e.target.files;
+            if (files && files.length > 0) onFiles(files);
           }}
         />
         <button className="mf-btn primary" disabled={busy} onClick={() => fileRef.current?.click()}>
-          {busy ? "解析中…" : "📷 食事の写真をアップロード"}
+          {busy ? "解析中…" : "📷 食事の写真をアップロード（複数可）"}
         </button>
 
         <div className="mf-row" style={{ marginTop: 10 }}>
