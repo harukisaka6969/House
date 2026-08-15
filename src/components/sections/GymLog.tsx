@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiPost, apiDelete } from "@/lib/apiClient";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { GymSplitOut, GymExerciseOut, GymExerciseType, GymLogOut, GymSetEntry } from "@/lib/apiTypes";
 import { suggestNext, suggestCardioNext, formatSets } from "@/lib/gymSuggestion";
 import { todayStrJST } from "@/lib/date";
@@ -36,6 +36,7 @@ export default function GymLog() {
   const [setInputs, setSetInputs] = useState<Record<string, SetInput[]>>({});
   const [cardioInputs, setCardioInputs] = useState<Record<string, CardioInput>>({});
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
+  const [showHidden, setShowHidden] = useState(false);
 
   const load = () => {
     apiGet<{ splits: GymSplitOut[]; exercises: GymExerciseOut[]; logs: GymLogOut[] }>("/api/gym-log")
@@ -51,9 +52,33 @@ export default function GymLog() {
 
   const { splits, exercises, logs } = data;
   const split = splits.find((s) => s.id === splitId) ?? null;
-  const splitExercises = exercises.filter((e) => e.split_id === splitId).sort((a, b) => a.sort - b.sort);
+  const allSplitExercises = exercises.filter((e) => e.split_id === splitId).sort((a, b) => a.sort - b.sort);
+  const splitExercises = allSplitExercises.filter((e) => e.active);
+  const hiddenSplitExercises = allSplitExercises.filter((e) => !e.active);
 
-  const logsForExercise = (exerciseId: string) => logs.filter((l) => l.exercise_id === exerciseId);
+  /** 種目名でマッチさせ、別スプリットに同じ名前で登録されている種目も含めた履歴・提案を1本にまとめる
+   * （同じ種目を複数のスプリットで扱っていても、記録と次回提案が連携するように）。 */
+  const logsForExercise = (ex: GymExerciseOut) => {
+    const sameNameIds = new Set(exercises.filter((e) => e.name === ex.name).map((e) => e.id));
+    return logs.filter((l) => sameNameIds.has(l.exercise_id));
+  };
+
+  const moveExercise = async (ex: GymExerciseOut, direction: "up" | "down") => {
+    const idx = splitExercises.findIndex((e) => e.id === ex.id);
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= splitExercises.length) return;
+    const target = splitExercises[targetIdx];
+    await Promise.all([
+      apiPut(`/api/gym-log/exercises/${ex.id}`, { sort: target.sort }),
+      apiPut(`/api/gym-log/exercises/${target.id}`, { sort: ex.sort }),
+    ]);
+    load();
+  };
+
+  const toggleExerciseActive = async (ex: GymExerciseOut) => {
+    await apiPut(`/api/gym-log/exercises/${ex.id}`, { active: !ex.active });
+    load();
+  };
 
   const getSetInputs = (exerciseId: string): SetInput[] => setInputs[exerciseId] ?? [{ ...emptySetInput }];
   const setExerciseInputs = (exerciseId: string, sets: SetInput[]) => setSetInputs((m) => ({ ...m, [exerciseId]: sets }));
@@ -220,8 +245,8 @@ export default function GymLog() {
 
           {splitExercises.length === 0 && <div className="mf-empty">この日の種目がまだありません。</div>}
 
-          {splitExercises.map((ex) => {
-            const exLogs = logsForExercise(ex.id);
+          {splitExercises.map((ex, exIdx) => {
+            const exLogs = logsForExercise(ex);
             const isCardio = ex.type === "cardio";
             const suggestion = isCardio
               ? suggestCardioNext(exLogs.map((l) => ({ date: l.date, duration_minutes: l.duration_minutes, distance_km: l.distance_km })))
@@ -238,9 +263,32 @@ export default function GymLog() {
                       </span>
                     )}
                   </div>
-                  <button className="mf-del" onClick={() => removeExercise(ex.id)}>
-                    ×
-                  </button>
+                  <div className="mf-row" style={{ gap: 4 }}>
+                    <button
+                      className="mf-iconbtn"
+                      disabled={exIdx === 0}
+                      title="上に移動"
+                      aria-label="上に移動"
+                      onClick={() => moveExercise(ex, "up")}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      className="mf-iconbtn"
+                      disabled={exIdx === splitExercises.length - 1}
+                      title="下に移動"
+                      aria-label="下に移動"
+                      onClick={() => moveExercise(ex, "down")}
+                    >
+                      ▼
+                    </button>
+                    <button className="mf-iconbtn" title="一時的に非表示にする" aria-label="一時的に非表示にする" onClick={() => toggleExerciseActive(ex)}>
+                      🙈
+                    </button>
+                    <button className="mf-del" onClick={() => removeExercise(ex.id)}>
+                      ×
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mf-hint" style={{ opacity: 0.85, marginTop: 6 }}>
@@ -358,6 +406,26 @@ export default function GymLog() {
               </div>
             );
           })}
+
+          {hiddenSplitExercises.length > 0 && (
+            <button className="mf-btn ghost" style={{ marginBottom: 8 }} onClick={() => setShowHidden((v) => !v)}>
+              {showHidden ? "非表示の種目を隠す" : `非表示の種目を表示（${hiddenSplitExercises.length}件）`}
+            </button>
+          )}
+          {showHidden &&
+            hiddenSplitExercises.map((ex) => (
+              <div key={ex.id} className="mf-panel mf-row" style={{ justifyContent: "space-between", opacity: 0.6 }}>
+                <span>{ex.name}</span>
+                <div className="mf-row" style={{ gap: 4 }}>
+                  <button className="mf-btn ghost" style={{ padding: "4px 10px" }} onClick={() => toggleExerciseActive(ex)}>
+                    表示に戻す
+                  </button>
+                  <button className="mf-del" onClick={() => removeExercise(ex.id)}>
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
 
           {!showAddExercise ? (
             <button className="mf-btn ghost" onClick={() => setShowAddExercise(true)}>

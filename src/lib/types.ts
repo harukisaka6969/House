@@ -312,6 +312,7 @@ export interface GymExerciseRow {
   name: string;
   type: GymExerciseType;
   sort: number;
+  active: boolean;
   created_at: string;
 }
 

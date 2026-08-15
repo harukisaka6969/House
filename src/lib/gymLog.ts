@@ -48,6 +48,17 @@ export async function deleteExercise(id: string, ownerId: string): Promise<boole
   return (data?.length ?? 0) > 0;
 }
 
+/** 種目の並び順（sort）・表示/非表示（active）を更新する。並べ替えと、削除せず一時的に隠す用途で使う。 */
+export async function updateExercise(
+  id: string,
+  ownerId: string,
+  patch: { sort?: number; active?: boolean }
+): Promise<GymExerciseRow | null> {
+  const { data, error } = await db().from("gym_exercises").update(patch).eq("id", id).eq("owner", ownerId).select("*").maybeSingle();
+  if (error) throw error;
+  return data as GymExerciseRow | null;
+}
+
 /** 直近の記録一覧（種目ごとの提案・履歴表示用）。件数上限つきで全件取得し、種目ごとにグルーピングして使う。 */
 export async function getRecentLogs(ownerId: string, limit = 800): Promise<GymLogRow[]> {
   const { data, error } = await db()

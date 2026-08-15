@@ -340,6 +340,7 @@ export interface GymExerciseOut {
   name: string;
   type: GymExerciseType;
   sort: number;
+  active: boolean;
 }
 
 export interface GymLogOut {
