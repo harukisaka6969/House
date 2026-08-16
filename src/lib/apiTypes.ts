@@ -628,10 +628,11 @@ export interface SavingsActionOut {
   last_date: string;
 }
 
-/** 節約履歴（カレンダー・日ごとの一覧）用の1件。カードの初回分＋各実施ログを平坦化したもの。 */
+/** 節約履歴（カレンダー・日ごとの一覧）用の1件。カードの初回分＋各実施ログを平坦化したもの。
+ * action_idがnullなのは、カードを作らない単独記録（割引購入・ポイント等での無料入手）。 */
 export interface SavingsHistoryOut {
   id: string;
-  action_id: string;
+  action_id: string | null;
   owner: string;
   owner_name: string;
   date: string;

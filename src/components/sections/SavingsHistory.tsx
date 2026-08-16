@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/apiClient";
+import { apiGet, apiDelete } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import { periodRange } from "@/lib/date";
 import { groupSavingsByDay, groupSavingsByWeek, savingsPerDayMap } from "@/lib/savingsHistory";
@@ -29,12 +29,22 @@ export default function SavingsHistory() {
   const [history, setHistory] = useState<SavingsHistoryOut[] | null>(null);
   const [selDay, setSelDay] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
     apiGet<{ history: SavingsHistoryOut[] }>(`/api/savings-actions${qs}`)
       .then((r) => setHistory(r.history))
       .catch(() => setHistory([]));
-  }, [ownerFilter]);
+  };
+  useEffect(load, [ownerFilter]);
+
+  /** 間違って登録してしまった履歴を1件削除する。カードの初回分を消す場合は、他に履歴が残っていれば
+   * 最も古い履歴がカードの初回分に昇格し（カード自体は消えない）、無ければカードごと削除される。 */
+  const deleteEntry = async (entry: { id: string; action_id?: string | null; title: string }) => {
+    if (!confirm(`「${entry.title}」の記録を削除しますか？`)) return;
+    const qs = entry.action_id ? `?action_id=${entry.action_id}` : "";
+    await apiDelete(`/api/savings-actions/history/${entry.id}${qs}`);
+    load();
+  };
 
   const { from, toExclusive } = periodRange(monthKey);
   const periodActions = useMemo(
@@ -125,6 +135,9 @@ export default function SavingsHistory() {
                     <span className="sv-dayitememoji">{it.emoji || "💡"}</span>
                     <span className="sv-dayitemtitle">{it.title}</span>
                     <span className="sv-dayitemamount mf-mono">{fmt(it.estimated_saving)}</span>
+                    <button className="mf-del" style={{ marginLeft: 6 }} title="この記録を削除" onClick={() => deleteEntry(it)}>
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>

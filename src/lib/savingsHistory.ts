@@ -6,6 +6,9 @@ export interface SavingsHistoryItem {
   title: string;
   emoji: string;
   estimated_saving: number;
+  /** カードに紐づく履歴ならそのカードのid、単独記録（割引購入等）ならnull。削除時にどちらの経路で
+   * 消すか判定するために使う。省略可（グルーピング処理そのものはこの値を使わないため）。 */
+  action_id?: string | null;
 }
 
 export interface DayGroup {

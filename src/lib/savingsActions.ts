@@ -193,3 +193,36 @@ export async function deleteSavingsAction(id: string): Promise<boolean> {
   if (error) throw error;
   return (data?.length ?? 0) > 0;
 }
+
+/** 節約履歴の1件を、間違って登録してしまった場合などに削除する。
+ * - カードに紐づく履歴ログ、または単独記録（割引購入等）なら、そのログ行をそのまま削除する。
+ * - カード自身の初回分（＝entryId===actionIdで、カード行そのものが表す1件）を消す場合は、
+ *   他に履歴ログが残っていれば最も古いログをカードの初回分に昇格させてそのログを削除し（カード自体は残す）、
+ *   他に履歴が無ければカードごと削除する。 */
+export async function deleteSavingsHistoryEntry(entryId: string, actionId: string | null): Promise<boolean> {
+  if (actionId && entryId === actionId) {
+    const { data: oldestLogs, error: logsErr } = await db()
+      .from("savings_action_logs")
+      .select("*")
+      .eq("action_id", actionId)
+      .order("date", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (logsErr) throw logsErr;
+    const promote = (oldestLogs ?? [])[0] as SavingsActionLogRow | undefined;
+    if (promote) {
+      const { error: updateErr } = await db()
+        .from("savings_actions")
+        .update({ date: promote.date, estimated_saving: promote.estimated_saving })
+        .eq("id", actionId);
+      if (updateErr) throw updateErr;
+      const { data, error } = await db().from("savings_action_logs").delete().eq("id", promote.id).select("id");
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    }
+    return deleteSavingsAction(actionId);
+  }
+  const { data, error } = await db().from("savings_action_logs").delete().eq("id", entryId).select("id");
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
