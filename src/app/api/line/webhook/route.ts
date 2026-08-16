@@ -337,6 +337,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             memo: ocr.store || "",
             original_currency: currency,
             original_amount: currency ? ocr.total : null,
+            items: ocr.items,
           },
         ],
         categories

@@ -36,6 +36,7 @@ export default function ExpensePanel() {
   const [rateErr, setRateErr] = useState("");
   const [ocrDiscountPercent, setOcrDiscountPercent] = useState<number | null>(null);
   const [ocrRedeemed, setOcrRedeemed] = useState<{ item: string; originalPrice: number } | null>(null);
+  const [ocrItems, setOcrItems] = useState<string[] | null>(null);
   const [redeemedBusy, setRedeemedBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -143,6 +144,7 @@ export default function ExpensePanel() {
             memo: form.memo,
             sub: form.category === "その他" ? form.sub.trim() : undefined,
             ...(isForeign ? { original_currency: currency, original_amount: Number(foreignAmount), exchange_rate: rate } : {}),
+            ...(ocrItems && ocrItems.length > 0 ? { items: ocrItems } : {}),
           },
         ],
       });
@@ -193,6 +195,7 @@ export default function ExpensePanel() {
       setForeignAmount("");
       setOcrDiscountPercent(null);
       setOcrRedeemed(null);
+      setOcrItems(null);
       setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote + discountNote);
       refreshMonth();
       if (promoted.length) refreshSettings();
@@ -285,6 +288,7 @@ export default function ExpensePanel() {
     setBusy(true);
     setOcrDiscountPercent(null);
     setOcrRedeemed(null);
+    setOcrItems(null);
     setMsg("レシートを読み取り中…");
     try {
       const fd = new FormData();
@@ -301,6 +305,7 @@ export default function ExpensePanel() {
         discount_percent?: number | null;
         redeemed_item?: string | null;
         redeemed_original_price?: number | null;
+        items?: string[];
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
       setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
@@ -310,6 +315,7 @@ export default function ExpensePanel() {
       const redeemed =
         parsed.redeemed_item && parsed.redeemed_original_price ? { item: parsed.redeemed_item, originalPrice: parsed.redeemed_original_price } : null;
       setOcrRedeemed(redeemed);
+      setOcrItems(parsed.items && parsed.items.length > 0 ? parsed.items : null);
       // ポイント等で全額相殺され支払合計が0円のレシートは、支出として追加する金額が無いため
       // フォームには反映しない（節約履歴への登録は下の専用ボタンで行う）。
       if (!(parsed.total > 0)) {

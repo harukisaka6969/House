@@ -640,3 +640,13 @@ export interface SavingsHistoryOut {
   emoji: string;
   estimated_saving: number;
 }
+
+export interface ItemHistoryOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  date: string;
+  name: string;
+  source: "purchase" | "meal";
+  note: string;
+}

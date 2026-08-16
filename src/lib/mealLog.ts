@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { addItemHistoryEntries } from "./itemHistory";
 import type { MealLogRow, PfcTargetRow } from "./types";
 
 export async function getMealLogsInRange(ownerId: string, fromDate: string, toDateExclusive: string): Promise<MealLogRow[]> {
@@ -31,6 +32,14 @@ export async function createMealLog(ownerId: string, input: NewMealLogInput): Pr
     .select("*")
     .single();
   if (error) throw error;
+  // 品目履歴（検索専用）への記録はベストエフォート。失敗しても食事ログ自体は成功として扱う。
+  if (input.description.trim()) {
+    try {
+      await addItemHistoryEntries(ownerId, input.date, "meal", [input.description]);
+    } catch (e) {
+      console.error("item history logging failed", e);
+    }
+  }
   return data as MealLogRow;
 }
 

@@ -47,6 +47,7 @@ const Anniversaries = dyn(() => import("./sections/Anniversaries"));
 const YearTimeline = dyn(() => import("./sections/YearTimeline"));
 const SavingsActions = dyn(() => import("./sections/SavingsActions"));
 const SavingsHistory = dyn(() => import("./sections/SavingsHistory"));
+const ItemHistorySearch = dyn(() => import("./sections/ItemHistorySearch"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const PYTHON_LEARN_URL = "https://python-learn-lilac.vercel.app/";
@@ -71,6 +72,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["splitEvents", "㉒ 割り勘"],
       ["savingsActions", "㉕ 節約アクション"],
       ["savingsHistory", "㉖ 節約履歴"],
+      ["itemHistory", "㉗ 履歴検索"],
     ],
   },
   {
@@ -285,6 +287,7 @@ function DashboardInner() {
             {view === "yearTimeline" && <YearTimeline />}
             {view === "savingsActions" && <SavingsActions />}
             {view === "savingsHistory" && <SavingsHistory />}
+            {view === "itemHistory" && <ItemHistorySearch />}
             {view === "settings" && <Settings />}
           </>
         )}

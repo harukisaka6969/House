@@ -409,3 +409,17 @@ export interface InventoryItemRow {
   created_at: string;
   updated_at: string;
 }
+
+/* ---- 品目履歴（購入・食事の品目名を検索用に裏で記録） ---- */
+
+export type ItemHistorySource = "purchase" | "meal";
+
+export interface ItemHistoryRow {
+  id: string;
+  owner: string;
+  date: string;
+  name: string;
+  source: ItemHistorySource;
+  note: string;
+  created_at: string;
+}

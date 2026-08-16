@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { todayStrJST, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
+import { addItemHistoryEntries } from "./itemHistory";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -17,6 +18,8 @@ export interface NewExpenseInput {
    * （クライアントやAIが申告したレートは信用しない）。 */
   original_currency?: string | null;
   original_amount?: number | null;
+  /** レシートOCR等で読み取れた購入品名（あれば）。品目履歴（検索専用）に残す。未指定ならmemoを1件として残す。 */
+  items?: string[] | null;
 }
 
 export interface PreparedExpense {
@@ -95,6 +98,19 @@ export async function addExpenseEntries(
     p_entries: prepared,
   });
   if (error) throw error;
+
+  // 品目履歴（検索専用）への記録はベストエフォート。失敗しても支出登録自体は成功として扱う。
+  try {
+    await Promise.all(
+      entries.map((e, i) => {
+        const names = e.items && e.items.length > 0 ? e.items : prepared[i].memo ? [prepared[i].memo] : [];
+        return names.length > 0 ? addItemHistoryEntries(ownerId, prepared[i].date, "purchase", names, prepared[i].memo) : Promise.resolve();
+      })
+    );
+  } catch (e) {
+    console.error("item history logging failed", e);
+  }
+
   return { promoted: (data as string[] | null) ?? [], entries: prepared };
 }
 
