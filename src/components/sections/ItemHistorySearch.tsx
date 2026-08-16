@@ -7,8 +7,9 @@ import type { ItemHistoryOut, ItemHistoryAggregatesOut, PeriodTotalsOut } from "
 import { SectionHead, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 
-function fmtDateShort(d: string): string {
-  return d.slice(5).replace("-", "/");
+function fmtDateWithYear(d: string): string {
+  const [y, m, day] = d.split("-");
+  return `${y}/${m}/${day}`;
 }
 
 interface DayGroup {
@@ -187,7 +188,7 @@ export default function ItemHistorySearch() {
                     style={{ width: "100%", background: "none", border: "none", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer", padding: 0 }}
                   >
                     <div className="mf-row" style={{ justifyContent: "space-between" }}>
-                      <b>{fmtDateShort(g.date)}</b>
+                      <b>{fmtDateWithYear(g.date)}</b>
                       <span className="mf-hint" style={{ margin: 0 }}>{expandedDate === g.date ? "▾ 閉じる" : "▸ 展開"}</span>
                     </div>
                     <div className="mf-hint" style={{ margin: "4px 0 0" }}>
