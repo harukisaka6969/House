@@ -648,5 +648,22 @@ export interface ItemHistoryOut {
   date: string;
   name: string;
   source: "purchase" | "meal";
-  note: string;
+  store: string;
+  category: string;
+  amount: number | null;
+}
+
+export interface PeriodTotalsOut {
+  thisWeek: number;
+  thisMonth: number;
+  past3m: number;
+  past6m: number;
+  pastYear: number;
+  allTime: number;
+}
+
+export interface ItemHistoryAggregatesOut {
+  byItem: { query: string; totals: PeriodTotalsOut; unknownCount: number } | null;
+  byStore: { query: string; totals: PeriodTotalsOut } | null;
+  byCategory: { query: string; totals: PeriodTotalsOut } | null;
 }

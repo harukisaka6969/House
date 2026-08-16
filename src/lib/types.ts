@@ -420,6 +420,13 @@ export interface ItemHistoryRow {
   date: string;
   name: string;
   source: ItemHistorySource;
-  note: string;
+  /** 購入時のメモ（レシートOCRなら店名になることが多い）。食事はいつも空文字。 */
+  store: string;
+  /** 支出のカテゴリ。食事はいつも空文字。 */
+  category: string;
+  /** その品目1件分の金額（読み取れた場合のみ）。食事はいつもnull。 */
+  amount: number | null;
+  /** 元になったexpensesの行への参照（購入のみ・食事はnull）。 */
+  expense_id: string | null;
   created_at: string;
 }

@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { todayStrJST, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
-import { addItemHistoryEntries } from "./itemHistory";
+import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
@@ -18,8 +18,9 @@ export interface NewExpenseInput {
    * （クライアントやAIが申告したレートは信用しない）。 */
   original_currency?: string | null;
   original_amount?: number | null;
-  /** レシートOCR等で読み取れた購入品名（あれば）。品目履歴（検索専用）に残す。未指定ならmemoを1件として残す。 */
-  items?: string[] | null;
+  /** レシートOCR等で読み取れた購入品ごとの{name, price}（あれば）。品目履歴（検索専用）に残す。
+   * 未指定ならmemoを1件（金額はこの支出全体の金額）として残す。 */
+  items?: { name: string; price?: number | null }[] | null;
 }
 
 export interface PreparedExpense {
@@ -98,20 +99,34 @@ export async function addExpenseEntries(
     p_entries: prepared,
   });
   if (error) throw error;
+  const row = (data as { promoted: string[]; ids: string[] }[] | null)?.[0];
+  const promoted = row?.promoted ?? [];
+  const expenseIds = row?.ids ?? [];
 
   // 品目履歴（検索専用）への記録はベストエフォート。失敗しても支出登録自体は成功として扱う。
   try {
     await Promise.all(
       entries.map((e, i) => {
-        const names = e.items && e.items.length > 0 ? e.items : prepared[i].memo ? [prepared[i].memo] : [];
-        return names.length > 0 ? addItemHistoryEntries(ownerId, prepared[i].date, "purchase", names, prepared[i].memo) : Promise.resolve();
+        const items: NewItemHistoryEntry[] =
+          e.items && e.items.length > 0
+            ? e.items.map((it) => ({ name: it.name, amount: it.price ?? null }))
+            : prepared[i].memo
+              ? [{ name: prepared[i].memo, amount: prepared[i].amount }]
+              : [];
+        return items.length > 0
+          ? addItemHistoryEntries(ownerId, prepared[i].date, "purchase", items, {
+              store: prepared[i].memo,
+              category: prepared[i].category,
+              expenseId: expenseIds[i] ?? null,
+            })
+          : Promise.resolve();
       })
     );
   } catch (e) {
     console.error("item history logging failed", e);
   }
 
-  return { promoted: (data as string[] | null) ?? [], entries: prepared };
+  return { promoted, entries: prepared };
 }
 
 export async function deleteExpense(id: string, ownerId: string): Promise<boolean> {

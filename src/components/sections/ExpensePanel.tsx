@@ -36,7 +36,7 @@ export default function ExpensePanel() {
   const [rateErr, setRateErr] = useState("");
   const [ocrDiscountPercent, setOcrDiscountPercent] = useState<number | null>(null);
   const [ocrRedeemed, setOcrRedeemed] = useState<{ item: string; originalPrice: number } | null>(null);
-  const [ocrItems, setOcrItems] = useState<string[] | null>(null);
+  const [ocrItems, setOcrItems] = useState<{ name: string; price: number | null }[] | null>(null);
   const [redeemedBusy, setRedeemedBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -305,7 +305,7 @@ export default function ExpensePanel() {
         discount_percent?: number | null;
         redeemed_item?: string | null;
         redeemed_original_price?: number | null;
-        items?: string[];
+        items?: { name: string; price: number | null }[];
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
       setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
