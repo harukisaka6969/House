@@ -5,6 +5,7 @@ import { apiGet, apiPut, apiDelete } from "@/lib/apiClient";
 import type { PersonalRecordOut, RecordCategorySummary, RecordMetric } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
 import RecordsTrend from "./RecordsTrend";
+import BodyCompositionDashboard from "./BodyCompositionDashboard";
 
 /** 値の先頭にある数値（例: "84.1kg"→84.1）を取り出す。比較不能なら null。 */
 function leadingNumber(value: string): number | null {
@@ -199,7 +200,8 @@ export default function Records() {
         </div>
       )}
 
-      {activeCategory && records && records.length >= 2 && <RecordsTrend records={records} />}
+      {activeCategory === "体組成" && records && records.length > 0 && <BodyCompositionDashboard records={records} />}
+      {activeCategory && activeCategory !== "体組成" && records && records.length >= 2 && <RecordsTrend records={records} />}
 
       {activeCategory && records && (
         <div className="mf-panel">
