@@ -15,25 +15,32 @@ interface Group {
   entries: ItemHistoryOut[];
 }
 
+const TABS: { id: "purchase" | "meal"; label: string }[] = [
+  { id: "purchase", label: "🧾 購入品" },
+  { id: "meal", label: "🍽 食事" },
+];
+
 /** レシートの購入品・食事の内容など、裏で記録されている品目履歴をキーワード検索する。
+ * 購入品と食事は混ざるとわかりにくいため、上部タブでどちらか一方だけを表示する。
  * 同じ品目名ごとにまとめて、いつ登録されたか（日付一覧）を表示する。 */
 export default function ItemHistorySearch() {
   const { me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const [source, setSource] = useState<"purchase" | "meal">("purchase");
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ItemHistoryOut[] | null>(null);
 
   useEffect(() => {
     if (!query.trim()) return;
     const t = setTimeout(() => {
-      const qs = new URLSearchParams({ q: query.trim() });
+      const qs = new URLSearchParams({ q: query.trim(), source });
       if (ownerFilter) qs.set("owner", ownerFilter);
       apiGet<{ items: ItemHistoryOut[] }>(`/api/item-history?${qs.toString()}`)
         .then((r) => setItems(r.items))
         .catch(() => setItems([]));
     }, 300);
     return () => clearTimeout(t);
-  }, [query, ownerFilter]);
+  }, [query, ownerFilter, source]);
 
   const groups = useMemo<Group[]>(() => {
     if (!items) return [];
@@ -57,9 +64,23 @@ export default function ItemHistorySearch() {
       />
       <MoneyViewToggle />
       <div className="mf-panel">
+        <div className="mf-chips" style={{ marginTop: 0, marginBottom: 10 }}>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={"mf-chipbtn" + (source === t.id ? " on" : "")}
+              onClick={() => {
+                setSource(t.id);
+                setItems(null);
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <input
           className="mf-input"
-          placeholder="🔍 品目名で検索（例: 洗剤）"
+          placeholder={source === "purchase" ? "🔍 購入品を検索（例: 洗剤）" : "🔍 食事を検索（例: カレー）"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -88,7 +109,7 @@ export default function ItemHistorySearch() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                   {g.entries.map((e) => (
                     <span key={e.id} className="mf-mono" style={{ fontSize: 12, background: "#181E25", borderRadius: 6, padding: "3px 8px" }}>
-                      {fmtDateShort(e.date)} {e.source === "meal" ? "🍽" : "🧾"}
+                      {fmtDateShort(e.date)}
                       {e.owner_name !== meName && (
                         <span className="mf-ownerchip" style={{ marginLeft: 4 }}>
                           {e.owner_name}

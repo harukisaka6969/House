@@ -21,18 +21,14 @@ export async function addItemHistoryEntries(
   if (error) throw error;
 }
 
-/** 品目名をキーワード検索する（渡されたowner群のみ・日付の新しい順）。 */
-export async function searchItemHistory(ownerIds: string[], query: string, limit = 300): Promise<ItemHistoryRow[]> {
+/** 品目名をキーワード検索する（渡されたowner群のみ・日付の新しい順）。sourceを指定すると
+ * purchase（購入品）/meal（食事）のどちらか一方だけに絞る。 */
+export async function searchItemHistory(ownerIds: string[], query: string, source?: ItemHistorySource, limit = 300): Promise<ItemHistoryRow[]> {
   if (ownerIds.length === 0 || !query.trim()) return [];
   const pattern = `%${query.trim()}%`;
-  const { data, error } = await db()
-    .from("item_history")
-    .select("*")
-    .in("owner", ownerIds)
-    .ilike("name", pattern)
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  let q = db().from("item_history").select("*").in("owner", ownerIds).ilike("name", pattern);
+  if (source) q = q.eq("source", source);
+  const { data, error } = await q.order("date", { ascending: false }).order("created_at", { ascending: false }).limit(limit);
   if (error) throw error;
   return (data ?? []) as ItemHistoryRow[];
 }
