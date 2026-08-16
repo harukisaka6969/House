@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { TT } from "../common";
 import { apiGet } from "@/lib/apiClient";
 import { todayStrJST, addDaysStr, dayOfWeek } from "@/lib/date";
@@ -131,43 +131,89 @@ interface PartWeekEntry {
   sets: GymSetEntry[];
 }
 
-interface PartWeekVolume {
-  splitId: string;
-  label: string;
-  color: string;
-  volume: number;
-  entries: PartWeekEntry[];
-}
-
-/** 週内のログを、種目が属するスプリット（=部位分割）ごとに集計して総挙上量（重量×回数の合計）を出す。
- * 有酸素運動（type: cardio）は重量記録が無いため対象外。分割自体は登録順（sort）で色を固定割当する。 */
-function computeWeeklyVolume(
-  logs: GymLogOut[],
-  exercises: GymExerciseOut[],
-  splits: GymSplitOut[],
-  weekStart: string,
-  weekEnd: string
-): PartWeekVolume[] {
+/** 1週間分のログを、種目が属するスプリット（=部位分割）ごとに集計する。有酸素運動（type: cardio）は
+ * 重量記録が無いため対象外。 */
+function computePartWeekData(logs: GymLogOut[], exercises: GymExerciseOut[], weekStart: string, weekEnd: string): Map<string, { volume: number; entries: PartWeekEntry[] }> {
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
-  const parts = new Map<string, PartWeekVolume>();
-  [...splits]
-    .sort((a, b) => a.sort - b.sort)
-    .forEach((s, idx) => {
-      if (!exercises.some((e) => e.split_id === s.id && e.type === "strength")) return;
-      parts.set(s.id, { splitId: s.id, label: s.label, color: PART_COLORS[idx % PART_COLORS.length], volume: 0, entries: [] });
-    });
+  const result = new Map<string, { volume: number; entries: PartWeekEntry[] }>();
   for (const log of logs) {
     if (log.date < weekStart || log.date > weekEnd) continue;
     const ex = exerciseById.get(log.exercise_id);
     if (!ex || ex.type !== "strength") continue;
-    const part = parts.get(ex.split_id);
-    if (!part) continue;
     const vol = setVolume(log.sets);
     if (vol <= 0) continue;
-    part.volume += vol;
-    part.entries.push({ date: log.date, exerciseName: ex.name, sets: log.sets });
+    const cur = result.get(ex.split_id) ?? { volume: 0, entries: [] };
+    cur.volume += vol;
+    cur.entries.push({ date: log.date, exerciseName: ex.name, sets: log.sets });
+    result.set(ex.split_id, cur);
   }
-  return [...parts.values()].sort((a, b) => b.volume - a.volume);
+  return result;
+}
+
+interface PartCycleStat {
+  splitId: string;
+  label: string;
+  color: string;
+  current: number;
+  previous: number;
+  /** 前サイクル比の変化率(%)。前サイクルの記録が無ければnull（今回が初回か、両方0か）。 */
+  deltaPct: number | null;
+  history: { weekStart: string; volume: number }[];
+  entries: PartWeekEntry[];
+}
+
+const HISTORY_WEEKS = 8;
+
+/** 部位ごとに「今サイクル・前サイクル」の総挙上量を比較し、あわせて直近HISTORY_WEEKS分の推移も返す。
+ * さらに、記録が両サイクルにある部位だけを対象にした前週比%の平均を「成長指数」として週ごとに算出する
+ * （新規に始めた部位や記録が無い週はノイズになるため対象から除く）。 */
+function analyzeGymHistory(
+  logs: GymLogOut[],
+  exercises: GymExerciseOut[],
+  splits: GymSplitOut[],
+  weekStart: string
+): { partStats: PartCycleStat[]; growthHistory: { weekStart: string; index: number | null }[]; growthIndex: number | null } {
+  const activeSplits = [...splits].sort((a, b) => a.sort - b.sort).filter((s) => exercises.some((e) => e.split_id === s.id && e.type === "strength"));
+  const weekStarts: string[] = [];
+  for (let i = HISTORY_WEEKS - 1; i >= 0; i--) weekStarts.push(addDaysStr(weekStart, -7 * i));
+  const weekMaps = weekStarts.map((s) => computePartWeekData(logs, exercises, s, addDaysStr(s, 6)));
+  const currentMap = weekMaps[weekMaps.length - 1];
+  const prevMap = weekMaps[weekMaps.length - 2];
+
+  const partStats: PartCycleStat[] = activeSplits
+    .map((s, idx) => {
+      const current = currentMap.get(s.id)?.volume ?? 0;
+      const previous = prevMap.get(s.id)?.volume ?? 0;
+      const entries = currentMap.get(s.id)?.entries ?? [];
+      const deltaPct = previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
+      const history = weekStarts.map((ws, i) => ({ weekStart: ws, volume: weekMaps[i].get(s.id)?.volume ?? 0 }));
+      return { splitId: s.id, label: s.label, color: PART_COLORS[idx % PART_COLORS.length], current, previous, deltaPct, history, entries };
+    })
+    .sort((a, b) => b.current - a.current);
+
+  const growthHistory: { weekStart: string; index: number | null }[] = [];
+  for (let i = 1; i < weekMaps.length; i++) {
+    const changes: number[] = [];
+    for (const s of activeSplits) {
+      const prev = weekMaps[i - 1].get(s.id)?.volume ?? 0;
+      const cur = weekMaps[i].get(s.id)?.volume ?? 0;
+      if (prev > 0) changes.push(((cur - prev) / prev) * 100);
+    }
+    growthHistory.push({
+      weekStart: weekStarts[i],
+      index: changes.length > 0 ? Math.round((changes.reduce((a, b) => a + b, 0) / changes.length) * 10) / 10 : null,
+    });
+  }
+  const growthIndex = growthHistory[growthHistory.length - 1]?.index ?? null;
+
+  return { partStats, growthHistory, growthIndex };
+}
+
+function fmtDeltaBadge(deltaPct: number | null, current: number): { text: string; color: string } {
+  if (deltaPct === null) return current > 0 ? { text: "🆕 初回", color: "#93A0AE" } : { text: "記録なし", color: "#93A0AE" };
+  if (deltaPct === 0) return { text: "±0%", color: "#93A0AE" };
+  const up = deltaPct > 0;
+  return { text: `${up ? "▲" : "▼"}${Math.abs(deltaPct)}%`, color: up ? "#3DDC97" : "#F26D5F" };
 }
 
 /** 体組成カテゴリ専用の一画面ダッシュボード。体重・体脂肪率・筋肉量は下限0固定にしないミニチャートで
@@ -197,11 +243,10 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
 
   const weekStart = useMemo(() => mondayOf(addDaysStr(todayStrJST(), -7 * weekOffset)), [weekOffset]);
   const weekEnd = useMemo(() => addDaysStr(weekStart, 6), [weekStart]);
-  const weekVolume = useMemo(
-    () => (gymLogs && gymExercises && gymSplits ? computeWeeklyVolume(gymLogs, gymExercises, gymSplits, weekStart, weekEnd) : null),
-    [gymLogs, gymExercises, gymSplits, weekStart, weekEnd]
+  const analysis = useMemo(
+    () => (gymLogs && gymExercises && gymSplits ? analyzeGymHistory(gymLogs, gymExercises, gymSplits, weekStart) : null),
+    [gymLogs, gymExercises, gymSplits, weekStart]
   );
-  const maxVolume = weekVolume && weekVolume.length > 0 ? Math.max(1, ...weekVolume.map((p) => p.volume)) : 1;
 
   const cutoff = useMemo(() => {
     const opt = PERIODS.find((p) => p.id === period);
@@ -392,7 +437,7 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
       <div style={{ background: "#101418", borderRadius: 10, padding: 12, marginTop: 12 }}>
         <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <span className="mf-hint" style={{ margin: 0 }}>
-            部位別トレーニング量（総挙上量＝重量×回数の合計。タップで内訳）
+            部位別トレーニング成長（前サイクル＝先週比）
           </span>
           <div className="mf-monthnav">
             <button className="mf-iconbtn" style={{ width: 26, height: 26, fontSize: 14 }} onClick={() => setWeekOffset((w) => w + 1)} aria-label="前の週">
@@ -413,50 +458,143 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
           </div>
         </div>
 
-        {!weekVolume ? (
+        {!analysis ? (
           <div className="mf-hint" style={{ margin: "6px 0 0" }}>
             読み込み中…
           </div>
-        ) : weekVolume.length === 0 ? (
+        ) : analysis.partStats.length === 0 ? (
           <div className="mf-hint" style={{ margin: "6px 0 0" }}>
             部位ごとの分割（スプリット）で筋トレを記録すると、ここに表示されます。
           </div>
         ) : (
-          <div style={{ marginTop: 4 }}>
-            {weekVolume.map((p) => (
-              <div key={p.splitId}>
-                <button
-                  className="mf-catbar"
-                  style={{
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    color: "inherit",
-                    font: "inherit",
-                    textAlign: "left",
-                    cursor: p.entries.length > 0 ? "pointer" : "default",
-                    padding: "6px 0",
-                  }}
-                  onClick={() => p.entries.length > 0 && setExpandedSplit((s) => (s === p.splitId ? null : p.splitId))}
-                >
-                  <span className="mf-catbarname">{p.label}</span>
-                  <div className="mf-bar" style={{ flex: 1, marginTop: 0 }}>
-                    <div className="mf-barfill" style={{ width: `${(p.volume / maxVolume) * 100}%`, background: p.color }} />
-                  </div>
-                  <span className="mf-mono mf-catbaramt">{p.volume > 0 ? `${Math.round(p.volume).toLocaleString("ja-JP")}kg` : "—"}</span>
-                </button>
-                {expandedSplit === p.splitId && p.entries.length > 0 && (
-                  <div style={{ margin: "0 0 8px 6px", padding: "4px 0 2px 10px", borderLeft: "2px solid rgba(255,255,255,0.08)" }}>
-                    {p.entries.map((entry, idx) => (
-                      <div key={idx} className="mf-hint" style={{ margin: "2px 0" }}>
-                        {fmtDateShort(entry.date)} {entry.exerciseName}: {entry.sets.map((s) => `${s.weight}kg×${s.reps}`).join(", ")}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          <>
+            <div style={{ marginTop: 8 }}>
+              <div className="mf-hint" style={{ margin: 0 }}>
+                成長指数（KPI）: 先週も記録がある部位に絞った、総挙上量の前週比の平均
               </div>
-            ))}
-          </div>
+              {analysis.growthIndex === null ? (
+                <div className="mf-hint" style={{ margin: "4px 0 0" }}>
+                  2週続けて同じ部位を記録すると計算されます。
+                </div>
+              ) : (
+                <div className="mf-row" style={{ alignItems: "baseline", gap: 8, marginTop: 4 }}>
+                  <span className="mf-statvalue mf-mono" style={{ color: analysis.growthIndex >= 0 ? "#3DDC97" : "#F26D5F" }}>
+                    {analysis.growthIndex > 0 ? "+" : ""}
+                    {analysis.growthIndex}%
+                  </span>
+                </div>
+              )}
+              <div style={{ height: 90, marginTop: 6 }}>
+                <ResponsiveContainer>
+                  <LineChart
+                    data={analysis.growthHistory.map((g) => ({ date: fmtDateShort(g.weekStart), value: g.index }))}
+                    margin={{ top: 6, right: 6, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#93A0AE" fontSize={10} tickLine={false} axisLine={false} minTickGap={20} />
+                    <YAxis
+                      domain={computeDomain(analysis.growthHistory.map((g) => g.index).filter((v): v is number => v !== null))}
+                      stroke="#93A0AE"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      width={34}
+                      tickCount={3}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                    <Tooltip
+                      cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const v = payload[0]?.value;
+                        if (v === null || v === undefined) return null;
+                        return (
+                          <div style={TT}>
+                            <div style={{ opacity: 0.7, marginBottom: 2 }}>{label}</div>
+                            <b>
+                              {Number(v) > 0 ? "+" : ""}
+                              {v}%
+                            </b>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#3987e5"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      dot={{ r: 3, fill: "#3987e5", strokeWidth: 0 }}
+                      activeDot={{ r: 5 }}
+                      connectNulls={false}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 12, marginTop: 14 }}>
+              {analysis.partStats.map((p) => {
+                const badge = fmtDeltaBadge(p.deltaPct, p.current);
+                const domain = computeDomain(p.history.map((h) => h.volume));
+                const chartData = p.history.map((h) => ({ date: fmtDateShort(h.weekStart), value: h.volume }));
+                return (
+                  <div key={p.splitId} style={{ background: "#181E25", borderRadius: 10, padding: 10 }}>
+                    <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span className="mf-hint" style={{ margin: 0 }}>
+                        {p.label}
+                      </span>
+                      <span className="mf-hint" style={{ margin: 0, color: badge.color }}>
+                        {badge.text}
+                      </span>
+                    </div>
+                    <div className="mf-mono" style={{ fontSize: 18, fontWeight: 700, marginTop: 2, color: p.color }}>
+                      {p.current > 0 ? `${Math.round(p.current).toLocaleString("ja-JP")}kg` : "記録なし"}
+                    </div>
+                    <div className="mf-hint" style={{ margin: "2px 0 0" }}>
+                      先週: {p.previous > 0 ? `${Math.round(p.previous).toLocaleString("ja-JP")}kg` : "記録なし"}
+                    </div>
+                    <div style={{ height: 60, marginTop: 6 }}>
+                      <ResponsiveContainer>
+                        <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                          <YAxis hide domain={domain} />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke={p.color}
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {p.entries.length > 0 && (
+                      <button
+                        className="mf-btn ghost"
+                        style={{ marginTop: 6, padding: "3px 10px", fontSize: 11 }}
+                        onClick={() => setExpandedSplit((s) => (s === p.splitId ? null : p.splitId))}
+                      >
+                        {expandedSplit === p.splitId ? "内訳を閉じる" : "内訳を見る"}
+                      </button>
+                    )}
+                    {expandedSplit === p.splitId && p.entries.length > 0 && (
+                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                        {p.entries.map((entry, idx) => (
+                          <div key={idx} className="mf-hint" style={{ margin: "2px 0" }}>
+                            {fmtDateShort(entry.date)} {entry.exerciseName}: {entry.sets.map((s) => `${s.weight}kg×${s.reps}`).join(", ")}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>
