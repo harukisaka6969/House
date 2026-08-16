@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { TT } from "../common";
 import { apiGet } from "@/lib/apiClient";
-import type { PersonalRecordOut, GymLogOut, GymExerciseOut } from "@/lib/apiTypes";
+import { todayStrJST, addDaysStr, dayOfWeek } from "@/lib/date";
+import type { PersonalRecordOut, GymLogOut, GymExerciseOut, GymSplitOut, GymSetEntry } from "@/lib/apiTypes";
 
 const HEADLINE_LABELS = ["体重", "体脂肪率", "筋肉量"] as const;
 const HEADLINE_COLORS: Record<string, string> = { 体重: "#3987e5", 体脂肪率: "#d95926", 筋肉量: "#199e70" };
+/** 部位別トレーニング量の棒色（dataviz skillの参照パレット。split順で固定割当、フィルタで振り直さない）。 */
+const PART_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 
 type PeriodId = "1m" | "3m" | "6m" | "1y" | "all";
 const PERIODS: { id: PeriodId; label: string; days: number | null }[] = [
@@ -105,6 +108,68 @@ function dotsScore(totalKg: number, bodyweightKg: number): number | null {
 
 const LIFT_NAMES: Record<"squat" | "bench" | "deadlift", string> = { squat: "スクワット", bench: "ベンチプレス", deadlift: "デッドリフト" };
 
+/** dateStr（YYYY-MM-DD）を含む週の月曜日を返す。 */
+function mondayOf(dateStr: string): string {
+  const daysSinceMonday = (dayOfWeek(dateStr) + 6) % 7;
+  return addDaysStr(dateStr, -daysSinceMonday);
+}
+
+function fmtWeekLabel(start: string, end: string, offset: number): string {
+  const range = `${fmtDateShort(start)}〜${fmtDateShort(end)}`;
+  if (offset === 0) return `今週（${range}）`;
+  if (offset === 1) return `先週（${range}）`;
+  return `${offset}週間前（${range}）`;
+}
+
+function setVolume(sets: GymSetEntry[]): number {
+  return sets.reduce((sum, s) => (Number.isFinite(s.weight) && Number.isFinite(s.reps) ? sum + s.weight * s.reps : sum), 0);
+}
+
+interface PartWeekEntry {
+  date: string;
+  exerciseName: string;
+  sets: GymSetEntry[];
+}
+
+interface PartWeekVolume {
+  splitId: string;
+  label: string;
+  color: string;
+  volume: number;
+  entries: PartWeekEntry[];
+}
+
+/** 週内のログを、種目が属するスプリット（=部位分割）ごとに集計して総挙上量（重量×回数の合計）を出す。
+ * 有酸素運動（type: cardio）は重量記録が無いため対象外。分割自体は登録順（sort）で色を固定割当する。 */
+function computeWeeklyVolume(
+  logs: GymLogOut[],
+  exercises: GymExerciseOut[],
+  splits: GymSplitOut[],
+  weekStart: string,
+  weekEnd: string
+): PartWeekVolume[] {
+  const exerciseById = new Map(exercises.map((e) => [e.id, e]));
+  const parts = new Map<string, PartWeekVolume>();
+  [...splits]
+    .sort((a, b) => a.sort - b.sort)
+    .forEach((s, idx) => {
+      if (!exercises.some((e) => e.split_id === s.id && e.type === "strength")) return;
+      parts.set(s.id, { splitId: s.id, label: s.label, color: PART_COLORS[idx % PART_COLORS.length], volume: 0, entries: [] });
+    });
+  for (const log of logs) {
+    if (log.date < weekStart || log.date > weekEnd) continue;
+    const ex = exerciseById.get(log.exercise_id);
+    if (!ex || ex.type !== "strength") continue;
+    const part = parts.get(ex.split_id);
+    if (!part) continue;
+    const vol = setVolume(log.sets);
+    if (vol <= 0) continue;
+    part.volume += vol;
+    part.entries.push({ date: log.date, exerciseName: ex.name, sets: log.sets });
+  }
+  return [...parts.values()].sort((a, b) => b.volume - a.volume);
+}
+
 /** 体組成カテゴリ専用の一画面ダッシュボード。体重・体脂肪率・筋肉量は下限0固定にしないミニチャートで
  * 小さな変化まで見えるようにし、既存データから計算できるボディビル/パワーリフティング向けの参考指標
  * （FFMI、筋トレ記録から拾ったBIG3自己ベストとDOTSスコア）を追加で表示する。 */
@@ -112,18 +177,31 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
   const [period, setPeriod] = useState<PeriodId>("3m");
   const [gymLogs, setGymLogs] = useState<GymLogOut[] | null>(null);
   const [gymExercises, setGymExercises] = useState<GymExerciseOut[] | null>(null);
+  const [gymSplits, setGymSplits] = useState<GymSplitOut[] | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [expandedSplit, setExpandedSplit] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<{ logs: GymLogOut[]; exercises: GymExerciseOut[] }>("/api/gym-log")
+    apiGet<{ logs: GymLogOut[]; exercises: GymExerciseOut[]; splits: GymSplitOut[] }>("/api/gym-log")
       .then((r) => {
         setGymLogs(r.logs);
         setGymExercises(r.exercises);
+        setGymSplits(r.splits);
       })
       .catch(() => {
         setGymLogs([]);
         setGymExercises([]);
+        setGymSplits([]);
       });
   }, []);
+
+  const weekStart = useMemo(() => mondayOf(addDaysStr(todayStrJST(), -7 * weekOffset)), [weekOffset]);
+  const weekEnd = useMemo(() => addDaysStr(weekStart, 6), [weekStart]);
+  const weekVolume = useMemo(
+    () => (gymLogs && gymExercises && gymSplits ? computeWeeklyVolume(gymLogs, gymExercises, gymSplits, weekStart, weekEnd) : null),
+    [gymLogs, gymExercises, gymSplits, weekStart, weekEnd]
+  );
+  const maxVolume = weekVolume && weekVolume.length > 0 ? Math.max(1, ...weekVolume.map((p) => p.volume)) : 1;
 
   const cutoff = useMemo(() => {
     const opt = PERIODS.find((p) => p.id === period);
@@ -309,6 +387,77 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
             </>
           )}
         </div>
+      </div>
+
+      <div style={{ background: "#101418", borderRadius: 10, padding: 12, marginTop: 12 }}>
+        <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <span className="mf-hint" style={{ margin: 0 }}>
+            部位別トレーニング量（総挙上量＝重量×回数の合計。タップで内訳）
+          </span>
+          <div className="mf-monthnav">
+            <button className="mf-iconbtn" style={{ width: 26, height: 26, fontSize: 14 }} onClick={() => setWeekOffset((w) => w + 1)} aria-label="前の週">
+              ‹
+            </button>
+            <span className="mf-monthlabel" style={{ fontSize: 12, fontFamily: "inherit", fontWeight: 400, minWidth: 150 }}>
+              {fmtWeekLabel(weekStart, weekEnd, weekOffset)}
+            </span>
+            <button
+              className="mf-iconbtn"
+              style={{ width: 26, height: 26, fontSize: 14, opacity: weekOffset === 0 ? 0.4 : 1, cursor: weekOffset === 0 ? "default" : "pointer" }}
+              disabled={weekOffset === 0}
+              onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+              aria-label="次の週"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+
+        {!weekVolume ? (
+          <div className="mf-hint" style={{ margin: "6px 0 0" }}>
+            読み込み中…
+          </div>
+        ) : weekVolume.length === 0 ? (
+          <div className="mf-hint" style={{ margin: "6px 0 0" }}>
+            部位ごとの分割（スプリット）で筋トレを記録すると、ここに表示されます。
+          </div>
+        ) : (
+          <div style={{ marginTop: 4 }}>
+            {weekVolume.map((p) => (
+              <div key={p.splitId}>
+                <button
+                  className="mf-catbar"
+                  style={{
+                    width: "100%",
+                    background: "none",
+                    border: "none",
+                    color: "inherit",
+                    font: "inherit",
+                    textAlign: "left",
+                    cursor: p.entries.length > 0 ? "pointer" : "default",
+                    padding: "6px 0",
+                  }}
+                  onClick={() => p.entries.length > 0 && setExpandedSplit((s) => (s === p.splitId ? null : p.splitId))}
+                >
+                  <span className="mf-catbarname">{p.label}</span>
+                  <div className="mf-bar" style={{ flex: 1, marginTop: 0 }}>
+                    <div className="mf-barfill" style={{ width: `${(p.volume / maxVolume) * 100}%`, background: p.color }} />
+                  </div>
+                  <span className="mf-mono mf-catbaramt">{p.volume > 0 ? `${Math.round(p.volume).toLocaleString("ja-JP")}kg` : "—"}</span>
+                </button>
+                {expandedSplit === p.splitId && p.entries.length > 0 && (
+                  <div style={{ margin: "0 0 8px 6px", padding: "4px 0 2px 10px", borderLeft: "2px solid rgba(255,255,255,0.08)" }}>
+                    {p.entries.map((entry, idx) => (
+                      <div key={idx} className="mf-hint" style={{ margin: "2px 0" }}>
+                        {fmtDateShort(entry.date)} {entry.exerciseName}: {entry.sets.map((s) => `${s.weight}kg×${s.reps}`).join(", ")}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
