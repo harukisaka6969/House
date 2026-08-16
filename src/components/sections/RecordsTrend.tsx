@@ -9,6 +9,12 @@ import type { PersonalRecordOut } from "@/lib/apiTypes";
  * ラベル付きで表示されるため色だけで識別する必要はないが、固定順で割り当てる。 */
 const TREND_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 
+/** カテゴリごとに、グラフ（推移）で表示する項目をここで絞り込む。指定の無いカテゴリは
+ * 従来どおり全項目を表示する。指定した以外の項目は記録データとしては残るが、グラフには出さない。 */
+const IMPORTANT_METRICS_BY_CATEGORY: Record<string, string[]> = {
+  体組成: ["体重", "体脂肪率", "筋肉量"],
+};
+
 type PeriodId = "1m" | "3m" | "6m" | "1y" | "all";
 const PERIODS: { id: PeriodId; label: string; days: number | null }[] = [
   { id: "1m", label: "1ヶ月", days: 30 },
@@ -39,16 +45,19 @@ export default function RecordsTrend({ records }: { records: PersonalRecordOut[]
   const [period, setPeriod] = useState<PeriodId>("3m");
 
   const ascending = useMemo(() => [...records].sort((a, b) => a.date.localeCompare(b.date)), [records]);
+  const importantLabels = IMPORTANT_METRICS_BY_CATEGORY[records[0]?.category ?? ""];
 
   const labelOrder = useMemo(() => {
     const seen: string[] = [];
     for (const r of ascending) {
       for (const m of r.metrics) {
-        if (m.label.trim() && !seen.includes(m.label)) seen.push(m.label);
+        if (!m.label.trim() || seen.includes(m.label)) continue;
+        if (importantLabels && !importantLabels.includes(m.label)) continue;
+        seen.push(m.label);
       }
     }
     return seen;
-  }, [ascending]);
+  }, [ascending, importantLabels]);
 
   const cutoff = useMemo(() => {
     const opt = PERIODS.find((p) => p.id === period);
