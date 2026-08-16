@@ -35,6 +35,8 @@ export default function ExpensePanel() {
   const [rate, setRate] = useState<number | null>(null);
   const [rateErr, setRateErr] = useState("");
   const [ocrDiscountPercent, setOcrDiscountPercent] = useState<number | null>(null);
+  const [ocrRedeemed, setOcrRedeemed] = useState<{ item: string; originalPrice: number } | null>(null);
+  const [redeemedBusy, setRedeemedBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -175,9 +177,22 @@ export default function ExpensePanel() {
           discountNote = " ／ 節約履歴への登録は失敗しました";
         }
       }
+      if (ocrRedeemed) {
+        try {
+          const { action: savingsRow } = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+            item: ocrRedeemed.item,
+            original_price: ocrRedeemed.originalPrice,
+            price_paid: 0,
+          });
+          discountNote += ` ／ ${savingsRow.emoji} ${savingsRow.title}（${fmt(savingsRow.estimated_saving)}節約、ポイント等で無料入手）も節約履歴に登録`;
+        } catch {
+          discountNote += " ／ ポイント等での無料入手の節約履歴登録は失敗しました";
+        }
+      }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
       setForeignAmount("");
       setOcrDiscountPercent(null);
+      setOcrRedeemed(null);
       setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote + discountNote);
       refreshMonth();
       if (promoted.length) refreshSettings();
@@ -269,6 +284,7 @@ export default function ExpensePanel() {
   const runOcr = async (file: File) => {
     setBusy(true);
     setOcrDiscountPercent(null);
+    setOcrRedeemed(null);
     setMsg("レシートを読み取り中…");
     try {
       const fd = new FormData();
@@ -283,12 +299,28 @@ export default function ExpensePanel() {
         account?: string;
         currency?: string;
         discount_percent?: number | null;
+        redeemed_item?: string | null;
+        redeemed_original_price?: number | null;
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
       setShowCustomCurrency(foreign ? !CURRENCIES.some((c) => c.code === foreign) : false);
       setCurrency(foreign ?? "JPY");
       setForeignAmount(foreign ? String(parsed.total || "") : "");
       setOcrDiscountPercent(parsed.discount_percent && parsed.discount_percent > 0 && parsed.discount_percent < 100 ? parsed.discount_percent : null);
+      const redeemed =
+        parsed.redeemed_item && parsed.redeemed_original_price ? { item: parsed.redeemed_item, originalPrice: parsed.redeemed_original_price } : null;
+      setOcrRedeemed(redeemed);
+      // ポイント等で全額相殺され支払合計が0円のレシートは、支出として追加する金額が無いため
+      // フォームには反映しない（節約履歴への登録は下の専用ボタンで行う）。
+      if (!(parsed.total > 0)) {
+        setMsg(
+          redeemed
+            ? `🎁 ${redeemed.item}（定価${redeemed.originalPrice.toLocaleString()}円相当）をポイント等で無料入手したようです。支出としては記録せず、下のボタンで節約履歴に登録できます。`
+            : "レシートの金額を読み取れませんでした。手入力するか、別の写真で試してください。"
+        );
+        setBusy(false);
+        return;
+      }
       setForm((f) => {
         const account = accounts.some((a) => a.id === parsed.account) ? (parsed.account as string) : f.account;
         const nextCats = categoriesForAccount(allCats, account);
@@ -305,15 +337,37 @@ export default function ExpensePanel() {
         parsed.discount_percent && parsed.discount_percent > 0 && parsed.discount_percent < 100
           ? `（${parsed.discount_percent}%オフを検出。追加時に節約アクションにも登録します）`
           : "";
+      const redeemedNote = redeemed ? `（${redeemed.item}のポイント等での無料入手を検出。追加時に節約履歴にも登録します）` : "";
       setMsg(
         (foreign
           ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}。円換算を確認して追加してください。`
-          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`) + discountNote
+          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`) +
+          discountNote +
+          redeemedNote
       );
     } catch {
       setMsg("読み取りに失敗しました。手入力するか、別の写真で試してください。");
     }
     setBusy(false);
+  };
+
+  /** OCRでポイント等での無料入手を検出したが、支払合計が0円のため支出としては追加できない場合に、
+   * 節約履歴にだけ単独で登録する。 */
+  const registerRedeemedSaving = async () => {
+    if (!ocrRedeemed || redeemedBusy) return;
+    setRedeemedBusy(true);
+    try {
+      const { action: row } = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+        item: ocrRedeemed.item,
+        original_price: ocrRedeemed.originalPrice,
+        price_paid: 0,
+      });
+      setMsg(`✓ 節約履歴に登録しました: ${row.emoji} ${row.title}（${fmt(row.estimated_saving)}節約）`);
+      setOcrRedeemed(null);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    }
+    setRedeemedBusy(false);
   };
 
   const sorted = [...month.expenses]
@@ -668,6 +722,13 @@ export default function ExpensePanel() {
             }}
           />
         </div>
+        {ocrRedeemed && (
+          <div className="mf-row" style={{ marginTop: 8 }}>
+            <button className="mf-btn primary" disabled={redeemedBusy} onClick={registerRedeemedSaving}>
+              {redeemedBusy ? "登録中…" : `🎁 ${ocrRedeemed.item}を節約として登録する（支出には追加しない）`}
+            </button>
+          </div>
+        )}
         {msg && <div className="mf-hint">{msg}</div>}
           </>
         )}

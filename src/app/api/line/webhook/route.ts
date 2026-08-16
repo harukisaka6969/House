@@ -293,8 +293,30 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
     if (kind === "receipt") {
       const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
       const ocr = await ocrReceipt(content.base64, content.mediaType, categories, accounts);
+
+      let redeemedNote = "";
+      // ポイント・リワード等で商品代金が相殺されている明細があれば、支出とは別に節約履歴にも
+      // 「無料で入手」として記録する（支払額0円・元の金額から節約額を確定計算）。
+      if (ocr.redeemed_item && ocr.redeemed_original_price) {
+        try {
+          const savingsRow = await createDiscountSavingsAction(profileId, {
+            item: ocr.redeemed_item,
+            originalPrice: ocr.redeemed_original_price,
+            pricePaid: 0,
+            date: ocr.date ?? todayStrJST(),
+          });
+          redeemedNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約、ポイント等で無料入手）`;
+        } catch (e) {
+          console.error("receipt redeemed-item savings action failed", e);
+        }
+      }
+
       if (!ocr.total || ocr.total <= 0) {
-        await reply(event, "レシートの金額を読み取れませんでした。アプリから登録してください。");
+        if (redeemedNote) {
+          await reply(event, `🎁 ポイント等で無料入手として記録しました。実際の支払いが0円のため、支出としては記録していません。${redeemedNote}`);
+        } else {
+          await reply(event, "レシートの金額を読み取れませんでした。アプリから登録してください。");
+        }
         return;
       }
       const account = accounts.find((a) => a.id === ocr.account) ?? accounts[0];
@@ -337,7 +359,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
           console.error("receipt discount savings action failed", e);
         }
       }
-      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}`);
+      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${redeemedNote}`);
       return;
     }
 

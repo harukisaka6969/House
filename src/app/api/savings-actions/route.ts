@@ -43,7 +43,13 @@ const bodySchema = z.union([
   z.object({
     item: z.string().min(1).max(200),
     discount_percent: z.number().min(1).max(99),
-    price_paid: z.number().positive(),
+    price_paid: z.number().min(0),
+    date: z.string().refine(isValidDateStr).optional(),
+  }),
+  z.object({
+    item: z.string().min(1).max(200),
+    original_price: z.number().positive(),
+    price_paid: z.number().min(0),
     date: z.string().refine(isValidDateStr).optional(),
   }),
 ]);
@@ -51,15 +57,26 @@ const bodySchema = z.union([
 /** 新規: 節約になった行動の説明文を、既存カード（直近100件）と照らし合わせる。同じ習慣の繰り返しと
  * AIが判断すれば、新しいカードは作らずそのカードの履歴に1件積む。新しい種類の行動ならAIで見積もって新規カード化する。
  * duplicate_of指定時: 既存カードの「今日も繰り返した」記録。カードは増やさず履歴にだけ積む（AIは呼ばない）。
- * item/discount_percent/price_paid指定時: 「○○を○%オフで○○円で買った」という割引購入。節約額は
- * AIに推測させず、支払額と割引率からサーバー側で確定計算する（絵文字の選定だけAIに任せる）。購入ごとに
- * 金額が変わるため、既存カードとの照合はせず常に新規カードとして登録する。 */
+ * item指定時: 割引購入・ポイント等での無料入手。discount_percent（割引率から逆算）またはoriginal_price
+ * （元の金額を直接指定。支払額0円＝ポイント等での全額相殺＝無料入手も表現できる）のどちらかで節約額を
+ * サーバー側で確定計算する（絵文字の選定だけAIに任せる）。購入ごとに金額が変わるため、既存カードとの
+ * 照合はせず常に新規カードとして登録する。 */
 export async function POST(req: Request) {
   try {
     const session = await requireOwnerSession();
     const body = bodySchema.parse(await req.json());
     const profiles = await getAllProfiles();
     const nameOf = makeNameLookup(profiles);
+
+    if ("item" in body && "original_price" in body) {
+      const row = await createDiscountSavingsAction(session.profile_id, {
+        item: body.item,
+        originalPrice: body.original_price,
+        pricePaid: body.price_paid,
+        date: body.date ?? todayStrJST(),
+      });
+      return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
+    }
 
     if ("item" in body) {
       const row = await createDiscountSavingsAction(session.profile_id, {

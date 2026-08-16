@@ -40,8 +40,10 @@ export default function SavingsActions() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
   const [discountExpanded, setDiscountExpanded] = useState(false);
+  const [discountMode, setDiscountMode] = useState<"percent" | "original">("percent");
   const [discountItem, setDiscountItem] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
+  const [discountOriginalPrice, setDiscountOriginalPrice] = useState("");
   const [discountPrice, setDiscountPrice] = useState("");
   const [discountSubmitting, setDiscountSubmitting] = useState(false);
   const [discountMsg, setDiscountMsg] = useState("");
@@ -137,23 +139,32 @@ export default function SavingsActions() {
     }
   };
 
-  /** 「○○を○%オフで○○円で買った」を登録する。節約額はAIに推測させず、サーバー側で
-   * 支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。 */
+  /** 「○○を○%オフで○○円で買った」、または「○○を定価○○円のところ○○円で買った」を登録する。
+   * 節約額はAIに推測させず、サーバー側で確定計算する（絵文字の選定だけAIに任せる）。元の金額モードでは
+   * 支払金額を0円にでき、ポイント等で全額相殺された「無料で入手」（100%オフ相当）も表現できる。 */
   const submitDiscount = async () => {
     const item = discountItem.trim();
-    const percent = Number(discountPercent);
-    const price = Number(discountPrice);
-    if (!item || !(percent > 0 && percent < 100) || !(price > 0) || discountSubmitting) return;
+    const price = discountPrice.trim() === "" ? 0 : Number(discountPrice);
+    if (!item || !(price >= 0) || discountSubmitting) return;
+
+    let payload: { item: string; price_paid: number } & ({ original_price: number } | { discount_percent: number });
+    if (discountMode === "original") {
+      const original = Number(discountOriginalPrice);
+      if (!(original > price)) return;
+      payload = { item, original_price: original, price_paid: price };
+    } else {
+      const percent = Number(discountPercent);
+      if (!(percent > 0 && percent < 100) || !(price > 0)) return;
+      payload = { item, discount_percent: percent, price_paid: price };
+    }
+
     setDiscountSubmitting(true);
     setDiscountMsg("");
     try {
-      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
-        item,
-        discount_percent: percent,
-        price_paid: price,
-      });
+      await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", payload);
       setDiscountItem("");
       setDiscountPercent("");
+      setDiscountOriginalPrice("");
       setDiscountPrice("");
       load();
     } catch (e) {
@@ -317,37 +328,65 @@ export default function SavingsActions() {
           <span className="sv-chevron">{discountExpanded ? "︿" : "﹀"}</span>
         </div>
         {discountExpanded && (
-          <div className="mf-row" style={{ marginTop: 10 }}>
-            <input
-              className="mf-input"
-              style={{ flex: 2, minWidth: 140 }}
-              placeholder="商品名（例: コーヒー豆）"
-              value={discountItem}
-              onChange={(e) => setDiscountItem(e.target.value)}
-            />
-            <input
-              className="mf-input mf-mono"
-              style={{ flex: 1, minWidth: 90 }}
-              type="number"
-              placeholder="割引率（例: 20）"
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value)}
-            />
-            <input
-              className="mf-input mf-mono"
-              style={{ flex: 1, minWidth: 110 }}
-              type="number"
-              placeholder="支払金額（例: 800）"
-              value={discountPrice}
-              onChange={(e) => setDiscountPrice(e.target.value)}
-            />
-            <button
-              className="mf-btn primary"
-              onClick={submitDiscount}
-              disabled={discountSubmitting || !discountItem.trim() || !discountPercent || !discountPrice}
-            >
-              {discountSubmitting ? "登録中…" : "登録する"}
-            </button>
+          <div style={{ marginTop: 10 }}>
+            <div className="mf-chips" style={{ marginBottom: 8 }}>
+              <button className={"mf-chipbtn" + (discountMode === "percent" ? " on" : "")} onClick={() => setDiscountMode("percent")}>
+                割引率で入力
+              </button>
+              <button className={"mf-chipbtn" + (discountMode === "original" ? " on" : "")} onClick={() => setDiscountMode("original")}>
+                元の金額で入力（無料入手も可）
+              </button>
+            </div>
+            <div className="mf-row">
+              <input
+                className="mf-input"
+                style={{ flex: 2, minWidth: 140 }}
+                placeholder="商品名（例: コーヒー豆）"
+                value={discountItem}
+                onChange={(e) => setDiscountItem(e.target.value)}
+              />
+              {discountMode === "percent" ? (
+                <input
+                  className="mf-input mf-mono"
+                  style={{ flex: 1, minWidth: 90 }}
+                  type="number"
+                  placeholder="割引率（例: 20）"
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                />
+              ) : (
+                <input
+                  className="mf-input mf-mono"
+                  style={{ flex: 1, minWidth: 110 }}
+                  type="number"
+                  placeholder="元の金額（例: 632）"
+                  value={discountOriginalPrice}
+                  onChange={(e) => setDiscountOriginalPrice(e.target.value)}
+                />
+              )}
+              <input
+                className="mf-input mf-mono"
+                style={{ flex: 1, minWidth: 110 }}
+                type="number"
+                placeholder={discountMode === "original" ? "支払金額（無料なら0）" : "支払金額（例: 800）"}
+                value={discountPrice}
+                onChange={(e) => setDiscountPrice(e.target.value)}
+              />
+              <button
+                className="mf-btn primary"
+                onClick={submitDiscount}
+                disabled={
+                  discountSubmitting ||
+                  !discountItem.trim() ||
+                  (discountMode === "percent" ? !discountPercent || !discountPrice : !discountOriginalPrice)
+                }
+              >
+                {discountSubmitting ? "登録中…" : "登録する"}
+              </button>
+            </div>
+            {discountMode === "original" && (
+              <div className="mf-hint">支払金額を0円にすると、ポイント等で全額相殺した「無料で入手」として登録されます。</div>
+            )}
           </div>
         )}
         {discountMsg && <div className="mf-hint">{discountMsg}</div>}

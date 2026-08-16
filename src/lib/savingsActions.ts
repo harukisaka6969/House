@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { computeDiscountSaving } from "./discountMath";
+import { computeDiscountSaving, computeDiscountSavingFromOriginal } from "./discountMath";
 import { pickEmoji } from "./anthropic";
 
 export interface SavingsActionRow {
@@ -156,28 +156,31 @@ export async function logSavingsActionOccurrence(input: {
   return { log: data as SavingsActionLogRow, card };
 }
 
-/** 「○○を○%オフで○○円で買った」という割引購入の節約アクションを登録する。節約額はAIに推測させず、
- * サーバー側で支払額と割引率から確定計算する（絵文字の選定だけAIに任せる）。購入ごとに商品も金額も変わり
- * 「次に同じものを選ぶ」意味を持たないため、カードは作らず節約履歴に単独記録として残す。 */
+/** 「○○を○%オフ（または元の金額○○円のところ）○○円で買った」という割引購入・ポイント等での無料入手の
+ * 節約アクションを登録する。節約額はAIに推測させず、サーバー側で確定計算する（絵文字の選定だけAIに任せる）。
+ * 購入ごとに商品も金額も変わり「次に同じものを選ぶ」意味を持たないため、カードは作らず節約履歴に単独記録として残す。
+ * discountPercentを渡せば割引率から、originalPriceを渡せば元の金額から直接、節約額を計算する
+ * （originalPrice指定時はpricePaidが0でもよく、ポイント等での全額相殺＝無料入手を表現できる）。 */
 export async function createDiscountSavingsAction(
   owner: string,
-  input: { item: string; discountPercent: number; pricePaid: number; date: string }
+  input: { item: string; pricePaid: number; date: string } & ({ discountPercent: number } | { originalPrice: number })
 ): Promise<SavingsActionLogRow> {
-  const { originalPrice, saving } = computeDiscountSaving(input.pricePaid, input.discountPercent);
+  const { originalPrice, saving } =
+    "originalPrice" in input
+      ? computeDiscountSavingFromOriginal(input.originalPrice, input.pricePaid)
+      : computeDiscountSaving(input.pricePaid, input.discountPercent);
   const emoji = await pickEmoji(input.item).catch(() => "🏷️");
+  const percent = originalPrice > 0 ? Math.min(100, Math.max(0, Math.round((saving / originalPrice) * 100))) : 0;
+  const isFree = input.pricePaid <= 0 && saving > 0;
+  const title = isFree ? `${input.item}を無料で入手` : `${input.item}を${percent}%オフで購入`;
+  const description = isFree
+    ? `${input.item}（定価${originalPrice.toLocaleString()}円相当）をポイント等で無料入手した`
+    : `${input.item}を${percent}%オフの${input.pricePaid.toLocaleString()}円で購入した`;
+  const reasoning = `定価${originalPrice.toLocaleString()}円のところ${input.pricePaid.toLocaleString()}円で購入。差額${saving.toLocaleString()}円が節約分。`;
+  const keywords = isFree ? [input.item, "無料", "ポイント"] : [input.item, "割引", `${percent}%オフ`];
   const { data, error } = await db()
     .from("savings_action_logs")
-    .insert({
-      action_id: null,
-      owner,
-      date: input.date,
-      estimated_saving: saving,
-      title: `${input.item}を${input.discountPercent}%オフで購入`,
-      description: `${input.item}を${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入した`,
-      reasoning: `定価${originalPrice.toLocaleString()}円のところ${input.discountPercent}%オフの${input.pricePaid.toLocaleString()}円で購入。差額${saving.toLocaleString()}円が節約分。`,
-      keywords: [input.item, "割引", `${input.discountPercent}%オフ`],
-      emoji,
-    })
+    .insert({ action_id: null, owner, date: input.date, estimated_saving: saving, title, description, reasoning, keywords, emoji })
     .select("*")
     .single();
   if (error) throw error;

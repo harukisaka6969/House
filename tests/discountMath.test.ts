@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDiscountSaving } from "@/lib/discountMath";
+import { computeDiscountSaving, computeDiscountSavingFromOriginal } from "@/lib/discountMath";
 
 describe("computeDiscountSaving", () => {
   it("computes the original price and saving from a paid price and discount percent", () => {
@@ -29,5 +29,33 @@ describe("computeDiscountSaving", () => {
   it("returns zero saving for a non-positive price paid", () => {
     expect(computeDiscountSaving(0, 20)).toEqual({ originalPrice: 0, saving: 0 });
     expect(computeDiscountSaving(-100, 20)).toEqual({ originalPrice: 0, saving: 0 });
+  });
+});
+
+describe("computeDiscountSavingFromOriginal", () => {
+  it("computes saving as the difference between original price and price paid", () => {
+    expect(computeDiscountSavingFromOriginal(1000, 800)).toEqual({ originalPrice: 1000, saving: 200 });
+  });
+
+  it("supports a fully redeemed item (100% off / free via points)", () => {
+    // スターバックスの「スター リワード」でポイントを使い切って0円になったケース
+    expect(computeDiscountSavingFromOriginal(632, 0)).toEqual({ originalPrice: 632, saving: 632 });
+  });
+
+  it("returns zero saving when price paid equals the original price", () => {
+    expect(computeDiscountSavingFromOriginal(1000, 1000)).toEqual({ originalPrice: 1000, saving: 0 });
+  });
+
+  it("returns zero saving (keeping the known original price) when price paid exceeds the original price", () => {
+    expect(computeDiscountSavingFromOriginal(1000, 1200)).toEqual({ originalPrice: 1000, saving: 0 });
+  });
+
+  it("returns zero saving (keeping the known original price) for a negative price paid", () => {
+    expect(computeDiscountSavingFromOriginal(1000, -1)).toEqual({ originalPrice: 1000, saving: 0 });
+  });
+
+  it("returns zero for everything when the original price itself is non-positive", () => {
+    expect(computeDiscountSavingFromOriginal(0, 0)).toEqual({ originalPrice: 0, saving: 0 });
+    expect(computeDiscountSavingFromOriginal(-100, 0)).toEqual({ originalPrice: 0, saving: 0 });
   });
 });
