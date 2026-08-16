@@ -6,10 +6,9 @@ import {
   listSavingsHistory,
   createSavingsAction,
   createDiscountSavingsAction,
-  getSavingsActionById,
   logSavingsActionOccurrence,
 } from "@/lib/savingsActions";
-import { estimateSavingsAction, matchSavingsAction } from "@/lib/anthropic";
+import { estimateSavingsAction } from "@/lib/anthropic";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { todayStrJST, isValidDateStr } from "@/lib/date";
 
@@ -54,8 +53,9 @@ const bodySchema = z.union([
   }),
 ]);
 
-/** 新規: 節約になった行動の説明文を、既存カード（直近100件）と照らし合わせる。同じ習慣の繰り返しと
- * AIが判断すれば、新しいカードは作らずそのカードの履歴に1件積む。新しい種類の行動ならAIで見積もって新規カード化する。
+/** 新規: 節約になった行動の説明文をAIで見積もって新規カード化する。既存カードと同じ習慣の繰り返しの場合は、
+ * このテキスト入力ではなく各カードの「🔁 今日も実施」ボタン（duplicate_of）を使うこと
+ * （テキストからのAI自動照合は、無関係なカードに誤って合流させてしまうことがあり見送った）。
  * duplicate_of指定時: 既存カードの「今日も繰り返した」記録。カードは増やさず履歴にだけ積む（AIは呼ばない）。
  * item指定時: 割引購入・ポイント等での無料入手。discount_percent（割引率から逆算）またはoriginal_price
  * （元の金額を直接指定。支払額0円＝ポイント等での全額相殺＝無料入手も表現できる）のどちらかで節約額を
@@ -97,20 +97,6 @@ export async function POST(req: Request) {
         throw new ApiError(404, e instanceof Error ? e.message : "元のカードが見つかりません");
       });
       return NextResponse.json({ action: { ...card, owner_name: nameOf(card.owner) } });
-    }
-
-    const existing = (await listSavingsActions()).slice(0, 100).map((a) => ({ id: a.id, title: a.title, keywords: a.keywords }));
-    const matchedId = await matchSavingsAction(body.description, existing).catch(() => null);
-    if (matchedId) {
-      const original = await getSavingsActionById(matchedId);
-      if (original) {
-        const { card } = await logSavingsActionOccurrence({
-          action_id: matchedId,
-          owner: session.profile_id,
-          date: body.date ?? todayStrJST(),
-        });
-        return NextResponse.json({ action: { ...card, owner_name: nameOf(card.owner) } });
-      }
     }
 
     const estimate = await estimateSavingsAction(body.description, todayStrJST());
