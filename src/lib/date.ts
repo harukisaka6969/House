@@ -14,6 +14,27 @@ export function todayStrJST(): string {
   return `${y}-${m}-${d}`;
 }
 
+/** 購入・食事の記録用の「今日」(YYYY-MM-DD, JST)。1日を午前3:30始まり・翌午前3:29:59終わりとみなし、
+ * 深夜0:00〜3:29はまだ前日の続きとして扱う。日付の自動割り当てが必要な箇所（未入力時のデフォルト、
+ * LINEでの記録、相対日付の解決基準など）で、購入品・食事に限りtodayStrJSTの代わりに使う。 */
+export function businessDateJST(): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: JST,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  const dateStr = `${get("year")}-${get("month")}-${get("day")}`;
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  const beforeCutoff = hour < 3 || (hour === 3 && minute < 30);
+  return beforeCutoff ? prevDayStr(dateStr) : dateStr;
+}
+
 /** 現在時刻をJSTの"HH:MM"で返し、分は15分刻みに切り捨てる（LINEリマインダー配信時刻とのマッチング用）。 */
 export function currentTimeBucketJST(stepMinutes = 15): string {
   const parts = new Intl.DateTimeFormat("en-GB", {

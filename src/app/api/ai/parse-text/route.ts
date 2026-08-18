@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { parseExpenseText } from "@/lib/anthropic";
 import { getAllCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
-import { todayStrJST } from "@/lib/date";
+import { businessDateJST } from "@/lib/date";
 
 const bodySchema = z.object({ text: z.string().min(1).max(2000) });
 
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     const { text } = bodySchema.parse(await req.json());
     const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
-    const entries = await parseExpenseText(text, accounts, categories, todayStrJST());
+    const entries = await parseExpenseText(text, accounts, categories, businessDateJST());
     return NextResponse.json({ entries });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });

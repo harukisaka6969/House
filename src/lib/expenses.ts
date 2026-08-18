@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { todayStrJST, periodRange } from "./date";
+import { businessDateJST, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
 import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import type { AccountId, ExpenseRow } from "./types";
@@ -70,8 +70,9 @@ async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ValidationError(`invalid amount: ${input.amount}`);
   }
-  // 日付が空・未指定なら当日の日付（JST）で登録する (spec §7-1)
-  const date = input.date && input.date.trim() ? input.date.trim() : todayStrJST();
+  // 日付が空・未指定なら当日の日付（JST）で登録する (spec §7-1)。「当日」は午前3:30始まりの日付
+  // （深夜0:00〜3:29は前日扱い）で判定する。
+  const date = input.date && input.date.trim() ? input.date.trim() : businessDateJST();
   return {
     date,
     account_id: input.account_id as AccountId,

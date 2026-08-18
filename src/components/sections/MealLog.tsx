@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { MealLogOut, PfcTargetOut } from "@/lib/apiTypes";
-import { todayStrJST, periodKeyOfDate } from "@/lib/date";
+import { businessDateJST, periodKeyOfDate } from "@/lib/date";
 import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { SectionHead } from "../common";
 
@@ -34,7 +34,7 @@ function Bar({ label, actual, target, color }: { label: string; actual: number; 
 }
 
 export default function MealLog() {
-  const [date, setDate] = useState(todayStrJST());
+  const [date, setDate] = useState(businessDateJST());
   const [logs, setLogs] = useState<MealLogOut[] | null>(null);
   const [target, setTarget] = useState<PfcTargetOut | null>(null);
   const [busy, setBusy] = useState(false);

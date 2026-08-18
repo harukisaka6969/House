@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { periodKeyOfDate, periodRange, periodEndInclusive, shiftMonth } from "@/lib/date";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { periodKeyOfDate, periodRange, periodEndInclusive, shiftMonth, businessDateJST } from "@/lib/date";
 
 describe("periodKeyOfDate (25日始まり・翌月24日締め)", () => {
   it("day >= 25 belongs to that calendar month's label", () => {
@@ -36,5 +36,41 @@ describe("periodRange / periodEndInclusive", () => {
       const nextDay = shiftMonth(monthKey, 1) + "-25";
       expect(periodKeyOfDate(nextDay)).toBe(shiftMonth(monthKey, 1));
     }
+  });
+});
+
+describe("businessDateJST (購入・食事の「1日」は午前3:30始まり)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("before 3:30 JST still counts as the previous day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T16:00:00.000Z")); // 2026-04-26 01:00 JST
+    expect(businessDateJST()).toBe("2026-04-25");
+  });
+
+  it("at 3:29 JST still counts as the previous day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T18:29:00.000Z")); // 2026-04-26 03:29 JST
+    expect(businessDateJST()).toBe("2026-04-25");
+  });
+
+  it("at exactly 3:30 JST counts as the new day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T18:30:00.000Z")); // 2026-04-26 03:30 JST
+    expect(businessDateJST()).toBe("2026-04-26");
+  });
+
+  it("during normal daytime hours matches the calendar date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T05:00:00.000Z")); // 2026-04-25 14:00 JST
+    expect(businessDateJST()).toBe("2026-04-25");
+  });
+
+  it("shifts correctly across a month boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-30T17:00:00.000Z")); // 2026-05-01 02:00 JST
+    expect(businessDateJST()).toBe("2026-04-30");
   });
 });

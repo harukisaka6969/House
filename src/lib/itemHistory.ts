@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { todayStrJST, addDaysStr, dayOfWeek } from "./date";
+import { businessDateJST, addDaysStr, dayOfWeek } from "./date";
 import type { ItemHistoryRow, ItemHistorySource } from "./types";
 
 export interface NewItemHistoryEntry {
@@ -100,7 +100,7 @@ function mondayOf(dateStr: string): string {
 /** 「今週・今月」はカレンダー基準、「過去3ヶ月・半年・1年」は今日からの日数さかのぼり、それぞれ今日までの
  * 合計（重複するウィンドウで、期間ごとの排他的な内訳ではない）。 */
 function bucketPeriods(rows: { date: string; amount: number }[]): PeriodTotals {
-  const today = todayStrJST();
+  const today = businessDateJST();
   const weekStart = mondayOf(today);
   const monthStart = `${today.slice(0, 7)}-01`;
   const past3m = addDaysStr(today, -90);

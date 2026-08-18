@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { fmt } from "@/lib/judge";
-import { todayStrJST } from "@/lib/date";
+import { businessDateJST } from "@/lib/date";
 import { CAT_COLORS, CURRENCIES, categoriesForAccount } from "@/lib/constants";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut, SavingsActionOut } from "@/lib/apiTypes";
@@ -158,7 +158,7 @@ export default function ExpensePanel() {
               beneficiaryIds: linkBeneficiaryIds,
               amount: amountToUse,
               memo: form.memo,
-              date: form.date || todayStrJST(),
+              date: form.date || businessDateJST(),
             });
             splitNote = ` ／「${linkEvent.name}」にも登録`;
           } catch {
@@ -669,7 +669,7 @@ export default function ExpensePanel() {
           </div>
         )}
         <div className="mf-hint" style={{ opacity: 0.6 }}>
-          日付を空にすると今日（{todayStrJST()}）の日付で登録されます。
+          日付を空にすると当日（{businessDateJST()}、午前3:30より前は前日）の日付で登録されます。
         </div>
 
         {splitEvents && splitEvents.length > 0 && (

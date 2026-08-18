@@ -35,7 +35,7 @@ import {
   createDiscountSavingsAction,
   logSavingsActionOccurrence,
 } from "@/lib/savingsActions";
-import { todayStrJST, nowMonthKeyJST, nextDayStr } from "@/lib/date";
+import { todayStrJST, businessDateJST, nowMonthKeyJST, nextDayStr } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
 interface LineEvent {
@@ -112,7 +112,7 @@ async function formatDailyPfcSummary(profileId: string, date: string): Promise<s
 
 async function handleMealText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const estimate = await estimateMealNutritionFromText(text);
-  const date = todayStrJST();
+  const date = businessDateJST();
   await createMealLog(profileId, {
     date,
     description: estimate.description || "",
@@ -127,7 +127,7 @@ async function handleMealText(event: LineEvent, profileId: string, text: string)
 
 async function handleExpenseText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
-  const parsed = await parseExpenseText(text, accounts, categories, todayStrJST());
+  const parsed = await parseExpenseText(text, accounts, categories, businessDateJST());
   const valid = parsed.filter((p) => Number(p.amount) > 0);
   if (valid.length === 0) {
     await reply(event, "支出の内容を読み取れませんでした。金額を含めて送ってください。（例: コンビニで480円）");
@@ -297,7 +297,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
 
     if (kind === "meal") {
       const estimate = await estimateMealNutrition(content.base64, content.mediaType);
-      const date = todayStrJST();
+      const date = businessDateJST();
       await createMealLog(profileId, {
         date,
         description: estimate.description || "",
@@ -331,7 +331,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             item: ocr.redeemed_item,
             originalPrice: ocr.redeemed_original_price,
             pricePaid: 0,
-            date: ocr.date ?? todayStrJST(),
+            date: ocr.date ?? businessDateJST(),
           });
           redeemedNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約、ポイント等で無料入手）`;
         } catch (e) {
@@ -381,7 +381,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             item: ocr.store || "購入品",
             discountPercent: ocr.discount_percent,
             pricePaid: jpyAmount,
-            date: ocr.date ?? todayStrJST(),
+            date: ocr.date ?? businessDateJST(),
           });
           discountNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約）`;
         } catch (e) {

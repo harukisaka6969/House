@@ -10,7 +10,7 @@ import {
 } from "@/lib/savingsActions";
 import { estimateSavingsAction } from "@/lib/anthropic";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
-import { todayStrJST, isValidDateStr } from "@/lib/date";
+import { todayStrJST, businessDateJST, isValidDateStr } from "@/lib/date";
 
 export async function GET(req: Request) {
   try {
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
         item: body.item,
         originalPrice: body.original_price,
         pricePaid: body.price_paid,
-        date: body.date ?? todayStrJST(),
+        date: body.date ?? businessDateJST(),
       });
       return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
     }
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
         item: body.item,
         discountPercent: body.discount_percent,
         pricePaid: body.price_paid,
-        date: body.date ?? todayStrJST(),
+        date: body.date ?? businessDateJST(),
       });
       return NextResponse.json({ action: { ...row, owner_name: nameOf(row.owner) } });
     }
