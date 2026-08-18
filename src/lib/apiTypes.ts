@@ -147,6 +147,7 @@ export interface ShoppingItemOut {
   owner_name: string;
   name: string;
   store: ShoppingStore;
+  url: string | null;
   needs_approval: boolean;
   approved: boolean;
   approved_by_name: string | null;

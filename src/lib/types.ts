@@ -119,6 +119,8 @@ export interface ShoppingItemRow {
   owner: string;
   name: string;
   store: ShoppingStore;
+  /** 商品リンク（Amazon等、任意）。 */
+  url: string | null;
   needs_approval: boolean;
   approved: boolean;
   approved_by: string | null;

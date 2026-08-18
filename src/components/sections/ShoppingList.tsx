@@ -15,6 +15,7 @@ export default function ShoppingList() {
   const [items, setItems] = useState<ShoppingItemOut[] | null>(null);
   const [name, setName] = useState("");
   const [store, setStore] = useState<ShoppingStore>("seiyu");
+  const [url, setUrl] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,8 +42,9 @@ export default function ShoppingList() {
       return;
     }
     try {
-      await apiPost("/api/shopping-items", { name: name.trim(), store });
+      await apiPost("/api/shopping-items", { name: name.trim(), store, url: url.trim() || undefined });
       setName("");
+      setUrl("");
       load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "追加に失敗しました。");
@@ -134,6 +136,18 @@ export default function ShoppingList() {
             </button>
           ))}
         </div>
+        {store === "amazon" && (
+          <input
+            className="mf-input"
+            style={{ marginBottom: 10 }}
+            placeholder="商品リンク（任意）"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+            }}
+          />
+        )}
         <button className="mf-btn primary" onClick={add}>
           追加する
         </button>
@@ -178,6 +192,11 @@ export default function ShoppingList() {
                 </div>
                 <div className="mf-row" style={{ gap: 6, marginTop: 4, marginLeft: 26 }}>
                   <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
+                  {i.url && (
+                    <a href={i.url} target="_blank" rel="noopener noreferrer" className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }}>
+                      🔗 開く
+                    </a>
+                  )}
                   {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
                   {i.needs_approval && !i.approved && i.owner !== myId && (
                     <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => approve(i.id)}>
@@ -207,6 +226,11 @@ export default function ShoppingList() {
                 </div>
                 <div className="mf-row" style={{ gap: 6, marginTop: 4 }}>
                   <span className="mf-listcat">{STORE_LABEL[i.store]}</span>
+                  {i.url && (
+                    <a href={i.url} target="_blank" rel="noopener noreferrer" className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }}>
+                      🔗 開く
+                    </a>
+                  )}
                   {i.owner !== myId && <span className="mf-ownerchip">{i.owner_name}</span>}
                   <button className="mf-btn ghost" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => revert(i.id)}>
                     戻す

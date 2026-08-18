@@ -22,16 +22,20 @@ export async function getShoppingItems(): Promise<ShoppingItemRow[]> {
 export interface NewShoppingItemInput {
   name: string;
   store: ShoppingStore;
+  /** 商品リンク（任意）。http(s)以外や空文字はnull扱いにする。 */
+  url?: string | null;
 }
 
 export async function createShoppingItem(ownerId: string, input: NewShoppingItemInput): Promise<ShoppingItemRow> {
   const name = input.name.trim();
   if (!name) throw new ValidationError("品目名を入力してください");
   if (!VALID_STORES.includes(input.store)) throw new ValidationError(`invalid store: ${input.store}`);
+  const url = input.url?.trim();
+  if (url && !/^https?:\/\//i.test(url)) throw new ValidationError("リンクはhttp(s)から始まるURLを入力してください");
   const needsApproval = APPROVAL_STORES.includes(input.store);
   const { data, error } = await db()
     .from("shopping_items")
-    .insert({ owner: ownerId, name, store: input.store, needs_approval: needsApproval, approved: !needsApproval })
+    .insert({ owner: ownerId, name, store: input.store, url: url || null, needs_approval: needsApproval, approved: !needsApproval })
     .select("*")
     .single();
   if (error) throw error;

@@ -17,6 +17,7 @@ export async function GET() {
         owner_name: nameOf(i.owner),
         name: i.name,
         store: i.store,
+        url: i.url,
         needs_approval: i.needs_approval,
         approved: i.approved,
         approved_by_name: i.approved_by ? nameOf(i.approved_by) : null,
@@ -32,6 +33,7 @@ export async function GET() {
 const bodySchema = z.object({
   name: z.string().min(1).max(120),
   store: z.enum(["seiyu", "amazon", "conveni", "other"]),
+  url: z.string().max(2000).optional().nullable(),
 });
 
 export async function POST(req: Request) {

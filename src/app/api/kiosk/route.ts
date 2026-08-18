@@ -44,6 +44,7 @@ export async function GET() {
         owner_name: nameOf(i.owner),
         name: i.name,
         store: i.store,
+        url: i.url,
         needs_approval: i.needs_approval,
         approved: i.approved,
         approved_by_name: i.approved_by ? nameOf(i.approved_by) : null,
