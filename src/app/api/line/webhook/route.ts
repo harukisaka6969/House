@@ -19,7 +19,8 @@ import {
   extractGymLogFromText,
   type ExtractedGymItem,
 } from "@/lib/anthropic";
-import { createMealLog } from "@/lib/mealLog";
+import { createMealLog, getMealLogsInRange, getPfcTarget } from "@/lib/mealLog";
+import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { getExercises, createExercise, createLog as createGymLog, getOrCreateLineSplit, findExerciseByName } from "@/lib/gymLog";
 import { formatSets } from "@/lib/gymSuggestion";
 import type { GymExerciseRow } from "@/lib/types";
@@ -34,7 +35,7 @@ import {
   createDiscountSavingsAction,
   logSavingsActionOccurrence,
 } from "@/lib/savingsActions";
-import { todayStrJST, nowMonthKeyJST } from "@/lib/date";
+import { todayStrJST, nowMonthKeyJST, nextDayStr } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
 interface LineEvent {
@@ -86,17 +87,42 @@ async function handleCompleteCommand(event: LineEvent): Promise<void> {
   await reply(event, completedNames.length ? `✅ 完了にしました:\n${completedNames.map((n) => `・${n}`).join("\n")}` : "完了にできませんでした。");
 }
 
+/** その日の食事ログ合計を、pfc_targets（未設定ならDEFAULT_PFC_TARGET）に対する「何g中何g（%）」で
+ * 3行にまとめる。食事を記録した直後の返信に添えて、単発のカロリーだけでなく1日の進み具合がわかるようにする。 */
+async function formatDailyPfcSummary(profileId: string, date: string): Promise<string> {
+  const [target, logs] = await Promise.all([getPfcTarget(profileId), getMealLogsInRange(profileId, date, nextDayStr(date))]);
+  const t = target ?? DEFAULT_PFC_TARGET;
+  const totals = logs.reduce(
+    (acc, l) => ({
+      calories: acc.calories + l.calories,
+      protein_g: acc.protein_g + l.protein_g,
+      fat_g: acc.fat_g + l.fat_g,
+      carb_g: acc.carb_g + l.carb_g,
+    }),
+    { calories: 0, protein_g: 0, fat_g: 0, carb_g: 0 }
+  );
+  const pct = (actual: number, target: number) => (target > 0 ? Math.round((actual / target) * 100) : 0);
+  return (
+    `📊 今日の合計: ${Math.round(totals.calories)} / ${Math.round(t.calories)}kcal（${pct(totals.calories, t.calories)}%）\n` +
+    `P: ${Math.round(totals.protein_g)} / ${Math.round(t.protein_g)}g（${pct(totals.protein_g, t.protein_g)}%）\n` +
+    `F: ${Math.round(totals.fat_g)} / ${Math.round(t.fat_g)}g（${pct(totals.fat_g, t.fat_g)}%）\n` +
+    `C: ${Math.round(totals.carb_g)} / ${Math.round(t.carb_g)}g（${pct(totals.carb_g, t.carb_g)}%）`
+  );
+}
+
 async function handleMealText(event: LineEvent, profileId: string, text: string): Promise<void> {
   const estimate = await estimateMealNutritionFromText(text);
+  const date = todayStrJST();
   await createMealLog(profileId, {
-    date: todayStrJST(),
+    date,
     description: estimate.description || "",
     calories: Number(estimate.calories) || 0,
     protein_g: Number(estimate.protein_g) || 0,
     fat_g: Number(estimate.fat_g) || 0,
     carb_g: Number(estimate.carb_g) || 0,
   });
-  await reply(event, `🍚 食事を記録しました: ${estimate.description || text}（約${Math.round(estimate.calories) || 0}kcal）`);
+  const summary = await formatDailyPfcSummary(profileId, date);
+  await reply(event, `🍚 食事を記録しました: ${estimate.description || text}（約${Math.round(estimate.calories) || 0}kcal）\n\n${summary}`);
 }
 
 async function handleExpenseText(event: LineEvent, profileId: string, text: string): Promise<void> {
@@ -271,15 +297,17 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
 
     if (kind === "meal") {
       const estimate = await estimateMealNutrition(content.base64, content.mediaType);
+      const date = todayStrJST();
       await createMealLog(profileId, {
-        date: todayStrJST(),
+        date,
         description: estimate.description || "",
         calories: Number(estimate.calories) || 0,
         protein_g: Number(estimate.protein_g) || 0,
         fat_g: Number(estimate.fat_g) || 0,
         carb_g: Number(estimate.carb_g) || 0,
       });
-      await reply(event, `🍚 食事を記録しました: ${estimate.description || "内容不明"}（約${Math.round(estimate.calories) || 0}kcal）`);
+      const summary = await formatDailyPfcSummary(profileId, date);
+      await reply(event, `🍚 食事を記録しました: ${estimate.description || "内容不明"}（約${Math.round(estimate.calories) || 0}kcal）\n\n${summary}`);
       return;
     }
 

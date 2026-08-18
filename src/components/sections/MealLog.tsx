@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
 import type { MealLogOut, PfcTargetOut } from "@/lib/apiTypes";
 import { todayStrJST, periodKeyOfDate } from "@/lib/date";
+import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { SectionHead } from "../common";
 
 function shiftDate(dateStr: string, delta: number): string {
@@ -12,7 +13,7 @@ function shiftDate(dateStr: string, delta: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
-const DEFAULT_TARGET = { calories: 2380, protein_g: 175, fat_g: 65, carb_g: 275 };
+const DEFAULT_TARGET = DEFAULT_PFC_TARGET;
 
 function Bar({ label, actual, target, color }: { label: string; actual: number; target: number; color: string }) {
   const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
