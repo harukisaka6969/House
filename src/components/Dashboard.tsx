@@ -8,6 +8,7 @@ import { shiftMonth } from "@/lib/date";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AppBadgeSync from "./AppBadgeSync";
+import PullToRefresh from "./PullToRefresh";
 import { SectionHead } from "./common";
 
 // 各セクションは実際に開いたときだけ読み込む（初回起動時のJSバンドルを最小限にするため）。
@@ -159,10 +160,22 @@ function LowStockBanner({ onOpenInventory }: { onOpenInventory: () => void }) {
 
 function DashboardInner() {
   const router = useRouter();
-  const { slug, me, monthKey, setMonthKey, loading } = useDashboard();
+  const { slug, me, monthKey, setMonthKey, loading, refreshMonth, refreshSettings, refreshMe, refreshLowStock } = useDashboard();
   const [view, setView] = useState<string>("home");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  /** 下に引っ張って更新: 家計まわりの共有データ（月・設定・自分の情報・在庫アラート）を再取得しつつ、
+   * 今開いているセクションを1つ丸ごと作り直して各セクション自身のデータ取得(useEffect)もやり直させる。
+   * 全セクションに個別のリロード処理を持たせずに済むよう、あえてマウントし直す方式にしている。 */
+  const refreshAll = () => {
+    refreshMonth();
+    refreshSettings();
+    refreshMe();
+    refreshLowStock();
+    setRefreshKey((k) => k + 1);
+  };
 
   // メニュー外をタップ/クリックしたら閉じる。開閉はReact stateのみで制御し、
   // CSSの:hover/:focus-within頼みにはしない — クリックしたdrawitemがフォーカスを
@@ -184,117 +197,119 @@ function DashboardInner() {
   };
 
   return (
-    <div className="mf-root">
-      <div className="mf-banner">
-        <img src="/banner-wedding.jpg" alt="" />
-      </div>
-      <header className="mf-header">
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
-          <div className="mf-menuwrap" ref={menuRef}>
-            <button className="mf-menubtn" aria-haspopup="true" aria-expanded={menuOpen} aria-label="メニュー" onClick={() => setMenuOpen((o) => !o)}>
-              ☰
-            </button>
-            <div className={"mf-drawer" + (menuOpen ? " open" : "")}>
-              {MENU_GROUPS.map((group, gi) => (
-                <div key={group.label}>
-                  {gi > 0 && <div className="mf-drawsep" />}
-                  <div className="mf-drawgroup">{group.label}</div>
-                  {group.items.map(([id, label]) => (
-                    <button key={id} className={"mf-drawitem" + (view === id ? " active" : "")} onClick={() => { setView(id); setMenuOpen(false); }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              ))}
-              <div className="mf-drawsep" />
-              <button className="mf-drawitem" onClick={() => router.push(`/${slug}/quick`)}>
-                ⚡ クイック入力
+    <PullToRefresh onRefresh={refreshAll}>
+      <div className="mf-root">
+        <div className="mf-banner">
+          <img src="/banner-wedding.jpg" alt="" />
+        </div>
+        <header className="mf-header">
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 14 }}>
+            <div className="mf-menuwrap" ref={menuRef}>
+              <button className="mf-menubtn" aria-haspopup="true" aria-expanded={menuOpen} aria-label="メニュー" onClick={() => setMenuOpen((o) => !o)}>
+                ☰
               </button>
-              <button className="mf-drawitem" onClick={() => router.push(`/${slug}/kiosk`)}>
-                🖥 常設ダッシュボード
+              <div className={"mf-drawer" + (menuOpen ? " open" : "")}>
+                {MENU_GROUPS.map((group, gi) => (
+                  <div key={group.label}>
+                    {gi > 0 && <div className="mf-drawsep" />}
+                    <div className="mf-drawgroup">{group.label}</div>
+                    {group.items.map(([id, label]) => (
+                      <button key={id} className={"mf-drawitem" + (view === id ? " active" : "")} onClick={() => { setView(id); setMenuOpen(false); }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                <div className="mf-drawsep" />
+                <button className="mf-drawitem" onClick={() => router.push(`/${slug}/quick`)}>
+                  ⚡ クイック入力
+                </button>
+                <button className="mf-drawitem" onClick={() => router.push(`/${slug}/kiosk`)}>
+                  🖥 常設ダッシュボード
+                </button>
+                <a className="mf-drawitem" href={PYTHON_LEARN_URL} onClick={() => setMenuOpen(false)}>
+                  🐍 Python学習
+                </a>
+                <button className="mf-drawitem" onClick={logout}>
+                  ログアウト
+                </button>
+              </div>
+            </div>
+            <div>
+              <div className="mf-eyebrow">SAKA HOUSEHOLD LEDGER</div>
+              <h1 className="mf-title">家計フローダッシュボード</h1>
+            </div>
+          </div>
+          <div className="mf-headright">
+            <a className="mf-btn quick" href={`/${slug}/quick`}>
+              ⚡ 入力
+            </a>
+            <span className="mf-numsub">
+              {me?.profile.name}
+              {me?.partner ? ` ／ ${me.partner.name}` : ""}
+            </span>
+            <div className="mf-monthnav">
+              <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, -1))} aria-label="前の月">
+                ‹
               </button>
-              <a className="mf-drawitem" href={PYTHON_LEARN_URL} onClick={() => setMenuOpen(false)}>
-                🐍 Python学習
-              </a>
-              <button className="mf-drawitem" onClick={logout}>
-                ログアウト
+              <span className="mf-monthlabel">{monthKey.replace("-", "年")}月</span>
+              <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, 1))} aria-label="次の月">
+                ›
               </button>
             </div>
           </div>
-          <div>
-            <div className="mf-eyebrow">SAKA HOUSEHOLD LEDGER</div>
-            <h1 className="mf-title">家計フローダッシュボード</h1>
-          </div>
-        </div>
-        <div className="mf-headright">
-          <a className="mf-btn quick" href={`/${slug}/quick`}>
-            ⚡ 入力
-          </a>
-          <span className="mf-numsub">
-            {me?.profile.name}
-            {me?.partner ? ` ／ ${me.partner.name}` : ""}
-          </span>
-          <div className="mf-monthnav">
-            <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, -1))} aria-label="前の月">
-              ‹
-            </button>
-            <span className="mf-monthlabel">{monthKey.replace("-", "年")}月</span>
-            <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, 1))} aria-label="次の月">
-              ›
-            </button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
-        <LowStockBanner onOpenInventory={() => setView("inventory")} />
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px" }}>
+          <LowStockBanner onOpenInventory={() => setView("inventory")} />
+        </div>
+
+        <main className="mf-main">
+          {loading && !me ? (
+            <div className="mf-empty" style={{ padding: 40, textAlign: "center" }}>
+              読み込み中…
+            </div>
+          ) : (
+            <div key={`${view}-${refreshKey}`}>
+              {view === "home" && <Home />}
+              {view === "summary" && <Summary />}
+              {view === "flow" && <Flow />}
+              {view === "accounts" && <Accounts />}
+              {view === "expenses" && (
+                <section className="mf-section">
+                  <SectionHead no="04" title="支出明細" sub={`いちばん細かい視点。${me?.profile.name ?? ""}として入力します。文章・レシート写真・手入力に対応。`} />
+                  <ExpensePanel />
+                </section>
+              )}
+              {view === "invest" && <Invest />}
+              {view === "sim" && <Sim />}
+              {view === "wishlist" && <Wishlist />}
+              {view === "lifeEvents" && <LifeEvents />}
+              {view === "maintenance" && <Maintenance />}
+              {view === "inventory" && <Inventory />}
+              {view === "journal" && <Journal />}
+              {view === "ideaBoard" && <IdeaBoard />}
+              {view === "records" && <Records />}
+              {view === "reminders" && <Reminders />}
+              {view === "flowAnalysis" && <FlowAnalysis />}
+              {view === "gymLog" && <GymLog />}
+              {view === "mealLog" && <MealLog />}
+              {view === "shoppingList" && <ShoppingList />}
+              {view === "smartHome" && <SmartHome />}
+              {view === "splitEvents" && <SplitEvents />}
+              {view === "anniversaries" && <Anniversaries />}
+              {view === "yearTimeline" && <YearTimeline />}
+              {view === "savingsActions" && <SavingsActions />}
+              {view === "savingsHistory" && <SavingsHistory />}
+              {view === "itemHistory" && <ItemHistorySearch />}
+              {view === "settings" && <Settings />}
+            </div>
+          )}
+          <footer className="mf-footer">データはこのアプリのサーバーに保存されます。投資に関する情報は参考情報であり、投資判断はご自身の責任で。</footer>
+        </main>
+        <AgentWidget />
+        <AppBadgeSync />
       </div>
-
-      <main className="mf-main">
-        {loading && !me ? (
-          <div className="mf-empty" style={{ padding: 40, textAlign: "center" }}>
-            読み込み中…
-          </div>
-        ) : (
-          <>
-            {view === "home" && <Home />}
-            {view === "summary" && <Summary />}
-            {view === "flow" && <Flow />}
-            {view === "accounts" && <Accounts />}
-            {view === "expenses" && (
-              <section className="mf-section">
-                <SectionHead no="04" title="支出明細" sub={`いちばん細かい視点。${me?.profile.name ?? ""}として入力します。文章・レシート写真・手入力に対応。`} />
-                <ExpensePanel />
-              </section>
-            )}
-            {view === "invest" && <Invest />}
-            {view === "sim" && <Sim />}
-            {view === "wishlist" && <Wishlist />}
-            {view === "lifeEvents" && <LifeEvents />}
-            {view === "maintenance" && <Maintenance />}
-            {view === "inventory" && <Inventory />}
-            {view === "journal" && <Journal />}
-            {view === "ideaBoard" && <IdeaBoard />}
-            {view === "records" && <Records />}
-            {view === "reminders" && <Reminders />}
-            {view === "flowAnalysis" && <FlowAnalysis />}
-            {view === "gymLog" && <GymLog />}
-            {view === "mealLog" && <MealLog />}
-            {view === "shoppingList" && <ShoppingList />}
-            {view === "smartHome" && <SmartHome />}
-            {view === "splitEvents" && <SplitEvents />}
-            {view === "anniversaries" && <Anniversaries />}
-            {view === "yearTimeline" && <YearTimeline />}
-            {view === "savingsActions" && <SavingsActions />}
-            {view === "savingsHistory" && <SavingsHistory />}
-            {view === "itemHistory" && <ItemHistorySearch />}
-            {view === "settings" && <Settings />}
-          </>
-        )}
-        <footer className="mf-footer">データはこのアプリのサーバーに保存されます。投資に関する情報は参考情報であり、投資判断はご自身の責任で。</footer>
-      </main>
-      <AgentWidget />
-      <AppBadgeSync />
-    </div>
+    </PullToRefresh>
   );
 }
