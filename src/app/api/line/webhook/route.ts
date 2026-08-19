@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { replyLineMessage, sendLineMessage, fetchLineImageContent } from "@/lib/lineNotify";
-import { findProfileIdByLineUserId } from "@/lib/profiles";
-import { getPendingApprovalsFor, approveShoppingItemAndNotify } from "@/lib/shoppingList";
+import { findProfileIdByLineUserId, getAllProfiles, getLineRecipients } from "@/lib/profiles";
+import { getPendingApprovalsFor, approveShoppingItemAndNotify, getShoppingItems, setShoppingItemBought } from "@/lib/shoppingList";
 import { getDueRemindersToday, updateReminder } from "@/lib/reminders";
 import { runSmartHomeTextCommand } from "@/lib/switchbotCommand";
 import {
@@ -47,10 +47,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n（食事・レシート・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・レシート・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -86,6 +86,26 @@ async function handleCompleteCommand(event: LineEvent): Promise<void> {
     if (result) completedNames.push(result.name);
   }
   await reply(event, completedNames.length ? `✅ 完了にしました:\n${completedNames.map((n) => `・${n}`).join("\n")}` : "完了にできませんでした。");
+}
+
+/** テキスト「買い物リスト」: 西友で買うもの（未購入分）をふたり両方のLINEにリストとして送り、
+ * 送った分は購入済みにする（アプリの「西友へ通知」ボタンと同じ処理をLINEから起動できるようにしたもの）。 */
+async function handleShoppingListCommand(event: LineEvent, profileId: string): Promise<void> {
+  const recipients = await getLineRecipients();
+  if (recipients.length === 0) {
+    await reply(event, "LINE通知が未設定です。「設定」→「LINE通知」でユーザーIDを登録してください。");
+    return;
+  }
+  const items = (await getShoppingItems()).filter((i) => i.store === "seiyu" && !i.bought);
+  if (items.length === 0) {
+    await reply(event, "西友で買うものは今ありません。");
+    return;
+  }
+  const profiles = await getAllProfiles();
+  const me = profiles.find((p) => p.id === profileId);
+  const lines = [`🛒 西友の買い物リスト（${me?.name ?? "パートナー"}より）`, "", ...items.map((i) => `・${i.name}`)];
+  await Promise.all(recipients.map((r) => sendLineMessage(r.line_user_id, lines.join("\n"))));
+  await Promise.all(items.map((i) => setShoppingItemBought(i.id, true)));
 }
 
 /** その日の食事ログ合計を、pfc_targets（未設定ならDEFAULT_PFC_TARGET）に対する「何g中何g（%）」で
@@ -476,6 +496,8 @@ export async function POST(req: Request) {
         await handleApproveCommand(event, profileId);
       } else if (text === "完了") {
         await handleCompleteCommand(event);
+      } else if (text === "買い物リスト") {
+        await handleShoppingListCommand(event, profileId);
       } else {
         await handleFreeText(event, profileId, text);
       }
