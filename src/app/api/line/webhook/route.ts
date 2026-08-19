@@ -33,6 +33,7 @@ import {
   listSavingsActions,
   createSavingsAction,
   createDiscountSavingsAction,
+  createGiftCardSavingsAction,
   logSavingsActionOccurrence,
 } from "@/lib/savingsActions";
 import { todayStrJST, businessDateJST, nowMonthKeyJST, nextDayStr } from "@/lib/date";
@@ -339,8 +340,28 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         }
       }
 
-      if (!ocr.total || ocr.total <= 0) {
-        if (redeemedNote) {
+      const currency = ocr.currency && ocr.currency.toUpperCase() !== "JPY" ? ocr.currency.toUpperCase() : null;
+      const total = ocr.total || 0;
+      // 総合計のうち、ギフトカード（eGift等）で充当された分は実支出ではないため、支出額から差し引き、
+      // 差し引いた分は別途「ギフトカードで節約」として節約履歴に記録する（外貨換算が絡む場合は対象外）。
+      const giftCardAmount = !currency && ocr.gift_card_amount && ocr.gift_card_amount > 0 ? Math.min(ocr.gift_card_amount, total) : 0;
+      const chargeAmount = total - giftCardAmount;
+
+      if (!ocr.total || chargeAmount <= 0) {
+        if (giftCardAmount > 0) {
+          let giftCardNote = "";
+          try {
+            const savingsRow = await createGiftCardSavingsAction(profileId, {
+              item: ocr.store || "購入品",
+              giftCardAmount,
+              date: ocr.date ?? businessDateJST(),
+            });
+            giftCardNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約、ギフトカードで支払い）`;
+          } catch (e) {
+            console.error("receipt gift-card savings action failed", e);
+          }
+          await reply(event, `🎁 ギフトカードでの支払いとして記録しました。実際の追加支払いが無いため、支出としては記録していません。${giftCardNote}${redeemedNote}`);
+        } else if (redeemedNote) {
           await reply(event, `🎁 ポイント等で無料入手として記録しました。実際の支払いが0円のため、支出としては記録していません。${redeemedNote}`);
         } else {
           await reply(event, "レシートの金額を読み取れませんでした。アプリから登録してください。");
@@ -353,7 +374,6 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         return;
       }
       const category = categories.includes(ocr.category) ? ocr.category : "その他";
-      const currency = ocr.currency && ocr.currency.toUpperCase() !== "JPY" ? ocr.currency.toUpperCase() : null;
       const { entries: resolved } = await addExpenseEntries(
         profileId,
         [
@@ -361,7 +381,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             date: ocr.date ?? undefined,
             account_id: account.id,
             category,
-            amount: ocr.total,
+            amount: chargeAmount,
             memo: ocr.store || "",
             original_currency: currency,
             original_amount: currency ? ocr.total : null,
@@ -370,7 +390,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         ],
         categories
       );
-      const jpyAmount = resolved[0]?.amount ?? ocr.total;
+      const jpyAmount = resolved[0]?.amount ?? chargeAmount;
       const currencyNote = currency ? `（${ocr.total}${currency}）` : "";
       let discountNote = "";
       // レシートに割引表示（○%OFFなど）が読み取れた場合は、支出とは別に節約履歴にも記録する（カードは作らない）。
@@ -388,7 +408,20 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
           console.error("receipt discount savings action failed", e);
         }
       }
-      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${redeemedNote}`);
+      let giftCardNote = "";
+      if (giftCardAmount > 0) {
+        try {
+          const savingsRow = await createGiftCardSavingsAction(profileId, {
+            item: ocr.store || "購入品",
+            giftCardAmount,
+            date: ocr.date ?? businessDateJST(),
+          });
+          giftCardNote = `\n${savingsRow.emoji} 節約履歴にも登録: ${savingsRow.title}（${savingsRow.estimated_saving.toLocaleString()}円節約、ギフトカードで支払い）`;
+        } catch (e) {
+          console.error("receipt gift-card savings action failed", e);
+        }
+      }
+      await reply(event, `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${giftCardNote}${redeemedNote}`);
       return;
     }
 

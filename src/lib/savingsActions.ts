@@ -187,6 +187,24 @@ export async function createDiscountSavingsAction(
   return data as SavingsActionLogRow;
 }
 
+/** 「総合計のうち○○円をギフトカード（eGift等）で支払った」という、特定商品の値引きではなく支払い手段としての
+ * ギフトカード充当分を節約として登録する。割引率や定価との比較ではなく、充当された金額そのものが節約額になる
+ * （その分、財布からの実支出が減っているため）。購入ごとに内容が変わるため、カードは作らず節約履歴に単独記録として残す。 */
+export async function createGiftCardSavingsAction(owner: string, input: { item: string; giftCardAmount: number; date: string }): Promise<SavingsActionLogRow> {
+  const emoji = await pickEmoji(input.item).catch(() => "🎁");
+  const title = `${input.item}をギフトカードで節約`;
+  const description = `${input.item}の代金のうち${input.giftCardAmount.toLocaleString()}円をギフトカードで支払った`;
+  const reasoning = `ギフトカードで${input.giftCardAmount.toLocaleString()}円分を充当したため、その分が実支出に対する節約分。`;
+  const keywords = [input.item, "ギフトカード", "eGift"];
+  const { data, error } = await db()
+    .from("savings_action_logs")
+    .insert({ action_id: null, owner, date: input.date, estimated_saving: input.giftCardAmount, title, description, reasoning, keywords, emoji })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as SavingsActionLogRow;
+}
+
 /** カードを削除する（紐づく履歴ログもcascadeで一緒に削除される）。 */
 export async function deleteSavingsAction(id: string): Promise<boolean> {
   const { data, error } = await db().from("savings_actions").delete().eq("id", id).select("id");

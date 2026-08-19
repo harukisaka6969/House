@@ -36,8 +36,10 @@ export default function ExpensePanel() {
   const [rateErr, setRateErr] = useState("");
   const [ocrDiscountPercent, setOcrDiscountPercent] = useState<number | null>(null);
   const [ocrRedeemed, setOcrRedeemed] = useState<{ item: string; originalPrice: number } | null>(null);
+  const [ocrGiftCard, setOcrGiftCard] = useState<{ item: string; amount: number } | null>(null);
   const [ocrItems, setOcrItems] = useState<{ name: string; price: number | null }[] | null>(null);
   const [redeemedBusy, setRedeemedBusy] = useState(false);
+  const [giftCardBusy, setGiftCardBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -191,10 +193,22 @@ export default function ExpensePanel() {
           discountNote += " ／ ポイント等での無料入手の節約履歴登録は失敗しました";
         }
       }
+      if (ocrGiftCard) {
+        try {
+          const { action: savingsRow } = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+            item: ocrGiftCard.item,
+            gift_card_amount: ocrGiftCard.amount,
+          });
+          discountNote += ` ／ ${savingsRow.emoji} ${savingsRow.title}（${fmt(savingsRow.estimated_saving)}節約、ギフトカードで支払い）も節約履歴に登録`;
+        } catch {
+          discountNote += " ／ ギフトカードでの節約履歴登録は失敗しました";
+        }
+      }
       setForm((f) => ({ ...f, amount: "", memo: "", sub: "" }));
       setForeignAmount("");
       setOcrDiscountPercent(null);
       setOcrRedeemed(null);
+      setOcrGiftCard(null);
       setOcrItems(null);
       setMsg("✓ 追加しました。" + promoMsg(promoted) + splitNote + discountNote);
       refreshMonth();
@@ -288,6 +302,7 @@ export default function ExpensePanel() {
     setBusy(true);
     setOcrDiscountPercent(null);
     setOcrRedeemed(null);
+    setOcrGiftCard(null);
     setOcrItems(null);
     setMsg("レシートを読み取り中…");
     try {
@@ -305,6 +320,7 @@ export default function ExpensePanel() {
         discount_percent?: number | null;
         redeemed_item?: string | null;
         redeemed_original_price?: number | null;
+        gift_card_amount?: number | null;
         items?: { name: string; price: number | null }[];
       };
       const foreign = parsed.currency && parsed.currency.toUpperCase() !== "JPY" ? parsed.currency.toUpperCase() : null;
@@ -316,14 +332,18 @@ export default function ExpensePanel() {
         parsed.redeemed_item && parsed.redeemed_original_price ? { item: parsed.redeemed_item, originalPrice: parsed.redeemed_original_price } : null;
       setOcrRedeemed(redeemed);
       setOcrItems(parsed.items && parsed.items.length > 0 ? parsed.items : null);
-      // ポイント等で全額相殺され支払合計が0円のレシートは、支出として追加する金額が無いため
-      // フォームには反映しない（節約履歴への登録は下の専用ボタンで行う）。
-      if (!(parsed.total > 0)) {
-        setMsg(
-          redeemed
-            ? `🎁 ${redeemed.item}（定価${redeemed.originalPrice.toLocaleString()}円相当）をポイント等で無料入手したようです。支出としては記録せず、下のボタンで節約履歴に登録できます。`
-            : "レシートの金額を読み取れませんでした。手入力するか、別の写真で試してください。"
-        );
+      // 総合計のうち、ギフトカード（eGift等）で充当された分は実支出ではないため、フォームの金額から差し引き、
+      // 差し引いた分は追加時（または全額充当なら下の専用ボタンで）節約履歴に登録する（外貨は対象外）。
+      const giftCard = !foreign && parsed.gift_card_amount && parsed.gift_card_amount > 0 ? Math.min(parsed.gift_card_amount, parsed.total || 0) : 0;
+      setOcrGiftCard(giftCard > 0 ? { item: parsed.store || "購入品", amount: giftCard } : null);
+      const chargeAmount = (parsed.total || 0) - giftCard;
+      // ポイント等で全額相殺、またはギフトカードで全額充当され支払合計が0円のレシートは、
+      // 支出として追加する金額が無いためフォームには反映しない（節約履歴への登録は下の専用ボタンで行う）。
+      if (!(parsed.total > 0) || chargeAmount <= 0) {
+        const notes: string[] = [];
+        if (redeemed) notes.push(`🎁 ${redeemed.item}（定価${redeemed.originalPrice.toLocaleString()}円相当）をポイント等で無料入手したようです。`);
+        if (giftCard > 0) notes.push(`🎁 ギフトカードで${giftCard.toLocaleString()}円分が支払われ、追加の支出は無いようです。`);
+        setMsg(notes.length > 0 ? notes.join("") + "支出としては記録せず、下のボタンで節約履歴に登録できます。" : "レシートの金額を読み取れませんでした。手入力するか、別の写真で試してください。");
         setBusy(false);
         return;
       }
@@ -333,7 +353,7 @@ export default function ExpensePanel() {
         return {
           ...f,
           date: parsed.date || f.date,
-          amount: foreign ? "" : String(parsed.total || f.amount),
+          amount: foreign ? "" : String(chargeAmount || f.amount),
           account,
           category: nextCats.includes(parsed.category) ? parsed.category : nextCats.includes(f.category) ? f.category : nextCats[0] ?? f.category,
           memo: parsed.store || f.memo,
@@ -344,12 +364,14 @@ export default function ExpensePanel() {
           ? `（${parsed.discount_percent}%オフを検出。追加時に節約アクションにも登録します）`
           : "";
       const redeemedNote = redeemed ? `（${redeemed.item}のポイント等での無料入手を検出。追加時に節約履歴にも登録します）` : "";
+      const giftCardNote = giftCard > 0 ? `（ギフトカードで${giftCard.toLocaleString()}円分の充当を検出。追加時に節約履歴にも登録します）` : "";
       setMsg(
         (foreign
           ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}。円換算を確認して追加してください。`
           : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`) +
           discountNote +
-          redeemedNote
+          redeemedNote +
+          giftCardNote
       );
     } catch {
       setMsg("読み取りに失敗しました。手入力するか、別の写真で試してください。");
@@ -374,6 +396,24 @@ export default function ExpensePanel() {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
     }
     setRedeemedBusy(false);
+  };
+
+  /** OCRでギフトカード（eGift等）による全額充当を検出したが、追加の支払いが無く支出としては
+   * 追加できない場合に、節約履歴にだけ単独で登録する。 */
+  const registerGiftCardSaving = async () => {
+    if (!ocrGiftCard || giftCardBusy) return;
+    setGiftCardBusy(true);
+    try {
+      const { action: row } = await apiPost<{ action: SavingsActionOut }>("/api/savings-actions", {
+        item: ocrGiftCard.item,
+        gift_card_amount: ocrGiftCard.amount,
+      });
+      setMsg(`✓ 節約履歴に登録しました: ${row.emoji} ${row.title}（${fmt(row.estimated_saving)}節約）`);
+      setOcrGiftCard(null);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    }
+    setGiftCardBusy(false);
   };
 
   const sorted = [...month.expenses]
@@ -732,6 +772,13 @@ export default function ExpensePanel() {
           <div className="mf-row" style={{ marginTop: 8 }}>
             <button className="mf-btn primary" disabled={redeemedBusy} onClick={registerRedeemedSaving}>
               {redeemedBusy ? "登録中…" : `🎁 ${ocrRedeemed.item}を節約として登録する（支出には追加しない）`}
+            </button>
+          </div>
+        )}
+        {ocrGiftCard && !form.amount && (
+          <div className="mf-row" style={{ marginTop: 8 }}>
+            <button className="mf-btn primary" disabled={giftCardBusy} onClick={registerGiftCardSaving}>
+              {giftCardBusy ? "登録中…" : `🎁 ${ocrGiftCard.item}のギフトカード${ocrGiftCard.amount.toLocaleString()}円分を節約として登録する（支出には追加しない）`}
             </button>
           </div>
         )}

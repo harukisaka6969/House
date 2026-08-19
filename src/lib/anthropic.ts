@@ -47,6 +47,11 @@ export interface OcrResult {
   redeemed_item: string | null;
   /** redeemed_itemの、ポイント等での相殺前の通常価格（レシート記載通貨のまま）。redeemed_itemがnullならnull。 */
   redeemed_original_price: number | null;
+  /** 支払い方法の内訳として「ギフトカード」「eGift」等（商品代金の一部または全部の相殺ではなく、
+   * 総合計に対する支払い手段の一つとして）で充当された金額（レシート記載通貨のまま）。
+   * 例: 総合計579円のうち、Starbucks eGiftで500円・クレジットで79円、のような内訳。
+   * 読み取れなければnull。redeemed_item（特定商品がポイント等で相殺される場合）とは別概念。 */
+  gift_card_amount: number | null;
   /** レシートに記載の購入品ごとの{name, price}一覧（読み取れる範囲でベストエフォート）。
    * priceはその品目単体の価格（レシート記載通貨のまま）で、読み取れなければnull。
    * 「いつ何をいくらで買ったか」を後から検索・集計できるようにするための品目履歴の元データ。読み取れなければ空配列。 */
@@ -78,8 +83,9 @@ ${accountRuleText(acctList)}
 海外のレシート（日本円以外の通貨）の場合、totalはレシートに印字された金額そのままの数値にしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにはISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円のレシートならcurrencyは"JPY"にしてください。
 レシートに「○%OFF」「定価○○円→○○円」のような割引の表示がある場合は、discount_percentにその割引率（0〜99の数値）を入れてください。割引の表示が無ければdiscount_percentはnullにしてください。割引額そのものの計算は不要です（率だけでよい）。
 レシートに「スター リワード」「ポイント」「クーポン」などで商品代金の全額または一部が相殺されている明細がある場合、その商品名をredeemed_item、相殺される前のその商品の通常価格をredeemed_original_priceに入れてください（無ければ両方null）。この場合でも、totalはレシートに印字された最終的な支払合計をそのまま入れてください（0円になっている場合はtotalも0にしてください。読み取り失敗ではありません）。
+レシートの支払い方法の内訳に「ギフトカード」「eGift」「Starbucks Card」などギフトカード・プリペイドカードの類で総合計の一部または全部が充当されている行がある場合（例:「Starbucks eGift（つり銭なし）500」）、その充当された金額をgift_card_amountに入れてください（読み取れなければnull）。これは特定の商品の値引きではなく、総合計に対する支払い手段の内訳です。redeemed_itemとは別の項目なので、両方該当すれば両方入れてください。
 itemsには、レシートに記載されている購入品ごとに{"name":"商品名","price":その商品単体の価格の数値（読み取れなければnull）}を、読み取れる範囲でできるだけ具体的にすべて配列で入れてください。小計・割引・ポイント等の行そのものは含めないでください。読み取れなければ空配列にしてください。
-{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない。0円の場合も0を入れる）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\"","discount_percent":割引率の数値、読み取れなければnull,"redeemed_item":"ポイント等で相殺された商品名、無ければnull","redeemed_original_price":その商品の通常価格の数値、無ければnull,"items":[{"name":"購入品名","price":数値またはnull}, "..."]}`,
+{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない。0円の場合も0を入れる）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\"","discount_percent":割引率の数値、読み取れなければnull,"redeemed_item":"ポイント等で相殺された商品名、無ければnull","redeemed_original_price":その商品の通常価格の数値、無ければnull,"gift_card_amount":ギフトカード等で充当された金額の数値、無ければnull,"items":[{"name":"購入品名","price":数値またはnull}, "..."]}`,
           },
         ],
       },
@@ -90,12 +96,14 @@ itemsには、レシートに記載されている購入品ごとに{"name":"商
   const discount = Number(parsed.discount_percent);
   const redeemedOriginalPrice = Number(parsed.redeemed_original_price);
   const redeemedItem = typeof parsed.redeemed_item === "string" ? parsed.redeemed_item.trim() : "";
+  const giftCardAmount = Number(parsed.gift_card_amount);
   return {
     ...parsed,
     currency: (parsed.currency || "JPY").toUpperCase(),
     discount_percent: Number.isFinite(discount) && discount > 0 && discount < 100 ? discount : null,
     redeemed_item: redeemedItem && Number.isFinite(redeemedOriginalPrice) && redeemedOriginalPrice > 0 ? redeemedItem : null,
     redeemed_original_price: redeemedItem && Number.isFinite(redeemedOriginalPrice) && redeemedOriginalPrice > 0 ? redeemedOriginalPrice : null,
+    gift_card_amount: Number.isFinite(giftCardAmount) && giftCardAmount > 0 ? giftCardAmount : null,
     items: Array.isArray(parsed.items)
       ? (parsed.items as unknown as Record<string, unknown>[])
           .filter((i) => i && typeof i.name === "string" && (i.name as string).trim().length > 0)
