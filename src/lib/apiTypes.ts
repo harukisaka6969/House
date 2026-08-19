@@ -642,6 +642,27 @@ export interface SavingsHistoryOut {
   estimated_saving: number;
 }
 
+export interface PersonOut {
+  id: string;
+  canonical_name: string;
+  reading: string | null;
+  memo: string;
+  /** canonical_name自身は含まない、それ以外の表記ゆれ一覧。 */
+  aliases: { id: string; alias: string }[];
+  /** 自分がこの人物と最後に会った日（自分の日記に記録が無ければnull）。 */
+  last_date: string | null;
+  last_summary: string | null;
+  encounter_count: number;
+}
+
+export interface JournalEncounterOut {
+  id: string;
+  date: string;
+  person_id: string | null;
+  person_raw_name: string;
+  summary: string;
+}
+
 export interface ItemHistoryOut {
   id: string;
   owner: string;

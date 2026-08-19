@@ -259,6 +259,44 @@ ${accountRuleText(acctList)}
   }
 }
 
+export interface ExtractedJournalEncounter {
+  person: string;
+  summary: string;
+}
+
+/** 日記本文から、その日実際に会って何かをした人物ごとに{person, summary}を抽出する
+ * （「○○と前回会ったのはいつ？」に後から答えられるようにするための裏データ）。
+ * knownNamesに渡した表記と一致する人物が出てきたら、その表記をなるべくそのまま使うよう促す
+ * （既存の人物台帳との名寄せ精度を上げるため）。単に名前が出てきただけで実際に会った描写が
+ * 無い場合は含めない。該当が無ければ空配列。 */
+export async function extractJournalEncounters(text: string, knownNames: string[]): Promise<ExtractedJournalEncounter[]> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 800,
+    messages: [
+      {
+        role: "user",
+        content: `次の日記本文から、その日に実際に会った・一緒に何かをした人物ごとに、JSON配列のみを返してください。前置きやコードブロックは不要です。
+形式: [{"person":"本文中の表記（既知の人物名候補と一致するならその表記を使う）","summary":"その人と何をしたかの短い要約（15字程度）"}]
+単に名前が話題に出ただけで実際に会った描写が無い場合や、家族・世帯の同居人についての日常的な記述（一緒に暮らしているだけの内容）は含めないでください。該当が一つも無ければ空配列を返してください。
+既知の人物名候補: ${knownNames.length > 0 ? knownNames.join("、") : "（なし）"}
+日記本文: ${text}`,
+      },
+    ],
+  });
+  const t = stripFence(joinText(res.content));
+  try {
+    const arr = JSON.parse(t);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x): x is { person?: unknown; summary?: unknown } => !!x && typeof x === "object")
+      .map((x) => ({ person: typeof x.person === "string" ? x.person.trim() : "", summary: typeof x.summary === "string" ? x.summary.trim() : "" }))
+      .filter((x) => x.person.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 export interface MealEstimate {
   description: string;
   calories: number;

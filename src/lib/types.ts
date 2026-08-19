@@ -412,6 +412,38 @@ export interface InventoryItemRow {
   updated_at: string;
 }
 
+/* ---- 人物台帳・日記からの出会い記録（「○○と前回会ったのはいつ？」に答えるための裏データ） ---- */
+
+/** 世帯で共有する人物の名寄せ台帳。表記ゆれ自体はperson_aliasesに持つ（canonical_name自身も
+ * 必ず1件エイリアスとして登録される）。 */
+export interface PersonRow {
+  id: string;
+  canonical_name: string;
+  reading: string | null;
+  memo: string;
+  created_at: string;
+}
+
+/** 1つの表記は必ずただ1人のpersonにしか紐づかない（unique index）。 */
+export interface PersonAliasRow {
+  id: string;
+  person_id: string;
+  alias: string;
+  created_at: string;
+}
+
+/** 日記本文からAIが抽出した「その日、誰と何をしたか」。日記本文と同様に本人にしか見えない
+ * （ownerで厳密にスコープする）。person_idは表記がperson_aliasesと一致した場合のみ埋まる。 */
+export interface JournalEncounterRow {
+  id: string;
+  owner: string;
+  date: string;
+  person_id: string | null;
+  person_raw_name: string;
+  summary: string;
+  created_at: string;
+}
+
 /* ---- 品目履歴（購入・食事の品目名を検索用に裏で記録） ---- */
 
 export type ItemHistorySource = "purchase" | "meal";

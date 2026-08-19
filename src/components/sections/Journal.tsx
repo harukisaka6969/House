@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut, apiPost, apiDelete } from "@/lib/apiClient";
-import type { JournalEntryOut, SportLogOut, ExpenseOut } from "@/lib/apiTypes";
+import type { JournalEntryOut, SportLogOut, ExpenseOut, JournalEncounterOut } from "@/lib/apiTypes";
 import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
@@ -33,6 +33,8 @@ export default function Journal() {
   const [isAiDraft, setIsAiDraft] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [encounters, setEncounters] = useState<JournalEncounterOut[]>([]);
+  const [extractingPeople, setExtractingPeople] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ account_id: string; category: string; amount: string; memo: string }>({
     account_id: "a1",
@@ -70,6 +72,13 @@ export default function Journal() {
       .catch(() => setJournalExpenses([]));
   };
   useEffect(loadJournalExpenses, [date]);
+
+  const loadEncounters = () => {
+    apiGet<{ encounters: JournalEncounterOut[] }>(`/api/journal/${date}/extract-people`)
+      .then((r) => setEncounters(r.encounters))
+      .catch(() => setEncounters([]));
+  };
+  useEffect(loadEncounters, [date]);
 
   useEffect(() => {
     const mine = entries?.find((e) => e.owner === meId && e.date === date);
@@ -137,6 +146,20 @@ export default function Journal() {
       setSaveMsg(`インポートに失敗しました。${e instanceof Error ? e.message : ""}`);
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const extractPeopleFromDiary = async () => {
+    if (!bodyDraft.trim()) return;
+    setExtractingPeople(true);
+    try {
+      const r = await apiPost<{ encounters: JournalEncounterOut[] }>(`/api/journal/${date}/extract-people`, { text: bodyDraft });
+      setEncounters(r.encounters);
+      setSaveMsg(r.encounters.length > 0 ? `✓ ${r.encounters.length}人分の記録を「知人」に反映しました。` : "この日記からは、会った人物が見つかりませんでした。");
+    } catch (e) {
+      setSaveMsg(`人物の抽出に失敗しました。${e instanceof Error ? e.message : ""}`);
+    } finally {
+      setExtractingPeople(false);
     }
   };
 
@@ -229,12 +252,33 @@ export default function Journal() {
           <button className="mf-btn ghost" disabled={!bodyDraft.trim() || extracting} onClick={importMoneyFromDiary}>
             {extracting ? "インポート中…" : "📥 支出明細にインポート"}
           </button>
+          <button className="mf-btn ghost" disabled={!bodyDraft.trim() || extractingPeople} onClick={extractPeopleFromDiary}>
+            {extractingPeople ? "抽出中…" : "🧑 人物を抽出"}
+          </button>
         </div>
         <div className="mf-hint" style={{ opacity: 0.7 }}>
           日記の内容からAIがお金の動きを推測し、支出として記録します。押すたびに、この日の日記由来の記録を最新の内容で上書きします。
         </div>
         {saveMsg && <div className="mf-hint">{saveMsg}</div>}
       </div>
+
+      {encounters.length > 0 && (
+        <div className="mf-panel">
+          <div className="mf-paneltitle">この日会った人</div>
+          <div className="mf-list" style={{ maxHeight: "none" }}>
+            {encounters.map((e) => (
+              <div key={e.id} className="mf-listrow">
+                <span className="mf-listname">{e.person_raw_name}</span>
+                <span className="mf-listmemo">{e.summary || "（内容の記録なし）"}</span>
+                {!e.person_id && <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>未登録</span>}
+              </div>
+            ))}
+          </div>
+          <div className="mf-hint" style={{ opacity: 0.7 }}>
+            「未登録」の人物は「知人」セクションから登録すると、次回の抽出で紐づきます。会った記録は「知人」セクションで振り返れます。
+          </div>
+        </div>
+      )}
 
       {journalExpenses.length > 0 && (
         <div className="mf-panel">
