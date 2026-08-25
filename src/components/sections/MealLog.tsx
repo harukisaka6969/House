@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
-import type { MealLogOut, PfcTargetOut } from "@/lib/apiTypes";
+import type { MealLogOut, PfcTargetOut, MealPrepOut } from "@/lib/apiTypes";
 import { businessDateJST, periodKeyOfDate } from "@/lib/date";
 import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { SectionHead } from "../common";
@@ -48,6 +48,21 @@ export default function MealLog() {
   const [textBusy, setTextBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [preps, setPreps] = useState<MealPrepOut[] | null>(null);
+  const [showAddPrep, setShowAddPrep] = useState(false);
+  const [prepManual, setPrepManual] = useState(false);
+  const [prepName, setPrepName] = useState("");
+  const [prepWeight, setPrepWeight] = useState("");
+  const [prepDesc, setPrepDesc] = useState("");
+  const [prepCal, setPrepCal] = useState("");
+  const [prepP, setPrepP] = useState("");
+  const [prepF, setPrepF] = useState("");
+  const [prepC, setPrepC] = useState("");
+  const [prepBusy, setPrepBusy] = useState(false);
+  const [prepGramsIn, setPrepGramsIn] = useState<Record<string, string>>({});
+  const [prepEatBusyId, setPrepEatBusyId] = useState<string | null>(null);
+  const prepFileRef = useRef<HTMLInputElement>(null);
+
   const monthKey = periodKeyOfDate(date);
 
   const loadLogs = () => {
@@ -59,6 +74,13 @@ export default function MealLog() {
   useEffect(() => {
     apiPost("/api/notifications/mark-seen", { kind: "meals" }).catch(() => {});
   }, []);
+
+  const loadPreps = () => {
+    apiGet<{ preps: MealPrepOut[] }>("/api/meal-preps")
+      .then((r) => setPreps(r.preps))
+      .catch(() => setPreps([]));
+  };
+  useEffect(loadPreps, []);
 
   useEffect(() => {
     apiGet<{ target: PfcTargetOut | null }>("/api/pfc-target")
@@ -183,6 +205,91 @@ export default function MealLog() {
     setRegenBusy(false);
   };
 
+  const resetPrepForm = () => {
+    setPrepName("");
+    setPrepWeight("");
+    setPrepDesc("");
+    setPrepCal("");
+    setPrepP("");
+    setPrepF("");
+    setPrepC("");
+    setPrepManual(false);
+  };
+
+  const submitPrep = async (fd: FormData) => {
+    setPrepBusy(true);
+    setMsg("作り置きを登録中…");
+    try {
+      const res = await fetch("/api/meal-preps", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body && body.error) || "failed");
+      }
+      setMsg("✓ 作り置きを登録しました。");
+      resetPrepForm();
+      setShowAddPrep(false);
+      loadPreps();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    }
+    setPrepBusy(false);
+    if (prepFileRef.current) prepFileRef.current.value = "";
+  };
+
+  const addPrepManual = () => {
+    if (!prepName.trim() || !prepWeight.trim()) return;
+    const fd = new FormData();
+    fd.append("name", prepName.trim());
+    fd.append("total_weight_g", prepWeight.trim());
+    fd.append("calories", prepCal || "0");
+    fd.append("protein_g", prepP || "0");
+    fd.append("fat_g", prepF || "0");
+    fd.append("carb_g", prepC || "0");
+    submitPrep(fd);
+  };
+
+  const addPrepFromText = () => {
+    if (!prepWeight.trim() || !prepDesc.trim()) return;
+    const fd = new FormData();
+    if (prepName.trim()) fd.append("name", prepName.trim());
+    fd.append("total_weight_g", prepWeight.trim());
+    fd.append("text", prepDesc.trim());
+    submitPrep(fd);
+  };
+
+  const addPrepFromPhoto = (file: File) => {
+    if (!prepWeight.trim()) {
+      setMsg("先に総重量(g)を入力してください。");
+      return;
+    }
+    const fd = new FormData();
+    if (prepName.trim()) fd.append("name", prepName.trim());
+    fd.append("total_weight_g", prepWeight.trim());
+    fd.append("image", file);
+    submitPrep(fd);
+  };
+
+  const deletePrep = async (id: string) => {
+    await apiDelete(`/api/meal-preps/${id}`);
+    loadPreps();
+  };
+
+  const eatPrep = async (prep: MealPrepOut) => {
+    const grams = Number(prepGramsIn[prep.id]);
+    if (!Number.isFinite(grams) || grams <= 0) return;
+    setPrepEatBusyId(prep.id);
+    try {
+      await apiPost(`/api/meal-preps/${prep.id}/consume`, { grams, date });
+      setPrepGramsIn((s) => ({ ...s, [prep.id]: "" }));
+      setMsg(`✓ ${prep.name}を${grams}g記録しました。`);
+      loadLogs();
+      loadPreps();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "記録に失敗しました。");
+    }
+    setPrepEatBusyId(null);
+  };
+
   const saveTarget = async () => {
     try {
       const r = await apiPut<{ target: PfcTargetOut }>("/api/pfc-target", targetForm);
@@ -239,6 +346,123 @@ export default function MealLog() {
           </button>
         </div>
         {msg && <div className="mf-hint">{msg}</div>}
+      </div>
+
+      <div className="mf-panel">
+        <div className="mf-paneltitle">作り置き</div>
+        <div className="mf-hint" style={{ opacity: 0.7 }}>
+          まとめて作った料理を1回だけ登録しておくと、以降は「〇〇g食べた」と入力するだけで按分計算されます（LINEでも「（名前）を150g食べた」で記録できます）。
+        </div>
+
+        {preps === null ? (
+          <div className="mf-empty" style={{ marginTop: 8 }}>
+            読み込み中…
+          </div>
+        ) : preps.length === 0 ? (
+          <div className="mf-empty" style={{ marginTop: 8 }}>
+            まだ登録されていません。
+          </div>
+        ) : (
+          <div className="mf-list" style={{ maxHeight: "none", marginTop: 8 }}>
+            {preps.map((p) => (
+              <div key={p.id} className="mf-listrow" style={{ flexWrap: "wrap" }}>
+                <span className="mf-listname" title={p.name}>
+                  {p.name}
+                </span>
+                <span className="mf-hint" style={{ margin: 0 }}>
+                  残り {Math.round(p.remaining_weight_g)}g / {Math.round(p.total_weight_g)}g
+                </span>
+                <input
+                  className="mf-input mf-mono"
+                  type="number"
+                  placeholder="g"
+                  style={{ width: 80, flex: "0 0 auto" }}
+                  value={prepGramsIn[p.id] ?? ""}
+                  onChange={(e) => setPrepGramsIn((s) => ({ ...s, [p.id]: e.target.value }))}
+                />
+                <button className="mf-btn ghost" disabled={prepEatBusyId === p.id || !prepGramsIn[p.id]} onClick={() => eatPrep(p)}>
+                  {prepEatBusyId === p.id ? "記録中…" : "食べた"}
+                </button>
+                <button className="mf-del" onClick={() => deletePrep(p.id)}>
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!showAddPrep ? (
+          <button className="mf-btn ghost" style={{ marginTop: 10 }} onClick={() => setShowAddPrep(true)}>
+            ＋ 作り置きを登録
+          </button>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <div className="mf-formgrid">
+              <input className="mf-input" placeholder="名前（例: 鶏むね肉のトマト煮）" value={prepName} onChange={(e) => setPrepName(e.target.value)} />
+              <input className="mf-input mf-mono" type="number" placeholder="総重量(g)" value={prepWeight} onChange={(e) => setPrepWeight(e.target.value)} />
+            </div>
+
+            <div className="mf-chips" style={{ marginTop: 8 }}>
+              <button className={"mf-chipbtn" + (!prepManual ? " on" : "")} onClick={() => setPrepManual(false)}>
+                AIで推定
+              </button>
+              <button className={"mf-chipbtn" + (prepManual ? " on" : "")} onClick={() => setPrepManual(true)}>
+                手入力する
+              </button>
+            </div>
+
+            {!prepManual ? (
+              <>
+                <div className="mf-row" style={{ marginTop: 8 }}>
+                  <input
+                    className="mf-input"
+                    style={{ flex: 1 }}
+                    placeholder="材料・内容（例: 鶏むね肉600g、玄米500g、ブロッコリー200g）"
+                    value={prepDesc}
+                    onChange={(e) => setPrepDesc(e.target.value)}
+                  />
+                  <button className="mf-btn primary" disabled={prepBusy || !prepWeight.trim() || !prepDesc.trim()} onClick={addPrepFromText}>
+                    {prepBusy ? "解析中…" : "登録"}
+                  </button>
+                </div>
+                <input
+                  ref={prepFileRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) addPrepFromPhoto(f);
+                  }}
+                />
+                <button className="mf-btn ghost" style={{ marginTop: 8 }} disabled={prepBusy} onClick={() => prepFileRef.current?.click()}>
+                  📷 できあがり写真から登録
+                </button>
+              </>
+            ) : (
+              <div className="mf-formgrid" style={{ marginTop: 8 }}>
+                <input className="mf-input mf-mono" type="number" placeholder="総カロリー(kcal)" value={prepCal} onChange={(e) => setPrepCal(e.target.value)} />
+                <input className="mf-input mf-mono" type="number" placeholder="総タンパク質(g)" value={prepP} onChange={(e) => setPrepP(e.target.value)} />
+                <input className="mf-input mf-mono" type="number" placeholder="総脂質(g)" value={prepF} onChange={(e) => setPrepF(e.target.value)} />
+                <input className="mf-input mf-mono" type="number" placeholder="総炭水化物(g)" value={prepC} onChange={(e) => setPrepC(e.target.value)} />
+                <button className="mf-btn primary" disabled={prepBusy || !prepName.trim() || !prepWeight.trim()} onClick={addPrepManual}>
+                  {prepBusy ? "登録中…" : "登録"}
+                </button>
+              </div>
+            )}
+
+            <button
+              className="mf-btn ghost"
+              style={{ marginTop: 8 }}
+              onClick={() => {
+                setShowAddPrep(false);
+                resetPrepForm();
+              }}
+            >
+              キャンセル
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="mf-panel">

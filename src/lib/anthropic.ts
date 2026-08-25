@@ -563,6 +563,57 @@ export async function estimateMealNutritionFromText(description: string): Promis
   return JSON.parse(text) as MealEstimate;
 }
 
+export interface MealPrepEstimate {
+  name: string;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+}
+
+/** 作り置き（まとめて作った料理）の説明文 → 総重量totalWeightGぶん全体の{name, calories, protein_g,
+ * fat_g, carb_g}。estimateMealNutritionFromTextと違い「1食分」ではなく「指定した総重量まるごと」の
+ * 合計値を出す点に注意（作り置きを登録するときに一度だけ計算し、以降は食べたグラム数で按分する）。 */
+export async function estimateMealPrepNutrition(description: string, totalWeightG: number): Promise<MealPrepEstimate> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    messages: [
+      {
+        role: "user",
+        content: `次は、まとめて作り置きした料理の内容の説明です。1人前・1食分ではなく、合計${totalWeightG}g分（この量まるごと）のおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"name":"料理名（15文字程度）","calories":合計${totalWeightG}g分の総カロリーの数値(kcal),"protein_g":合計${totalWeightG}g分のタンパク質の数値(g),"fat_g":合計${totalWeightG}g分の脂質の数値(g),"carb_g":合計${totalWeightG}g分の炭水化物の数値(g)}
+作り置きの内容: ${description}`,
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  return JSON.parse(text) as MealPrepEstimate;
+}
+
+/** 作り置きのできあがり全体の写真 → 総重量totalWeightGぶん全体の栄養価推定。 */
+export async function estimateMealPrepNutritionFromPhoto(base64: string, mediaType: string, totalWeightG: number): Promise<MealPrepEstimate> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: `この写真は、まとめて作り置きした料理のできあがり全体です。写真の見た目と、これが合計${totalWeightG}g分（この量まるごと）であるという情報から、1人前・1食分ではなく総量ぶん全体のおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"name":"料理名（15文字程度）","calories":合計${totalWeightG}g分の総カロリーの数値(kcal),"protein_g":合計${totalWeightG}g分のタンパク質の数値(g),"fat_g":合計${totalWeightG}g分の脂質の数値(g),"carb_g":合計${totalWeightG}g分の炭水化物の数値(g)}`,
+          },
+        ],
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  return JSON.parse(text) as MealPrepEstimate;
+}
+
 /** 家計アドバイザー。system はサーバーが§5準拠で構築したコンテキスト。 */
 export async function runAdvisor(
   system: string,

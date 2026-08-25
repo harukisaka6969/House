@@ -21,6 +21,7 @@ import {
   type ExtractedGymItem,
 } from "@/lib/anthropic";
 import { createMealLog, getMealLogsInRange, getPfcTarget } from "@/lib/mealLog";
+import { getMealPreps, consumeMealPrep, matchMealPrepFromText } from "@/lib/mealPreps";
 import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { getExercises, createExercise, createLog as createGymLog, getOrCreateLineSplit, findExerciseByName } from "@/lib/gymLog";
 import { formatSets } from "@/lib/gymSuggestion";
@@ -51,7 +52,7 @@ const ID_MESSAGE = (userId: string) =>
   `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -133,8 +134,24 @@ async function formatDailyPfcSummary(profileId: string, date: string): Promise<s
 }
 
 async function handleMealText(event: LineEvent, profileId: string, text: string): Promise<void> {
-  const estimate = await estimateMealNutritionFromText(text);
   const date = businessDateJST();
+
+  // 「〇〇を150g食べた」のように、登録済みの作り置きの名前とグラム数の両方が読み取れれば、
+  // AIでの推測ではなく作り置きの総量から按分した確定値で記録する。
+  const preps = await getMealPreps(profileId);
+  const matched = matchMealPrepFromText(preps, text);
+  if (matched) {
+    try {
+      const { log } = await consumeMealPrep(matched.prep.id, profileId, matched.grams, date);
+      const summary = await formatDailyPfcSummary(profileId, date);
+      await reply(event, `🍚 食事を記録しました: ${log.description}（約${Math.round(log.calories)}kcal）\n\n${summary}`);
+      return;
+    } catch (e) {
+      console.error("meal prep consume via LINE failed", e);
+    }
+  }
+
+  const estimate = await estimateMealNutritionFromText(text);
   await createMealLog(profileId, {
     date,
     description: estimate.description || "",

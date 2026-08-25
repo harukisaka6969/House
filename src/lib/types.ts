@@ -358,6 +358,21 @@ export interface MealLogRow {
   created_at: string;
 }
 
+/** 作り置き（まとめて作った料理）。calories/protein_g/fat_g/carb_gはtotal_weight_gぶん全体の合計値
+ * （1食分ではない）。remaining_weight_gは「食べた」記録のたびに減っていく残量。 */
+export interface MealPrepRow {
+  id: string;
+  owner: string;
+  name: string;
+  total_weight_g: number;
+  remaining_weight_g: number;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  created_at: string;
+}
+
 export interface PfcTargetRow {
   owner: string;
   calories: number;

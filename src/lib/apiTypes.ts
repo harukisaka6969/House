@@ -377,6 +377,19 @@ export interface MealLogOut {
   created_at: string;
 }
 
+/** calories/protein_g/fat_g/carb_gはtotal_weight_gぶん全体の合計値（1食分ではない）。 */
+export interface MealPrepOut {
+  id: string;
+  name: string;
+  total_weight_g: number;
+  remaining_weight_g: number;
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  created_at: string;
+}
+
 export interface PfcTargetOut {
   calories: number;
   protein_g: number;
