@@ -229,7 +229,7 @@ export default function MealLog() {
           <input
             className="mf-input"
             style={{ flex: 1 }}
-            placeholder="文章で入力（例: 牛丼並盛とみそ汁）"
+            placeholder="文章で入力（例: 牛丼並盛とみそ汁 ／ サイゼリヤで外食、満腹度8割）"
             value={textIn}
             onChange={(e) => setTextIn(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onText()}

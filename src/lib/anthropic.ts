@@ -540,7 +540,9 @@ export async function estimateMealNutrition(base64: string, mediaType: string): 
   return JSON.parse(text) as MealEstimate;
 }
 
-/** 食事の文章の説明 → {description, calories, protein_g, fat_g, carb_g}。写真が無いときのテキスト入力用。 */
+/** 食事の文章の説明 → {description, calories, protein_g, fat_g, carb_g}。写真が無いときのテキスト入力用。
+ * 外食は具体的に何を食べたか書くのが面倒・難しいことが多いため、店名＋満腹度（1〜10割）だけの
+ * 報告にも対応する（例:「サイゼリヤで外食、満腹度8割」）。 */
 export async function estimateMealNutritionFromText(description: string): Promise<MealEstimate> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -548,8 +550,11 @@ export async function estimateMealNutritionFromText(description: string): Promis
     messages: [
       {
         role: "user",
-        content: `次の食事の説明から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
-{"description":"料理名や内容の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}
+        content: `次の食事の説明から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。
+外食の店名だけが書かれていて具体的に何を食べたかの記載が無い場合（例:「サイゼリヤで外食した」）は、その店の一般的なメニュー構成・価格帯・提供カロリーの傾向から、その店で標準的な1食分の内容を推定してください。
+「満腹度○割」「満腹度○/10」のように満腹度（1〜10割）の記載がある場合、10割をその店での標準的な1食分の満腹とみなし、その割合に比例させてカロリー・PFCを増減させてください（例: 満腹度6割なら標準的な1食分のおよそ6割の量として計算する）。満腹度の記載が無ければ10割（標準的な1食分）として計算してください。
+次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"description":"料理名や内容の簡潔な説明（15文字程度。店名だけの場合は店名と満腹度を含める）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}
 食事の説明: ${description}`,
       },
     ],
