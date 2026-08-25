@@ -11,6 +11,7 @@ import {
   estimateMealNutrition,
   estimateMealNutritionFromText,
   ocrReceipt,
+  ocrAmazonOrder,
   parseExpenseText,
   extractIncomeFromText,
   estimateSavingsAction,
@@ -50,7 +51,7 @@ const ID_MESSAGE = (userId: string) =>
   `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・レシート・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text);
@@ -445,7 +446,42 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       return;
     }
 
-    await reply(event, "写真の内容を認識できませんでした。食事・レシート・トレーニングノートなどの写真を送ってください。");
+    if (kind === "amazon_order") {
+      const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+      const parsed = await ocrAmazonOrder(content.base64, content.mediaType, categories, accounts);
+      const items = parsed.items.filter((i): i is { name: string; price: number } => i.price !== null);
+      if (items.length === 0) {
+        await reply(event, "注文内容の金額を読み取れませんでした。アプリから登録してください。");
+        return;
+      }
+      const total = items.reduce((s, i) => s + i.price, 0);
+      const account = accounts.find((a) => a.id === parsed.account) ?? accounts.find((a) => a.id === "a3") ?? accounts[0];
+      if (!account) {
+        await reply(event, "口座の設定が見つかりません。アプリから登録してください。");
+        return;
+      }
+      const category = categories.includes(parsed.category) ? parsed.category : "趣味";
+      const { entries: resolved } = await addExpenseEntries(
+        profileId,
+        [
+          {
+            date: parsed.date ?? undefined,
+            account_id: account.id,
+            category,
+            amount: total,
+            memo: "Amazon",
+            items: parsed.items,
+          },
+        ],
+        categories
+      );
+      const jpyAmount = resolved[0]?.amount ?? total;
+      const itemNames = items.map((i) => `・${i.name}（${i.price.toLocaleString()}円）`).join("\n");
+      await reply(event, `🧾 支出を記録しました: Amazon ${jpyAmount.toLocaleString()}円（${category} / ${account.name}）\n${itemNames}`);
+      return;
+    }
+
+    await reply(event, "写真の内容を認識できませんでした。食事・レシート・Amazon等の注文詳細・トレーニングノートなどの写真を送ってください。");
   } catch (e) {
     if (e instanceof ExpenseValidationError) {
       await reply(event, `記録に失敗しました: ${e.message}`);

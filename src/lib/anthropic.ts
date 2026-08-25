@@ -305,9 +305,9 @@ export interface MealEstimate {
   carb_g: number;
 }
 
-export type LinePhotoKind = "meal" | "receipt" | "gym" | "other";
+export type LinePhotoKind = "meal" | "receipt" | "amazon_order" | "gym" | "other";
 
-/** LINEに送られてきた写真が「食事」「レシート」「筋トレ・運動の記録」かそれ以外かを判定する（自動振り分け用）。 */
+/** LINEに送られてきた写真が「食事」「レシート」「Amazon等の注文詳細画面」「筋トレ・運動の記録」かそれ以外かを判定する（自動振り分け用）。 */
 export async function classifyLinePhoto(base64: string, mediaType: string): Promise<LinePhotoKind> {
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -319,17 +319,75 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
           { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
           {
             type: "text",
-            text: "この画像は「食事・料理の写真」「レシート・領収書」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。meal / receipt / gym / other のいずれか1単語のみを返してください。",
+            text: "この画像は「食事・料理の写真」「レシート・領収書」「Amazon等の通販サイトの注文詳細・注文履歴のスクリーンショット」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。meal / receipt / amazon_order / gym / other のいずれか1単語のみを返してください。",
           },
         ],
       },
     ],
   });
   const text = stripFence(joinText(res.content)).toLowerCase();
+  if (text.includes("amazon_order") || text.includes("amazon")) return "amazon_order";
   if (text.includes("meal")) return "meal";
   if (text.includes("receipt")) return "receipt";
   if (text.includes("gym")) return "gym";
   return "other";
+}
+
+export interface AmazonOrderOcrResult {
+  /** 「Order placed」（注文日）が読み取れればYYYY-MM-DD、読み取れなければnull。 */
+  date: string | null;
+  category: string;
+  account?: string;
+  /** 画面に表示されている商品ごとの{name, price}。複数の配送グループに分かれるスクリーンショットの場合、
+   * その画像に写っている分だけでよい（1メッセージ＝1件の支出として登録するため）。 */
+  items: { name: string; price: number | null }[];
+}
+
+/** Amazon等の通販サイトの注文詳細画面のスクリーンショット → {date, category, account, items}。
+ * レシートと違い、画面全体の合計（Grand Total）が必ず表示されているとは限らないため、
+ * 支出金額はAIに計算させず、サーバー側でitemsの価格を合計して確定する。 */
+export async function ocrAmazonOrder(
+  base64: string,
+  mediaType: string,
+  categories: string[],
+  accounts: { id: string; name: string }[]
+): Promise<AmazonOrderOcrResult> {
+  const acctList = accounts.map((a) => `${a.id}=${a.name}`).join(", ");
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 800,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          {
+            type: "text",
+            text: `この通販サイトの注文詳細画面の画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
+${accountRuleText(acctList)}
+「Order placed」「注文日」のような注文日の記載が読み取れればYYYY-MM-DD形式で、読み取れなければnullにしてください。
+画面に表示されている商品ごとに{"name":"商品名","price":その商品の価格の数値（日本円、読み取れなければnull）}を、表示されている範囲ですべて配列で入れてください（送料・割引等の行そのものは含めない）。
+{"date":"YYYY-MM-DD（不明ならnull）","category":"${categories.join("|")} のいずれか","account":"口座id","items":[{"name":"商品名","price":数値またはnull}, "..."]}`,
+          },
+        ],
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  const parsed = JSON.parse(text) as Partial<AmazonOrderOcrResult>;
+  return {
+    date: typeof parsed.date === "string" && parsed.date.trim() ? parsed.date.trim() : null,
+    category: typeof parsed.category === "string" && parsed.category ? parsed.category : "その他",
+    account: typeof parsed.account === "string" ? parsed.account : undefined,
+    items: Array.isArray(parsed.items)
+      ? (parsed.items as unknown as Record<string, unknown>[])
+          .filter((i) => i && typeof i.name === "string" && (i.name as string).trim().length > 0)
+          .map((i) => {
+            const price = Number(i.price);
+            return { name: (i.name as string).trim(), price: Number.isFinite(price) && price > 0 ? price : null };
+          })
+      : [],
+  };
 }
 
 export type LineTextIntent = "meal" | "expense" | "income" | "smarthome" | "savings" | "gym" | "unknown";
