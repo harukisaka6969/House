@@ -641,14 +641,54 @@ function recordCategoryHint(existingCategories: string[]): string {
     : `カテゴリが未登録なので、内容から短く分かりやすいカテゴリ名を考えてください（例: 体組成、ランニング、ボルダリング、水泳 など）。`;
 }
 
-function parseExtractedRecord(text: string): ExtractedRecord {
-  const parsed = JSON.parse(stripFence(text)) as ExtractedRecord;
+function finalizeExtractedRecord(parsed: Partial<ExtractedRecord>): ExtractedRecord {
   return {
     category: (parsed.category || "その他").trim(),
     date: parsed.date ?? null,
     title: (parsed.title || "").trim(),
     metrics: Array.isArray(parsed.metrics) ? parsed.metrics.filter((m) => m && typeof m.label === "string" && typeof m.value === "string") : [],
   };
+}
+
+/** 体組成計の「部位別」画面のように項目数が非常に多い記録では、max_tokensの上限でmetrics配列の
+ * 途中でJSONが切れてしまうことがある。その場合でも、最後まで完全に生成されていた
+ * {"label":"...","value":"..."} だけを拾って部分的にでも復元する（0件で失敗させるより、
+ * 読み取れた分だけでも登録できた方がよいため）。 */
+function repairTruncatedRecordJson(raw: string): ExtractedRecord | null {
+  const metricsIdx = raw.indexOf('"metrics"');
+  if (metricsIdx === -1) return null;
+  const arrStart = raw.indexOf("[", metricsIdx);
+  if (arrStart === -1) return null;
+
+  const objRe = /\{\s*"label"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"value"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+  objRe.lastIndex = arrStart;
+  const metrics: { label: string; value: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = objRe.exec(raw))) {
+    metrics.push({ label: JSON.parse(`"${m[1]}"`), value: JSON.parse(`"${m[2]}"`) });
+  }
+  if (metrics.length === 0) return null;
+
+  const categoryMatch = raw.match(/"category"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const dateMatch = raw.match(/"date"\s*:\s*("(?:[^"\\]|\\.)*"|null)/);
+  const titleMatch = raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  return {
+    category: categoryMatch ? JSON.parse(`"${categoryMatch[1]}"`) : "その他",
+    date: dateMatch && dateMatch[1] !== "null" ? (JSON.parse(dateMatch[1]) as string) : null,
+    title: titleMatch ? JSON.parse(`"${titleMatch[1]}"`) : "",
+    metrics,
+  };
+}
+
+function parseExtractedRecord(text: string): ExtractedRecord {
+  const cleaned = stripFence(text);
+  try {
+    return finalizeExtractedRecord(JSON.parse(cleaned) as Partial<ExtractedRecord>);
+  } catch {
+    const repaired = repairTruncatedRecordJson(cleaned);
+    if (repaired) return repaired;
+    throw new Error("記録の解析結果を読み取れませんでした（出力が途中で切れた可能性があります）");
+  }
 }
 
 const RECORD_JSON_FORMAT =
@@ -660,7 +700,9 @@ const RECORD_JSON_FORMAT =
 export async function extractRecordFromPhoto(base64: string, mediaType: string, existingCategories: string[]): Promise<ExtractedRecord> {
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    // 体組成計の「部位別」画面など、項目数が非常に多い記録でmetrics配列が上限で
+    // 切れないよう、他の抽出系より大きめに取る。
+    max_tokens: 4000,
     messages: [
       {
         role: "user",
@@ -684,7 +726,7 @@ ${RECORD_JSON_FORMAT}
 export async function extractRecordFromText(text: string, existingCategories: string[], todayStr: string): Promise<ExtractedRecord> {
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    max_tokens: 4000,
     messages: [
       {
         role: "user",
