@@ -458,6 +458,11 @@ export interface RecordMetric {
   value: string;
 }
 
+/** 体組成の記録（体重を含む記録）を登録した際に、自動で見直された食事のPFC目標。 */
+export interface PfcUpdateOut extends PfcTargetOut {
+  message: string;
+}
+
 export interface PersonalRecordOut {
   id: string;
   category: string;

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut, apiDelete } from "@/lib/apiClient";
-import type { PersonalRecordOut, RecordCategorySummary, RecordMetric } from "@/lib/apiTypes";
+import type { PersonalRecordOut, RecordCategorySummary, RecordMetric, PfcUpdateOut } from "@/lib/apiTypes";
 import { SectionHead } from "../common";
 import RecordsTrend from "./RecordsTrend";
 import BodyCompositionDashboard from "./BodyCompositionDashboard";
@@ -76,8 +76,8 @@ export default function Records() {
         const body = await res.json().catch(() => null);
         throw new Error((body && body.error) || "failed");
       }
-      const { record } = (await res.json()) as { record: PersonalRecordOut };
-      setMsg(`✓「${record.category}」として記録しました。`);
+      const { record, pfcUpdate } = (await res.json()) as { record: PersonalRecordOut; pfcUpdate: PfcUpdateOut | null };
+      setMsg(`✓「${record.category}」として記録しました。` + (pfcUpdate ? `\n\n${pfcUpdate.message}` : ""));
       setActiveCategory(record.category);
       loadCategories();
       loadRecords(record.category);
@@ -178,7 +178,7 @@ export default function Records() {
             {textBusy ? "解析中…" : "✍️ 記録する"}
           </button>
         </div>
-        {msg && <div className="mf-hint">{msg}</div>}
+        {msg && <div className="mf-hint" style={{ whiteSpace: "pre-line" }}>{msg}</div>}
       </div>
 
       {categories.length === 0 ? (

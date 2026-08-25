@@ -4,6 +4,7 @@ import { rateLimit } from "@/lib/rateLimit";
 import { getRecordCategories, getRecordsForCategory, createRecord } from "@/lib/personalRecords";
 import { extractRecordFromPhoto, extractRecordFromText } from "@/lib/anthropic";
 import { todayStrJST, isValidDateStr } from "@/lib/date";
+import { recomputePfcTargetFromBodyRecords } from "@/lib/pfcRecommendation";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -60,7 +61,21 @@ export async function POST(req: Request) {
       metrics: extracted.metrics,
     });
 
-    return NextResponse.json({ record: { id: record.id, category: record.category, date: record.date, title: record.title, metrics: record.metrics, memo: record.memo, created_at: record.created_at } });
+    // 体重を含む記録（体組成の記録）なら、そのたびに減量しつつ筋肉量を落とさない方向で
+    // 食事のPFC目標を自動で見直す（筋トレの挙上量トレンド・実際の食事ログとも突き合わせる）。
+    let pfcUpdate = null;
+    if (record.metrics.some((m) => m.label === "体重")) {
+      try {
+        pfcUpdate = await recomputePfcTargetFromBodyRecords(session.profile_id);
+      } catch (e) {
+        console.error("pfc target recompute failed", e);
+      }
+    }
+
+    return NextResponse.json({
+      record: { id: record.id, category: record.category, date: record.date, title: record.title, metrics: record.metrics, memo: record.memo, created_at: record.created_at },
+      pfcUpdate,
+    });
   } catch (e) {
     return errorResponse(e);
   }
