@@ -454,30 +454,27 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         await reply(event, "注文内容の金額を読み取れませんでした。アプリから登録してください。");
         return;
       }
-      const total = items.reduce((s, i) => s + i.price, 0);
       const account = accounts.find((a) => a.id === parsed.account) ?? accounts.find((a) => a.id === "a3") ?? accounts[0];
       if (!account) {
         await reply(event, "口座の設定が見つかりません。アプリから登録してください。");
         return;
       }
       const category = categories.includes(parsed.category) ? parsed.category : "趣味";
+      // 注文の合計ではなく、品目ごとに別々の支出として登録する（1商品＝1支出）。
       const { entries: resolved } = await addExpenseEntries(
         profileId,
-        [
-          {
-            date: parsed.date ?? undefined,
-            account_id: account.id,
-            category,
-            amount: total,
-            memo: "Amazon",
-            items: parsed.items,
-          },
-        ],
+        items.map((i) => ({
+          date: parsed.date ?? undefined,
+          account_id: account.id,
+          category,
+          amount: i.price,
+          memo: i.name,
+        })),
         categories
       );
-      const jpyAmount = resolved[0]?.amount ?? total;
-      const itemNames = items.map((i) => `・${i.name}（${i.price.toLocaleString()}円）`).join("\n");
-      await reply(event, `🧾 支出を記録しました: Amazon ${jpyAmount.toLocaleString()}円（${category} / ${account.name}）\n${itemNames}`);
+      const total = resolved.reduce((s, e) => s + e.amount, 0);
+      const itemLines = resolved.map((e) => `・${e.memo}（${e.amount.toLocaleString()}円）`).join("\n");
+      await reply(event, `🧾 支出を記録しました（Amazon・${resolved.length}件、計${total.toLocaleString()}円）（${category} / ${account.name}）\n${itemLines}`);
       return;
     }
 
