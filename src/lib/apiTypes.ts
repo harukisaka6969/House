@@ -384,6 +384,22 @@ export interface PfcTargetOut {
   carb_g: number;
 }
 
+export interface BodyGoalOut {
+  body_fat_pct_target: number | null;
+  muscle_trend_kg_per_4w: number | null;
+  target_weight: number | null;
+  target_lbm: number | null;
+  target_date: string | null;
+}
+
+export interface WeeklyBodyReviewOut {
+  score: number;
+  components: { nutrition: number | null; training: number | null; bodyComp: number | null };
+  good: string[];
+  improve: string[];
+  facts: string[];
+}
+
 export interface InventoryItemOut {
   id: string;
   name: string;

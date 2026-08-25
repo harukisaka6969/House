@@ -367,6 +367,18 @@ export interface PfcTargetRow {
   updated_at: string;
 }
 
+/** 体組成の目標。1人1件。muscle_trend_kg_per_4wは「維持」「微増加」といった言葉ではなく、
+ * 4週あたりの目標変化量(kg)をスライダーで直接指定したもの（0=維持、正=増加、負=減少）。 */
+export interface BodyGoalRow {
+  owner: string;
+  body_fat_pct_target: number | null;
+  muscle_trend_kg_per_4w: number | null;
+  target_weight: number | null;
+  target_lbm: number | null;
+  target_date: string | null;
+  updated_at: string;
+}
+
 /* ---- 個人記録（写真から自動分類される任意の記録: 体組成・ランニング・ボルダリング等）---- */
 
 export interface RecordMetric {

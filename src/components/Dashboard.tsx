@@ -50,6 +50,7 @@ const SavingsActions = dyn(() => import("./sections/SavingsActions"));
 const SavingsHistory = dyn(() => import("./sections/SavingsHistory"));
 const ItemHistorySearch = dyn(() => import("./sections/ItemHistorySearch"));
 const People = dyn(() => import("./sections/People"));
+const BodyGoal = dyn(() => import("./sections/BodyGoal"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const PYTHON_LEARN_URL = "https://python-learn-lilac.vercel.app/";
@@ -85,6 +86,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["gymLog", "⑭ 筋トレログ"],
       ["mealLog", "⑮ 食事ログ"],
       ["records", "⑱ 記録"],
+      ["bodyGoal", "㉙ 体の目標"],
     ],
   },
   {
@@ -305,6 +307,7 @@ function DashboardInner() {
               {view === "savingsHistory" && <SavingsHistory />}
               {view === "itemHistory" && <ItemHistorySearch />}
               {view === "people" && <People />}
+              {view === "bodyGoal" && <BodyGoal />}
               {view === "settings" && <Settings />}
             </div>
           )}

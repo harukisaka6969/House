@@ -814,6 +814,38 @@ export async function generateDailyTip(prompt: string, useWebSearch: boolean, ma
   return joinText(res.content).trim() || "本日分の生成に失敗しました。";
 }
 
+export interface WeeklyBodyReviewNarrative {
+  good: string[];
+  improve: string[];
+}
+
+/** 週次の体づくりレビュー: サーバー側で計算済みの事実（達成度スコア・実績値）をもとに、
+ * 「良かった点」「改善点」を簡潔な日本語の箇条書きにする。数値の再計算・新しい事実の創作はさせない
+ * （渡した事実の言語化・コーチング的な解釈だけを担当させる）。 */
+export async function generateWeeklyBodyReview(facts: string): Promise<WeeklyBodyReviewNarrative> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 600,
+    messages: [
+      {
+        role: "user",
+        content: `あなたはボディメイクのコーチです。次のユーザーの直近1週間の実績データ（すべて事実。数値を新たに計算したり創作したりしないでください）をもとに、「良かった点」を2〜3個、「改善点」を2〜3個、それぞれ日本語で1文（20字前後）の簡潔な箇条書きにしてください。数値をそのまま読み上げるのではなく、何が良い/何を直すべきかが一目で伝わる書き方にしてください。データが少ない項目は、その旨を改善点に含めてもかまいません（例:「食事の記録をもっと増やす」）。
+JSON形式のみで返してください（前置き・コードブロック不要）: {"good":["...", "..."],"improve":["...", "..."]}
+実績データ:
+${facts}`,
+      },
+    ],
+  });
+  const text = stripFence(joinText(res.content));
+  try {
+    const parsed = JSON.parse(text) as { good?: unknown; improve?: unknown };
+    const asStrings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : []);
+    return { good: asStrings(parsed.good), improve: asStrings(parsed.improve) };
+  } catch {
+    return { good: [], improve: [] };
+  }
+}
+
 export interface YearHighlight {
   date: string;
   title: string;
