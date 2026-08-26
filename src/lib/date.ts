@@ -81,6 +81,15 @@ export function isValidMonthKey(key: string): boolean {
   return /^\d{4}-\d{2}$/.test(key);
 }
 
+/** ダッシュボードに表示する収支データの下限月。これより前のデータはDBには残すが、
+ * ダッシュボード上の月選択・トレンド・分析系の画面には出さない。 */
+export const DASHBOARD_MIN_MONTH = "2026-06";
+
+/** monthKeyがダッシュボード表示対象の期間内（DASHBOARD_MIN_MONTH以降）かどうか。 */
+export function isWithinDashboardRange(monthKey: string): boolean {
+  return monthKey >= DASHBOARD_MIN_MONTH;
+}
+
 export function isValidDateStr(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s + "T00:00:00Z").getTime());
 }

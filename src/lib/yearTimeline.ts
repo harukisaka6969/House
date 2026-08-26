@@ -5,7 +5,12 @@ import { getJournalEntriesInRange } from "./journal";
 import { isMaskedForViewer } from "./aggregate";
 import { extractYearHighlightsFromJournal, titleExpenseClusters } from "./anthropic";
 import { clusterExpenses, fallbackClusterTitle } from "./expenseCluster";
+import { DASHBOARD_MIN_MONTH } from "./date";
 import type { ExpenseRow } from "./types";
+
+/** DASHBOARD_MIN_MONTHの初日（YYYY-MM-01）。それより前のタイムライン項目は履歴として
+ * DBには残すが、ダッシュボードには表示しない。 */
+const DASHBOARD_MIN_DATE = `${DASHBOARD_MIN_MONTH}-01`;
 
 const NOTABLE_CATEGORY = "旅行";
 const NOTABLE_AMOUNT_THRESHOLD = 30000;
@@ -122,7 +127,7 @@ export async function getYearTimeline(year: number, viewerProfileId: string): Pr
       description: h.description,
       major: h.importance === "major",
     })),
-  ];
+  ].filter((item) => item.date >= DASHBOARD_MIN_DATE);
   items.sort((a, b) => a.date.localeCompare(b.date));
   return { items, highlightsGeneratedAt: highlightRow?.generated_at ?? null };
 }

@@ -67,7 +67,9 @@ export default function Flow() {
         <>
           <FlowDiagram income={income} accounts={perAccount} />
           <div className="mf-panel">
-            <div className="mf-paneltitle">配分の詳細{isPeriod && `（${monthKey.replace("-", "年")}月までの${periodMonths}ヶ月合計、予算は月次×${periodMonths}）`}</div>
+            <div className="mf-paneltitle">
+              配分の詳細{isPeriod && periodData && `（${monthKey.replace("-", "年")}月までの${periodData.months}ヶ月合計、予算は月次×${periodData.months}）`}
+            </div>
             <div className="mf-tabwrap">
               <div className="mf-tabhead">
                 <span>口座</span>

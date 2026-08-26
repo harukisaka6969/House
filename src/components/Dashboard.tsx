@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { apiGet, apiPost } from "@/lib/apiClient";
-import { shiftMonth, nowMonthKeyJST } from "@/lib/date";
+import { shiftMonth, nowMonthKeyJST, DASHBOARD_MIN_MONTH } from "@/lib/date";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AppBadgeSync from "./AppBadgeSync";
@@ -55,11 +55,13 @@ const Settings = dyn(() => import("./sections/Settings"));
 
 const PYTHON_LEARN_URL = "https://python-learn-lilac.vercel.app/";
 
-// 月選択プルダウンの選択肢: 直近24ヶ月分（新しい順）。
+// 月選択プルダウンの選択肢: 直近24ヶ月分（新しい順）。ただしDASHBOARD_MIN_MONTHより前は
+// 履歴として残すのみでダッシュボードには出さないため、そこで打ち切る。
 const MONTH_OPTIONS: string[] = (() => {
   const opts: string[] = [];
   let cursor = nowMonthKeyJST();
   for (let i = 0; i < 24; i++) {
+    if (cursor < DASHBOARD_MIN_MONTH) break;
     opts.push(cursor);
     cursor = shiftMonth(cursor, -1);
   }
@@ -264,7 +266,12 @@ function DashboardInner() {
               {me?.partner ? ` ／ ${me.partner.name}` : ""}
             </span>
             <div className="mf-monthnav">
-              <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, -1))} aria-label="前の月">
+              <button
+                className="mf-iconbtn"
+                onClick={() => setMonthKey(shiftMonth(monthKey, -1))}
+                disabled={monthKey <= DASHBOARD_MIN_MONTH}
+                aria-label="前の月"
+              >
                 ‹
               </button>
               <select

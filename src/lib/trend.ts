@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate } from "./date";
+import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate, DASHBOARD_MIN_MONTH } from "./date";
 import { sumAmount } from "./aggregate";
 
 export interface TrendPoint {
@@ -10,15 +10,18 @@ export interface TrendPoint {
   invest: number;
 }
 
-/** 直近12ヶ月の月別 収入/支出/投資（既定は世帯合計・spec §6 GET /api/trend）。
- * ownerFilterを指定すると、その人の分（＋owner無しの共有収入）だけに絞る。 */
+/** 直近12ヶ月（ただしDASHBOARD_MIN_MONTHより前には遡らない）の月別 収入/支出/投資
+ * （既定は世帯合計・spec §6 GET /api/trend）。ownerFilterを指定すると、その人の分
+ * （＋owner無しの共有収入）だけに絞る。 */
 export async function getTrend(ownerFilter?: string): Promise<TrendPoint[]> {
   const months: string[] = [];
   let cursor = nowMonthKeyJST();
   for (let i = 0; i < 12; i++) {
+    if (cursor < DASHBOARD_MIN_MONTH) break;
     months.unshift(cursor);
     cursor = shiftMonth(cursor, -1);
   }
+  if (months.length === 0) return [];
   const fromDate = periodRange(months[0]).from;
 
   const incomeQuery = db().from("incomes").select("month, amount, owner").in("month", months);

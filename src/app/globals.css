@@ -129,6 +129,8 @@ body {
 .mf-monthselect:hover { border-color: #F5A524; }
 .mf-iconbtn { background: #181E25; color: #E7ECF2; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; width: 34px; height: 34px; font-size: 18px; cursor: pointer; }
 .mf-iconbtn:hover { border-color: #F5A524; }
+.mf-iconbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.mf-iconbtn:disabled:hover { border-color: rgba(255,255,255,0.12); }
 .mf-nav { position: sticky; top: 0; z-index: 20; background: rgba(16,20,24,0.92); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px; -webkit-overflow-scrolling: touch; }
 .mf-navpill { flex: 0 0 auto; background: transparent; color: #93A0AE; border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .mf-navpill:hover { color: #F5A524; border-color: #F5A524; }

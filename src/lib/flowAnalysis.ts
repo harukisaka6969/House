@@ -4,7 +4,7 @@ import { getExpensesInRange } from "./expenses";
 import { getIncomesInMonthRange } from "./incomes";
 import { getInvestmentsInRange } from "./investments";
 import { buildPerCategory, isMaskedForViewer, sumAmount } from "./aggregate";
-import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate } from "./date";
+import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate, DASHBOARD_MIN_MONTH } from "./date";
 import { getAllProfiles, makeNameLookup } from "./profiles";
 import type { ExpenseRow, IncomeRow } from "./types";
 
@@ -53,11 +53,13 @@ async function earliestMonth(): Promise<string> {
   return candidates.sort()[0];
 }
 
-/** 家計の月次フロー分析（spec外・資産フロー分析ダッシュボード用）。開始月は記録済みデータの最古月〜今月。
- * ownerFilterを指定すると、集計をその人の分（＋owner無しの共有収入）だけに絞る。 */
+/** 家計の月次フロー分析（spec外・資産フロー分析ダッシュボード用）。開始月は記録済みデータの最古月〜今月
+ * だが、それより前のデータは履歴として残しつつダッシュボードには出さないため、DASHBOARD_MIN_MONTHより
+ * 前へは遡らない。ownerFilterを指定すると、集計をその人の分（＋owner無しの共有収入）だけに絞る。 */
 export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: string): Promise<FlowAnalysis> {
   const nowMonth = nowMonthKeyJST();
-  const startMonth = await earliestMonth();
+  const dataStartMonth = await earliestMonth();
+  const startMonth = dataStartMonth < DASHBOARD_MIN_MONTH ? DASHBOARD_MIN_MONTH : dataStartMonth;
 
   const months: string[] = [];
   for (let cursor = startMonth; cursor <= nowMonth; cursor = shiftMonth(cursor, 1)) {
