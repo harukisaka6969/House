@@ -72,6 +72,12 @@ export interface MonthResponse {
   };
 }
 
+export interface FlowPeriodResponse {
+  months: number;
+  income: number;
+  perAccount: AccountAggregateOut[];
+}
+
 export interface TrendPoint {
   month: string;
   income: number;
