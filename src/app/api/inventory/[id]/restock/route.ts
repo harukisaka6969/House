@@ -3,8 +3,7 @@ import { z } from "zod";
 import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { restockInventoryItem } from "@/lib/inventory";
 import { getAllCategories } from "@/lib/categories";
-
-const VALID_ACCOUNTS = ["a1", "a2", "a3", "a4"];
+import { VALID_ACCOUNT_IDS as VALID_ACCOUNTS } from "@/lib/constants";
 
 const bodySchema = z.object({
   amount: z.number().int().positive(),
@@ -21,7 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const body = bodySchema.parse(await req.json());
 
     if (body.createExpense) {
-      if (!body.account || !VALID_ACCOUNTS.includes(body.account)) throw new ApiError(400, "invalid account");
+      if (!body.account || !(VALID_ACCOUNTS as readonly string[]).includes(body.account)) throw new ApiError(400, "invalid account");
       const allCats = await getAllCategories();
       if (!body.category || !allCats.includes(body.category)) throw new ApiError(400, "invalid category");
       if (!body.price) throw new ApiError(400, "price is required when createExpense is true");

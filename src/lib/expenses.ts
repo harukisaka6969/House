@@ -3,9 +3,10 @@ import { db } from "./db";
 import { businessDateJST, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
 import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
+import { VALID_ACCOUNT_IDS } from "./constants";
 import type { AccountId, ExpenseRow } from "./types";
 
-const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
+const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
 
 export interface NewExpenseInput {
   date?: string | null;

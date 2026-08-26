@@ -1,8 +1,9 @@
 import "server-only";
 import { db } from "./db";
+import { VALID_ACCOUNT_IDS } from "./constants";
 import type { AccountId, RecurringExpenseRow } from "./types";
 
-const VALID_ACCOUNTS: AccountId[] = ["a1", "a2", "a3", "a4"];
+const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
 
 export async function getRecurringExpenses(ownerId: string): Promise<RecurringExpenseRow[]> {
   const { data, error } = await db()

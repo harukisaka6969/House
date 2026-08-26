@@ -7,12 +7,12 @@ const putSchema = z.object({
   accounts: z
     .array(
       z.object({
-        id: z.enum(["a1", "a2", "a3", "a4"]),
+        id: z.enum(["a1", "a2", "a3", "a4", "a5"]),
         name: z.string().optional(),
         budget: z.number().optional(),
       })
     )
-    .max(4),
+    .max(5),
 });
 
 export async function GET() {

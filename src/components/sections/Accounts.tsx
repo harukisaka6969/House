@@ -14,7 +14,7 @@ export default function Accounts() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="03" title="口座別の状況" sub="4つの口座それぞれの予算消化と判定。" />
+      <SectionHead no="03" title="口座別の状況" sub="各口座の予算消化と判定。" />
       <MoneyViewToggle />
       <div className="mf-acctgrid">
         {month.aggregates.perAccount.map((a) => {

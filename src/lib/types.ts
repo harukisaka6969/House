@@ -1,4 +1,4 @@
-export type AccountId = "a1" | "a2" | "a3" | "a4";
+export type AccountId = "a1" | "a2" | "a3" | "a4" | "a5";
 
 export interface Account {
   id: AccountId;
