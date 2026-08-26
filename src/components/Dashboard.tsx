@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { apiGet, apiPost } from "@/lib/apiClient";
-import { shiftMonth } from "@/lib/date";
+import { shiftMonth, nowMonthKeyJST } from "@/lib/date";
 import type { MeResponse } from "@/lib/apiTypes";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
 import AppBadgeSync from "./AppBadgeSync";
@@ -54,6 +54,17 @@ const BodyGoal = dyn(() => import("./sections/BodyGoal"));
 const Settings = dyn(() => import("./sections/Settings"));
 
 const PYTHON_LEARN_URL = "https://python-learn-lilac.vercel.app/";
+
+// 月選択プルダウンの選択肢: 直近24ヶ月分（新しい順）。
+const MONTH_OPTIONS: string[] = (() => {
+  const opts: string[] = [];
+  let cursor = nowMonthKeyJST();
+  for (let i = 0; i < 24; i++) {
+    opts.push(cursor);
+    cursor = shiftMonth(cursor, -1);
+  }
+  return opts;
+})();
 
 const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
   {
@@ -256,7 +267,21 @@ function DashboardInner() {
               <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, -1))} aria-label="前の月">
                 ‹
               </button>
-              <span className="mf-monthlabel">{monthKey.replace("-", "年")}月</span>
+              <select
+                className="mf-monthselect"
+                value={monthKey}
+                onChange={(e) => setMonthKey(e.target.value)}
+                aria-label="表示する月を選択"
+              >
+                {!MONTH_OPTIONS.includes(monthKey) && (
+                  <option value={monthKey}>{monthKey.replace("-", "年")}月</option>
+                )}
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m.replace("-", "年")}月
+                  </option>
+                ))}
+              </select>
               <button className="mf-iconbtn" onClick={() => setMonthKey(shiftMonth(monthKey, 1))} aria-label="次の月">
                 ›
               </button>

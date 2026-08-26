@@ -5,13 +5,50 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { fmt, monthJudge } from "@/lib/judge";
 import { TONE_COLOR } from "@/lib/constants";
 import { apiGet } from "@/lib/apiClient";
-import type { UpcomingSummary } from "@/lib/apiTypes";
+import type { UpcomingSummary, TrendPoint } from "@/lib/apiTypes";
 import { SectionHead, StatCard, TT, fmtTooltip, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
 
 function dsub(cur: number, pv: number | null | undefined): string | null {
   if (pv == null) return null;
   return (cur - pv >= 0 ? "+" : "") + fmt(cur - pv) + " 前月比";
+}
+
+function rollingTotal(trend: TrendPoint[], months: number) {
+  const slice = trend.slice(-months);
+  return {
+    income: slice.reduce((s, t) => s + t.income, 0),
+    expense: slice.reduce((s, t) => s + t.expense, 0),
+    invest: slice.reduce((s, t) => s + t.invest, 0),
+    count: slice.length,
+  };
+}
+
+function RollingTotals({ trend }: { trend: TrendPoint[] }) {
+  if (trend.length < 2) return null;
+  const periods = [3, 6, 12];
+  return (
+    <div className="mf-panel">
+      <div className="mf-paneltitle">期間トータル</div>
+      <div className="mf-acctgrid">
+        {periods.map((n) => {
+          const t = rollingTotal(trend, n);
+          const bal = t.income - t.expense;
+          return (
+            <div key={n} className="mf-acctcard">
+              <div className="mf-acctname">過去{t.count}ヶ月</div>
+              <div className="mf-numsub">収入 {fmt(t.income)}</div>
+              <div className="mf-numsub">支出 {fmt(t.expense)}</div>
+              <div className="mf-numsub">投資 {fmt(t.invest)}</div>
+              <div className="mf-num mf-mono" style={{ color: bal >= 0 ? "#45C48F" : "#F26D5F", marginTop: 4 }}>
+                {(bal > 0 ? "+" : "") + fmt(bal)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function Upcoming30d() {
@@ -33,7 +70,7 @@ function Upcoming30d() {
 }
 
 export default function Summary() {
-  const { month, prevMonth, trend } = useDashboard();
+  const { month, prevMonth, trend, monthKey } = useDashboard();
   if (!month) return null;
 
   const { income, expense, invest } = month.aggregates.monthTotals;
@@ -46,7 +83,7 @@ export default function Summary() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="01" title="今月のサマリー" sub="いちばん大きい視点。この月がどうだったか。" />
+      <SectionHead no="01" title={`${monthKey.replace("-", "年")}月のサマリー`} sub="いちばん大きい視点。この月がどうだったか。上のプルダウンから過去の月も選べます。" />
       <MoneyViewToggle />
       <div className="mf-cards4">
         <StatCard label="収入" value={fmt(income)} color="#E7ECF2" sub={dsub(income, prev?.income)} />
@@ -61,6 +98,7 @@ export default function Summary() {
         <div className="mf-judgenote">{judge.note}</div>
       </div>
       <Upcoming30d />
+      <RollingTotals trend={trend} />
       {topCats.length > 0 && (
         <div className="mf-panel">
           <div className="mf-paneltitle">支出トップカテゴリ</div>
