@@ -3,6 +3,12 @@ import { db } from "./db";
 import { addItemHistoryEntries } from "./itemHistory";
 import type { MealLogRow, PfcTargetRow } from "./types";
 
+export async function getMealLogById(id: string, ownerId: string): Promise<MealLogRow | null> {
+  const { data, error } = await db().from("meal_logs").select("*").eq("id", id).eq("owner", ownerId).maybeSingle();
+  if (error) throw error;
+  return (data as MealLogRow | null) ?? null;
+}
+
 export async function getMealLogsInRange(ownerId: string, fromDate: string, toDateExclusive: string): Promise<MealLogRow[]> {
   const { data, error } = await db()
     .from("meal_logs")

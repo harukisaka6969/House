@@ -6,6 +6,7 @@ import type { MealLogOut, PfcTargetOut, MealPrepOut } from "@/lib/apiTypes";
 import { businessDateJST, periodKeyOfDate } from "@/lib/date";
 import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { SectionHead } from "../common";
+import { useDashboard } from "../DashboardContext";
 
 function shiftDate(dateStr: string, delta: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -34,6 +35,7 @@ function Bar({ label, actual, target, color }: { label: string; actual: number; 
 }
 
 export default function MealLog() {
+  const { me } = useDashboard();
   const [date, setDate] = useState(businessDateJST());
   const [logs, setLogs] = useState<MealLogOut[] | null>(null);
   const [target, setTarget] = useState<PfcTargetOut | null>(null);
@@ -42,6 +44,7 @@ export default function MealLog() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetForm, setTargetForm] = useState(DEFAULT_TARGET);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
   const [logEditForm, setLogEditForm] = useState({ description: "", calories: "", protein_g: "", fat_g: "", carb_g: "" });
   const [regenBusy, setRegenBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
@@ -157,6 +160,17 @@ export default function MealLog() {
   const remove = async (id: string) => {
     await apiDelete(`/api/meal-logs/${id}`);
     loadLogs();
+  };
+
+  const copyToPartner = async (l: MealLogOut) => {
+    setCopyBusyId(l.id);
+    try {
+      const r = await apiPost<{ partnerName: string }>(`/api/meal-logs/${l.id}/copy-to-partner`);
+      setMsg(`✓ ${r.partnerName}にも登録しました。`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "登録に失敗しました。");
+    }
+    setCopyBusyId(null);
   };
 
   const startEditLog = (l: MealLogOut) => {
@@ -620,6 +634,16 @@ export default function MealLog() {
                 <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => startEditLog(l)}>
                   編集
                 </button>
+                {me?.partner && (
+                  <button
+                    className="mf-btn ghost"
+                    style={{ padding: "4px 8px", flex: "0 0 auto" }}
+                    disabled={copyBusyId === l.id}
+                    onClick={() => copyToPartner(l)}
+                  >
+                    {copyBusyId === l.id ? "登録中…" : `${me.partner.name}も同じものを食べた`}
+                  </button>
+                )}
                 <button className="mf-del" onClick={() => remove(l.id)}>
                   ×
                 </button>
