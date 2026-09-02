@@ -439,6 +439,20 @@ export interface InventoryItemRow {
   updated_at: string;
 }
 
+export type InventoryEventKind = "restock" | "consume";
+
+/** 在庫の増減履歴（何をいつ何個買った/使ったか）。消費ペースの計算にも使う。 */
+export interface InventoryEventRow {
+  id: string;
+  item_id: string;
+  kind: InventoryEventKind;
+  amount: number;
+  date: string;
+  price: number | null;
+  expense_id: string | null;
+  created_at: string;
+}
+
 /* ---- 人物台帳・日記からの出会い記録（「○○と前回会ったのはいつ？」に答えるための裏データ） ---- */
 
 /** 世帯で共有する人物の名寄せ台帳。表記ゆれ自体はperson_aliasesに持つ（canonical_name自身も

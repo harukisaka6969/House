@@ -2,27 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
-import type { InventoryItemOut } from "@/lib/apiTypes";
+import type { InventoryItemDetailOut } from "@/lib/apiTypes";
 import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
+import { todayStrJST } from "@/lib/date";
 import { SectionHead } from "../common";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
 
 const emptyForm = { name: "", category: "", unit: "個", quantity: "1", low_stock_threshold: "1", memo: "" };
 
+function paceText(item: InventoryItemDetailOut): string {
+  if (item.weeklyPace == null) return "消費データがまだありません（「使った」を記録すると出ます）";
+  const pace = item.weeklyPace >= 10 ? Math.round(item.weeklyPace) : Math.round(item.weeklyPace * 10) / 10;
+  const paceStr = `週あたり約${pace}${item.unit}のペース`;
+  if (item.daysUntilEmpty == null) return paceStr;
+  if (item.daysUntilEmpty <= 0) return `${paceStr}・在庫切れの見込み`;
+  return `${paceStr}・あと約${item.daysUntilEmpty}日でなくなる見込み`;
+}
+
 export default function Inventory() {
   const { settings, refreshLowStock } = useDashboard();
-  const [items, setItems] = useState<InventoryItemOut[] | null>(null);
+  const [items, setItems] = useState<InventoryItemDetailOut[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [restockingId, setRestockingId] = useState<string | null>(null);
-  const [restockForm, setRestockForm] = useState({ amount: "1", createExpense: false, account: "", category: "", price: "" });
+  const [restockForm, setRestockForm] = useState({ amount: "1", date: todayStrJST(), createExpense: false, account: "", category: "", price: "" });
   const [restockErr, setRestockErr] = useState("");
+  const [consumingId, setConsumingId] = useState<string | null>(null);
+  const [consumeForm, setConsumeForm] = useState({ amount: "1", date: todayStrJST() });
+  const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
 
   const load = () => {
-    apiGet<{ items: InventoryItemOut[] }>("/api/inventory").then((r) => setItems(r.items)).catch(() => setItems([]));
+    apiGet<{ items: InventoryItemDetailOut[] }>("/api/inventory").then((r) => setItems(r.items)).catch(() => setItems([]));
   };
   useEffect(load, []);
 
@@ -44,7 +57,7 @@ export default function Inventory() {
     setShowForm(false);
   };
 
-  const startEdit = (i: InventoryItemOut) => {
+  const startEdit = (i: InventoryItemDetailOut) => {
     setForm({
       name: i.name,
       category: i.category,
@@ -78,15 +91,24 @@ export default function Inventory() {
     afterChange();
   };
 
-  const consume = async (id: string, amount: number) => {
-    await apiPost(`/api/inventory/${id}/consume`, { amount });
+  const quickConsume = async (id: string, amount: number) => {
+    await apiPost(`/api/inventory/${id}/consume`, { amount, date: todayStrJST() });
+    afterChange();
+  };
+
+  const submitConsume = async (id: string) => {
+    const amount = Number(consumeForm.amount);
+    if (!amount || amount <= 0) return;
+    await apiPost(`/api/inventory/${id}/consume`, { amount, date: consumeForm.date || todayStrJST() });
+    setConsumingId(null);
+    setConsumeForm({ amount: "1", date: todayStrJST() });
     afterChange();
   };
 
   const submitRestock = async (id: string) => {
     setRestockErr("");
     if (!restockForm.amount) {
-      setRestockErr("補充数を入力してください。");
+      setRestockErr("購入数を入力してください。");
       return;
     }
     if (restockForm.createExpense && (!restockForm.account || !restockForm.category || !restockForm.price)) {
@@ -96,25 +118,30 @@ export default function Inventory() {
     try {
       await apiPost(`/api/inventory/${id}/restock`, {
         amount: Number(restockForm.amount),
+        date: restockForm.date || todayStrJST(),
         createExpense: restockForm.createExpense,
         account: restockForm.createExpense ? restockForm.account : undefined,
         category: restockForm.createExpense ? restockForm.category : undefined,
         price: restockForm.createExpense ? Number(restockForm.price) : undefined,
       });
       setRestockingId(null);
-      setRestockForm({ amount: "1", createExpense: false, account: "", category: "", price: "" });
+      setRestockForm({ amount: "1", date: todayStrJST(), createExpense: false, account: "", category: "", price: "" });
       afterChange();
     } catch (e) {
-      setRestockErr(e instanceof Error ? e.message : "補充の記録に失敗しました。");
+      setRestockErr(e instanceof Error ? e.message : "購入の記録に失敗しました。");
     }
   };
 
   return (
     <section className="mf-section">
-      <SectionHead no="11" title="在庫管理" sub="お米・ペット用品・サプリなど、減っていく消耗品の在庫と補充。" />
+      <SectionHead
+        no="11"
+        title="在庫管理"
+        sub="お米・ペット用品・サプリなど、減っていく消耗品の在庫と補充。「購入した」「使った」を記録すると、消費ペースと在庫切れの見込みが自動でわかります。"
+      />
 
       {items.length === 0 ? (
-        <div className="mf-empty">まだ何も登録されていません。</div>
+        <div className="mf-empty">まだ何も登録されていません。下の「＋ アイテムを追加」から登録してください。</div>
       ) : (
         grouped.map(({ cat, rows }) => (
           <div key={cat} className="mf-panel">
@@ -123,20 +150,42 @@ export default function Inventory() {
               {rows.map((i) => {
                 const low = i.quantity <= i.low_stock_threshold;
                 return (
-                  <div key={i.id}>
-                    <div className="mf-listrow">
+                  <div key={i.id} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div className="mf-listrow" style={{ marginBottom: 2 }}>
                       <span className="mf-listname" title={i.name}>
                         {i.name}
                       </span>
                       {low && <span className="mf-badge bad">在庫少</span>}
-                      <span className="mf-mono mf-listamt" style={{ color: low ? "#F26D5F" : undefined }}>
+                      <span className="mf-mono mf-listamt" style={{ color: low ? "#F26D5F" : undefined, fontSize: 16 }}>
                         残り{i.quantity}{i.unit}
                       </span>
-                      <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => consume(i.id, 1)} disabled={i.quantity <= 0}>
-                        −1
+                    </div>
+                    <div className="mf-hint" style={{ margin: "0 0 8px", opacity: 0.75 }}>
+                      {paceText(i)}
+                    </div>
+                    <div className="mf-row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => quickConsume(i.id, 1)} disabled={i.quantity <= 0}>
+                        −1 使った
                       </button>
-                      <button className="mf-btn primary" style={{ padding: "4px 10px", flex: "0 0 auto" }} onClick={() => { setRestockingId(i.id); setRestockForm({ ...restockForm, amount: "1" }); }}>
-                        補充
+                      <button
+                        className="mf-btn ghost"
+                        style={{ padding: "4px 8px", flex: "0 0 auto" }}
+                        onClick={() => {
+                          setConsumingId(consumingId === i.id ? null : i.id);
+                          setConsumeForm({ amount: "1", date: todayStrJST() });
+                        }}
+                      >
+                        使った数を記録
+                      </button>
+                      <button
+                        className="mf-btn primary"
+                        style={{ padding: "4px 10px", flex: "0 0 auto" }}
+                        onClick={() => {
+                          setRestockingId(restockingId === i.id ? null : i.id);
+                          setRestockForm({ ...restockForm, amount: "1", date: todayStrJST() });
+                        }}
+                      >
+                        購入した
                       </button>
                       <button className="mf-btn ghost" style={{ padding: "4px 8px", flex: "0 0 auto" }} onClick={() => startEdit(i)}>
                         編集
@@ -145,14 +194,47 @@ export default function Inventory() {
                         ×
                       </button>
                     </div>
-                    {restockingId === i.id && (
-                      <div className="mf-formgrid" style={{ margin: "6px 0 14px" }}>
+
+                    {consumingId === i.id && (
+                      <div className="mf-formgrid" style={{ margin: "10px 0" }}>
                         <input
                           className="mf-input mf-mono"
                           type="number"
-                          placeholder={`補充数（${i.unit}）`}
+                          placeholder={`使った数（${i.unit}）`}
+                          value={consumeForm.amount}
+                          onChange={(e) => setConsumeForm({ ...consumeForm, amount: e.target.value })}
+                        />
+                        <input
+                          className="mf-input mf-mono"
+                          type="date"
+                          value={consumeForm.date}
+                          onChange={(e) => setConsumeForm({ ...consumeForm, date: e.target.value })}
+                        />
+                        <div className="mf-row">
+                          <button className="mf-btn primary" onClick={() => submitConsume(i.id)}>
+                            記録する
+                          </button>
+                          <button className="mf-btn ghost" onClick={() => setConsumingId(null)}>
+                            キャンセル
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {restockingId === i.id && (
+                      <div className="mf-formgrid" style={{ margin: "10px 0" }}>
+                        <input
+                          className="mf-input mf-mono"
+                          type="number"
+                          placeholder={`購入数（${i.unit}）`}
                           value={restockForm.amount}
                           onChange={(e) => setRestockForm({ ...restockForm, amount: e.target.value })}
+                        />
+                        <input
+                          className="mf-input mf-mono"
+                          type="date"
+                          value={restockForm.date}
+                          onChange={(e) => setRestockForm({ ...restockForm, date: e.target.value })}
                         />
                         <label className="mf-row" style={{ gap: 6 }}>
                           <input type="checkbox" checked={restockForm.createExpense} onChange={(e) => setRestockForm({ ...restockForm, createExpense: e.target.checked })} />
@@ -192,7 +274,7 @@ export default function Inventory() {
                         )}
                         <div className="mf-row">
                           <button className="mf-btn primary" onClick={() => submitRestock(i.id)}>
-                            補充を記録
+                            購入を記録
                           </button>
                           <button className="mf-btn ghost" onClick={() => { setRestockingId(null); setRestockErr(""); }}>
                             キャンセル
@@ -201,6 +283,29 @@ export default function Inventory() {
                         {restockErr && (
                           <div className="mf-hint" style={{ color: "#F26D5F" }}>
                             {restockErr}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {i.recentEvents.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        <button
+                          className="mf-btn ghost"
+                          style={{ padding: "2px 8px", fontSize: 12 }}
+                          onClick={() => setHistoryOpenId(historyOpenId === i.id ? null : i.id)}
+                        >
+                          {historyOpenId === i.id ? "▾ 履歴を閉じる" : `▸ 履歴を見る（${i.recentEvents.length}件）`}
+                        </button>
+                        {historyOpenId === i.id && (
+                          <div className="mf-hint" style={{ marginTop: 6, opacity: 0.8, lineHeight: 1.8 }}>
+                            {i.recentEvents.map((e) => (
+                              <div key={e.id}>
+                                {e.date.slice(5).replace("-", "/")}　{e.kind === "restock" ? "＋" : "－"}
+                                {e.amount}{i.unit}　{e.kind === "restock" ? "購入" : "使用"}
+                                {e.price != null && `（${fmt(e.price)}）`}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -231,7 +336,7 @@ export default function Inventory() {
               <input
                 className="mf-input mf-mono"
                 type="number"
-                placeholder="現在の在庫数"
+                placeholder={editingId ? "現在の在庫数" : "今の在庫数（初期値）"}
                 value={form.quantity}
                 onChange={(e) => setForm({ ...form, quantity: e.target.value })}
               />

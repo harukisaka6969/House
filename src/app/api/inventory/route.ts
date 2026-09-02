@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
-import { getInventoryItems, createInventoryItem } from "@/lib/inventory";
+import { getInventoryItemsWithStats, createInventoryItem } from "@/lib/inventory";
 
 export async function GET() {
   try {
     await requireOwnerSession();
-    const items = await getInventoryItems();
+    const items = await getInventoryItemsWithStats();
     return NextResponse.json({ items });
   } catch (e) {
     return errorResponse(e);

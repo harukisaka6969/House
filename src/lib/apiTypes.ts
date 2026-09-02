@@ -431,6 +431,25 @@ export interface InventoryItemOut {
   updated_at: string;
 }
 
+export interface InventoryEventOut {
+  id: string;
+  kind: "restock" | "consume";
+  amount: number;
+  date: string;
+  price: number | null;
+}
+
+/** 在庫一覧画面（/api/inventory）用: 基本情報に加えて、購入・消費履歴からの消費ペースと
+ * 在庫切れまでの見込み日数、直近の履歴を付加したもの。 */
+export interface InventoryItemDetailOut extends InventoryItemOut {
+  /** 直近の履歴から算出した週あたりの消費ペース（個/週）。履歴が無ければnull。 */
+  weeklyPace: number | null;
+  /** 現在のペースで消費し続けた場合に在庫が尽きるまでの見込み日数。ペース算出不可ならnull。 */
+  daysUntilEmpty: number | null;
+  /** 直近の購入・消費履歴（新しい順、最大10件）。 */
+  recentEvents: InventoryEventOut[];
+}
+
 /* ---- family (read-only, whitelisted) ---- */
 
 export interface FamilyWishlistOut {
