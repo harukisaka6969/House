@@ -8,7 +8,7 @@ const bodySchema = z.object({
   name: z.string().min(1).max(80).optional(),
   category: z.string().max(40).optional().nullable(),
   price: z.number().nonnegative().optional(),
-  priority: z.number().int().min(1).max(5).optional(),
+  priority: z.number().int().min(0).max(5).optional(),
   target_date: z.string().optional().nullable(),
   monthly_plan: z.number().nonnegative().optional(),
   url: z.string().max(500).optional().nullable(),

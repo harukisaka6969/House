@@ -103,6 +103,8 @@ export interface WishlistItemRow {
   saved: number;
   monthly_plan: number;
   url: string | null;
+  /** urlのページから自動取得したOGP画像（無ければnull）。urlが変わるたびに再取得される。 */
+  image_url: string | null;
   memo: string;
   status: WishlistStatus;
   purchased_date: string | null;

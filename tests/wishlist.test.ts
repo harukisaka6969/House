@@ -18,6 +18,7 @@ function item(overrides: Partial<WishlistItemRow>): WishlistItemRow {
     saved: 50000,
     monthly_plan: 10000,
     url: null,
+    image_url: null,
     memo: "",
     status: "saving",
     purchased_date: null,

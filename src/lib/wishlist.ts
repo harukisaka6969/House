@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { todayStrJST } from "./date";
+import { fetchOgImage } from "./ogImage";
 import type { WishlistItemRow } from "./types";
 
 export { visibleWishlistItems, toFamilyWishlist } from "./v2Privacy";
@@ -25,6 +26,8 @@ export interface NewWishlistInput {
 }
 
 export async function createWishlistItem(ownerId: string, input: NewWishlistInput): Promise<WishlistItemRow> {
+  const url = input.url?.trim() || null;
+  const imageUrl = url ? await fetchOgImage(url) : null;
   const { data, error } = await db()
     .from("wishlist_items")
     .insert({
@@ -36,7 +39,8 @@ export async function createWishlistItem(ownerId: string, input: NewWishlistInpu
       priority: input.priority ?? 3,
       target_date: input.target_date?.trim() || null,
       monthly_plan: Math.round(Number(input.monthly_plan)) || 0,
-      url: input.url?.trim() || null,
+      url,
+      image_url: imageUrl,
       memo: input.memo?.trim() ?? "",
       visible_to_family: input.visible_to_family ?? true,
     })
@@ -61,7 +65,11 @@ export async function updateWishlistItem(id: string, ownerId: string, input: Upd
   if (input.priority !== undefined) patch.priority = input.priority;
   if (input.target_date !== undefined) patch.target_date = input.target_date?.trim() || null;
   if (input.monthly_plan !== undefined) patch.monthly_plan = Math.round(Number(input.monthly_plan)) || 0;
-  if (input.url !== undefined) patch.url = input.url?.trim() || null;
+  if (input.url !== undefined) {
+    const url = input.url?.trim() || null;
+    patch.url = url;
+    patch.image_url = url ? await fetchOgImage(url) : null;
+  }
   if (input.memo !== undefined) patch.memo = input.memo?.trim() ?? "";
   if (input.visible_to_family !== undefined) patch.visible_to_family = input.visible_to_family;
   if (input.status !== undefined) patch.status = input.status;

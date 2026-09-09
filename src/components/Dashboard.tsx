@@ -82,7 +82,7 @@ const MENU_GROUPS: { label: string; items: [string, string][] }[] = [
       ["expenses", "④ 支出明細"],
       ["invest", "⑤ 投資"],
       ["sim", "⑥ シミュレーション"],
-      ["wishlist", "⑧ 買いたいもの"],
+      ["wishlist", "⑧ ウィッシュリスト"],
       ["lifeEvents", "⑨ 将来設計"],
       ["flowAnalysis", "⑬ 資産フロー分析"],
       ["splitEvents", "㉒ 割り勘"],

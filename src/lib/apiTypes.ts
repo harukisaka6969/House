@@ -234,6 +234,7 @@ export interface WishlistItemOut {
   saved: number;
   monthly_plan: number;
   url: string | null;
+  image_url: string | null;
   memo: string;
   status: "planning" | "saving" | "purchased" | "dropped";
   purchased_date: string | null;

@@ -17,6 +17,14 @@ const TABS: [Tab, string][] = [
   ["dropped", "見送り"],
 ];
 
+// 優先度0は通常の緊急度スケール(1〜5)とは別枠の特別カテゴリ。ソート(昇順)で常に最上位に来る。
+const SPECIAL_PRIORITY = 0;
+const SPECIAL_PRIORITY_LABEL = "アリサを泣かせた分";
+
+function priorityLabel(p: number): string {
+  return p === SPECIAL_PRIORITY ? SPECIAL_PRIORITY_LABEL : `優先度 ${p}`;
+}
+
 const emptyForm = {
   name: "",
   category: "",
@@ -171,7 +179,7 @@ export default function Wishlist() {
 
   return (
     <section className="mf-section">
-      <SectionHead no="08" title="買いたいもの" sub="車・ワインセラー等のラグジュアリー購入の計画と進捗。" />
+      <SectionHead no="08" title="ウィッシュリスト" sub="車・ワインセラー等のラグジュアリー購入の計画と進捗。" />
       <MoneyViewToggle />
 
       <div className="mf-panel">
@@ -218,10 +226,21 @@ export default function Wishlist() {
                   {i.is_private && <span title="相手には非公開">🔒</span>}
                   {!mine && <span className="mf-ownerchip">{i.owner_name}</span>}
                   <span className="mf-chip" style={{ borderColor: "#8B7CF6", color: "#8B7CF6" }}>
-                    優先度 {i.priority}
+                    {priorityLabel(i.priority)}
                   </span>
                 </div>
                 {i.category && <div className="mf-numsub">{i.category}</div>}
+                {i.image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element -- 外部サイトのOGP画像を都度差し替えて表示するため next/image の固定ドメイン許可リストに乗せられない
+                  <img
+                    src={i.image_url}
+                    alt=""
+                    style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, margin: "8px 0" }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                )}
                 <div className="mf-acctnums">
                   <span className="mf-num">{fmt(i.saved)}</span>
                   <span className="mf-numsub"> / {fmt(i.price)}</span>
@@ -398,7 +417,7 @@ export default function Wishlist() {
       <div className="mf-panel" style={{ marginTop: 14 }}>
         {!showForm ? (
           <button className="mf-btn primary" onClick={() => setShowForm(true)}>
-            ＋ 買いたいものを追加
+            ＋ ウィッシュリストに追加
           </button>
         ) : (
           <>
@@ -411,6 +430,7 @@ export default function Wishlist() {
               </span>
               <input className="mf-input mf-mono" type="number" placeholder="想定価格" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
               <select className="mf-input" value={form.priority} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })}>
+                <option value={SPECIAL_PRIORITY}>{SPECIAL_PRIORITY_LABEL}</option>
                 {[1, 2, 3, 4, 5].map((p) => (
                   <option key={p} value={p}>
                     優先度 {p}
