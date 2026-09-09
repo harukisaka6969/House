@@ -80,9 +80,15 @@ export async function updateWishlistItem(id: string, ownerId: string, input: Upd
 }
 
 /** URLからのOGP自動取得がブロックされるサイト（Akamai等のBot対策があるブランドサイトなど）向けに、
- * 写真を直接アップロードして手動でimage_urlを差し替える／nullで削除する。 */
-export async function setWishlistItemImage(id: string, ownerId: string, imageUrl: string | null): Promise<WishlistItemRow | null> {
-  const { data, error } = await db().from("wishlist_items").update({ image_url: imageUrl }).eq("id", id).eq("owner", ownerId).select("*").maybeSingle();
+ * 写真を直接アップロードして手動でimage_urlを差し替える／nullで削除する。編集自体（名前・価格等）と
+ * 違い、写真の差し替えは相手が登録したアイテムでも手伝えるようにする（非公開アイテムは除く）。 */
+export async function setWishlistItemImage(id: string, viewerId: string, imageUrl: string | null): Promise<WishlistItemRow | null> {
+  const { data: current, error: selErr } = await db().from("wishlist_items").select("owner, is_private").eq("id", id).maybeSingle();
+  if (selErr) throw selErr;
+  if (!current) return null;
+  if (current.is_private && current.owner !== viewerId) return null;
+
+  const { data, error } = await db().from("wishlist_items").update({ image_url: imageUrl }).eq("id", id).select("*").maybeSingle();
   if (error) throw error;
   return data as WishlistItemRow | null;
 }

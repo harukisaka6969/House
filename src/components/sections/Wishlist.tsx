@@ -300,28 +300,31 @@ export default function Wishlist() {
                     }}
                   />
                 )}
-                {mine && (
-                  <div className="mf-row" style={{ gap: 6, marginBottom: 4 }}>
+                {i.url && !i.image_url && (
+                  <div className="mf-hint" style={{ color: "#F5A524", marginBottom: 4 }}>
+                    ⚠ このサイトからは写真を自動取得できませんでした（Bot対策のあるサイトでは起こります）。下のボタンから写真をアップロードしてください。
+                  </div>
+                )}
+                <div className="mf-row" style={{ gap: 6, marginBottom: 4 }}>
+                  <button
+                    className="mf-btn ghost"
+                    style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
+                    disabled={photoBusyId === i.id}
+                    onClick={() => triggerPhotoUpload(i.id)}
+                  >
+                    {photoBusyId === i.id ? "アップロード中…" : i.image_url ? "📷 写真を変更" : "📷 写真をアップロード"}
+                  </button>
+                  {i.image_url && (
                     <button
                       className="mf-btn ghost"
                       style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
                       disabled={photoBusyId === i.id}
-                      onClick={() => triggerPhotoUpload(i.id)}
+                      onClick={() => removePhoto(i.id)}
                     >
-                      {photoBusyId === i.id ? "アップロード中…" : i.image_url ? "📷 写真を変更" : "📷 写真をアップロード（URLから自動取得できない場合）"}
+                      写真を削除
                     </button>
-                    {i.image_url && (
-                      <button
-                        className="mf-btn ghost"
-                        style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
-                        disabled={photoBusyId === i.id}
-                        onClick={() => removePhoto(i.id)}
-                      >
-                        写真を削除
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="mf-acctnums">
                   <span className="mf-num">{fmt(i.saved)}</span>
                   <span className="mf-numsub"> / {fmt(i.price)}</span>
