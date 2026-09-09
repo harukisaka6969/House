@@ -66,59 +66,68 @@ function computeDomain(values: number[]): [number, number] {
   return [round(min - pad), round(max + pad)];
 }
 
-type Point = { date: string; t: number; value: number; raw: string };
+type Point = { date: string; t: number; value: number; raw: string; trend?: number };
 
 function buildSeries(records: PersonalRecordOut[], label: string, cutoff: string | null): Point[] {
   const ascending = [...records].sort((a, b) => a.date.localeCompare(b.date));
   const filtered = cutoff ? ascending.filter((r) => r.date >= cutoff) : ascending;
-  return filtered
+  const points = filtered
     .map((r) => {
       const m = r.metrics.find((mm) => mm.label === label);
       const value = m ? leadingNumber(m.value) : null;
       return m && value !== null ? { date: fmtDateShort(r.date), t: dateToDayNumber(r.date), value, raw: m.value } : null;
     })
     .filter((p): p is Point => p !== null);
+  return withTrend(points);
 }
 
-const SQUAT_RE = /(スクワット|squat)/i;
-const SQUAT_EXCLUDE_RE = /(カーフ|calf)/i;
-const BENCH_RE = /(ベンチプレス|bench)/i;
-const DEADLIFT_RE = /(デッドリフト|deadlift)/i;
+/** 最小二乗法で(t, value)の回帰直線を求め、各点にtrend（その時点での回帰直線上の値）を付加する。
+ * 日々のブレに埋もれがちな全体の傾きを見えるようにするための、点線トレンドライン用。 */
+function withTrend(points: Point[]): Point[] {
+  if (points.length < 2) return points;
+  const n = points.length;
+  const meanT = points.reduce((s, p) => s + p.t, 0) / n;
+  const meanV = points.reduce((s, p) => s + p.value, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (const p of points) {
+    num += (p.t - meanT) * (p.value - meanV);
+    den += (p.t - meanT) ** 2;
+  }
+  if (den === 0) return points;
+  const slope = num / den;
+  const intercept = meanV - slope * meanT;
+  return points.map((p) => ({ ...p, trend: Math.round((slope * p.t + intercept) * 100) / 100 }));
+}
 
-interface LiftPr {
+/** アイソレーション種目の自己ベストとして追跡する種目名（gym_exercises.nameと完全一致・大文字小文字は無視）。 */
+const TRACKED_EXERCISES = ["Isolateral BP", "Isolateral DY Row", "Incline DB Curl"] as const;
+
+interface SetVolumePr {
   weight: number;
   reps: number;
+  /** そのセット1回分の総重量（重量×レップ数）。単発の挙上重量ではなく、セット全体の仕事量で
+   * 自己ベストを判定する。 */
+  volume: number;
   date: string;
 }
 
-/** 種目名でスクワット・ベンチプレス・デッドリフトを判定し、記録中で最も重い重量（実測の自己ベスト。
- * 推定1RMではない）を拾う。 */
-function findLiftPr(logs: GymLogOut[], exercises: GymExerciseOut[], re: RegExp, excludeRe?: RegExp): LiftPr | null {
-  const ids = new Set(exercises.filter((e) => re.test(e.name) && !(excludeRe && excludeRe.test(e.name))).map((e) => e.id));
+/** 種目名（完全一致）で、記録中の全セットから最も総重量（重量×レップ数）が大きいセットを拾う。 */
+function findSetVolumePr(logs: GymLogOut[], exercises: GymExerciseOut[], exerciseName: string): SetVolumePr | null {
+  const target = exerciseName.trim().toLowerCase();
+  const ids = new Set(exercises.filter((e) => e.name.trim().toLowerCase() === target).map((e) => e.id));
   if (ids.size === 0) return null;
-  let best: LiftPr | null = null;
+  let best: SetVolumePr | null = null;
   for (const log of logs) {
     if (!ids.has(log.exercise_id)) continue;
     for (const set of log.sets) {
-      if (!Number.isFinite(set.weight) || set.weight <= 0) continue;
-      if (!best || set.weight > best.weight) best = { weight: set.weight, reps: set.reps, date: log.date };
+      if (!Number.isFinite(set.weight) || !Number.isFinite(set.reps) || set.weight <= 0 || set.reps <= 0) continue;
+      const volume = set.weight * set.reps;
+      if (!best || volume > best.volume) best = { weight: set.weight, reps: set.reps, volume, date: log.date };
     }
   }
   return best;
 }
-
-/** DOTS係数（男性、公表値で検証済み）。女性係数は出典を確認できなかったため未実装で、性別が
- * 男性と判定できた場合のみDOTSを表示する。 */
-const DOTS_MALE = { a: -0.000001093, b: 0.0007391293, c: -0.1918759221, d: 24.0900756, e: -307.75076 };
-
-function dotsScore(totalKg: number, bodyweightKg: number): number | null {
-  const bw = bodyweightKg;
-  const denom = DOTS_MALE.a * bw ** 4 + DOTS_MALE.b * bw ** 3 + DOTS_MALE.c * bw ** 2 + DOTS_MALE.d * bw + DOTS_MALE.e;
-  if (denom <= 0) return null;
-  return Math.round(((totalKg * 500) / denom) * 10) / 10;
-}
-
-const LIFT_NAMES: Record<"squat" | "bench" | "deadlift", string> = { squat: "スクワット", bench: "ベンチプレス", deadlift: "デッドリフト" };
 
 /** dateStr（YYYY-MM-DD）を含む週の月曜日を返す。 */
 function mondayOf(dateStr: string): string {
@@ -229,8 +238,8 @@ function fmtDeltaBadge(deltaPct: number | null, current: number): { text: string
 }
 
 /** 体組成カテゴリ専用の一画面ダッシュボード。体重・体脂肪率・筋肉量は下限0固定にしないミニチャートで
- * 小さな変化まで見えるようにし、既存データから計算できるボディビル/パワーリフティング向けの参考指標
- * （FFMI、筋トレ記録から拾ったBIG3自己ベストとDOTSスコア）を追加で表示する。 */
+ * 小さな変化まで見えるようにし（回帰直線の点線トレンドライン付き）、既存データから計算できる
+ * ボディビル向けの参考指標（FFMI、筋トレ記録から拾ったアイソレーション種目の自己ベスト）を追加で表示する。 */
 export default function BodyCompositionDashboard({ records }: { records: PersonalRecordOut[] }) {
   const [period, setPeriod] = useState<PeriodId>("3m");
   const [gymLogs, setGymLogs] = useState<GymLogOut[] | null>(null);
@@ -277,9 +286,7 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
   );
 
   const height = findLatest(records, "身長");
-  const gender = findLatest(records, "性別");
   const lbm = findLatest(records, "除脂肪量");
-  const weight = findLatest(records, "体重");
 
   const ffmi = useMemo(() => {
     if (!height?.num || height.num <= 0 || !lbm?.num) return null;
@@ -289,20 +296,10 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
     return { raw: Math.round(raw * 10) / 10, normalized: Math.round(normalized * 10) / 10 };
   }, [height, lbm]);
 
-  const isMale = gender !== null && gender.raw.includes("男");
-
-  const liftPrs = useMemo(() => {
+  const isolationPrs = useMemo(() => {
     if (!gymLogs || !gymExercises) return null;
-    return {
-      squat: findLiftPr(gymLogs, gymExercises, SQUAT_RE, SQUAT_EXCLUDE_RE),
-      bench: findLiftPr(gymLogs, gymExercises, BENCH_RE),
-      deadlift: findLiftPr(gymLogs, gymExercises, DEADLIFT_RE),
-    };
+    return TRACKED_EXERCISES.map((name) => ({ name, pr: findSetVolumePr(gymLogs, gymExercises, name) }));
   }, [gymLogs, gymExercises]);
-
-  const big3Total =
-    liftPrs && liftPrs.squat && liftPrs.bench && liftPrs.deadlift ? liftPrs.squat.weight + liftPrs.bench.weight + liftPrs.deadlift.weight : null;
-  const dots = big3Total !== null && isMale && weight?.num ? dotsScore(big3Total, weight.num) : null;
 
   if (records.length === 0) return null;
 
@@ -327,7 +324,7 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
             const first = s.points[0];
             const last = s.points[s.points.length - 1];
             const diff = Math.round((last.value - first.value) * 100) / 100;
-            const domain = computeDomain(s.points.map((p) => p.value));
+            const domain = computeDomain(s.points.flatMap((p) => (p.trend !== undefined ? [p.value, p.trend] : [p.value])));
             return (
               <div key={s.label} style={{ background: "#101418", borderRadius: 10, padding: "10px 10px 4px" }}>
                 <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
@@ -374,6 +371,18 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
                           );
                         }}
                       />
+                      {s.points.length >= 2 && (
+                        <Line
+                          type="linear"
+                          dataKey="trend"
+                          stroke={s.color}
+                          strokeWidth={1.5}
+                          strokeDasharray="4 3"
+                          strokeOpacity={0.55}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      )}
                       <Line
                         type="monotone"
                         dataKey="value"
@@ -414,44 +423,34 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
 
         <div style={{ background: "#101418", borderRadius: 10, padding: 12 }}>
           <div className="mf-hint" style={{ margin: 0 }}>
-            パワーリフティング PR（BIG3自己ベスト）
+            アイソレーション種目 自己ベスト（1セットの総重量＝重量×レップ数）
           </div>
-          {!liftPrs ? (
+          {!isolationPrs ? (
             <div className="mf-hint" style={{ margin: "6px 0 0" }}>
               読み込み中…
             </div>
-          ) : !liftPrs.squat && !liftPrs.bench && !liftPrs.deadlift ? (
+          ) : isolationPrs.every((e) => !e.pr) ? (
             <div className="mf-hint" style={{ margin: "6px 0 0" }}>
-              筋トレ記録にスクワット・ベンチプレス・デッドリフトがまだありません。記録すると自動で表示されます。
+              {TRACKED_EXERCISES.join("・")}の記録がまだありません。記録すると自動で表示されます。
             </div>
           ) : (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 6 }}>
-                {(Object.keys(LIFT_NAMES) as (keyof typeof LIFT_NAMES)[]).map((k) => {
-                  const pr = liftPrs[k];
-                  return (
-                    <div key={k}>
-                      <div className="mf-hint" style={{ margin: 0, fontSize: 11 }}>
-                        {LIFT_NAMES[k]}
-                      </div>
-                      <div className="mf-mono" style={{ fontWeight: 700 }}>
-                        {pr ? `${pr.weight}kg` : "—"}
-                      </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 6 }}>
+              {isolationPrs.map(({ name, pr }) => (
+                <div key={name}>
+                  <div className="mf-hint" style={{ margin: 0, fontSize: 11 }}>
+                    {name}
+                  </div>
+                  <div className="mf-mono" style={{ fontWeight: 700 }}>
+                    {pr ? `${Math.round(pr.volume).toLocaleString("ja-JP")}kg` : "—"}
+                  </div>
+                  {pr && (
+                    <div className="mf-hint" style={{ margin: "2px 0 0", fontSize: 10 }}>
+                      {pr.weight}kg×{pr.reps}
                     </div>
-                  );
-                })}
-              </div>
-              {big3Total !== null && (
-                <div className="mf-hint" style={{ marginTop: 8 }}>
-                  BIG3合計: <b className="mf-mono">{big3Total}kg</b>
-                  {dots !== null && (
-                    <>
-                      ／DOTS: <b className="mf-mono">{dots}</b>
-                    </>
                   )}
                 </div>
-              )}
-            </>
+              ))}
+            </div>
           )}
         </div>
       </div>
