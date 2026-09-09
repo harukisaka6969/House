@@ -21,11 +21,13 @@ export async function getSportLogsInRange(fromDate: string, toDateExclusive: str
   return (data ?? []) as SportLogRow[];
 }
 
-/** 自分の日記を1日1件でupsertする（他人の日記は編集不可）。 */
-export async function upsertJournalEntry(ownerId: string, date: string, body: string): Promise<JournalEntryRow> {
+/** 自分の日記を1日1件でupsertする（他人の日記は編集不可）。aiGenerated=trueは「AIの自動下書きを
+ * 一切編集せずそのまま保存した」場合のみ呼び出し側（フロント）が渡す — 振り返りカレンダーの赤丸を
+ * 自分で書いた日だけの印にするため。 */
+export async function upsertJournalEntry(ownerId: string, date: string, body: string, aiGenerated = false): Promise<JournalEntryRow> {
   const { data, error } = await db()
     .from("journal_entries")
-    .upsert({ owner: ownerId, date, body, updated_at: new Date().toISOString() }, { onConflict: "owner,date" })
+    .upsert({ owner: ownerId, date, body, ai_generated: aiGenerated, updated_at: new Date().toISOString() }, { onConflict: "owner,date" })
     .select("*")
     .single();
   if (error) throw error;

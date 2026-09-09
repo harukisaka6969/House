@@ -274,6 +274,9 @@ export interface JournalEntryRow {
   owner: string;
   date: string;
   body: string;
+  /** trueなら、AIの自動下書きをユーザーが一切編集せずそのまま保存したもの。振り返りカレンダーの
+   * 赤丸（自分で書いた日の印）の対象からは除外する。 */
+  ai_generated: boolean;
   created_at: string;
   updated_at: string;
 }

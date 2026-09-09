@@ -6,7 +6,7 @@ import { getJournalExpensesForDate } from "@/lib/expenses";
 import { profileNameOf } from "@/lib/profiles";
 import { isValidDateStr } from "@/lib/date";
 
-const bodySchema = z.object({ body: z.string().max(5000) });
+const bodySchema = z.object({ body: z.string().max(5000), aiGenerated: z.boolean().optional() });
 
 export async function GET(_req: Request, ctx: { params: Promise<{ date: string }> }) {
   try {
@@ -32,8 +32,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ date: string }>
     const session = await requireOwnerSession();
     const { date } = await ctx.params;
     if (!isValidDateStr(date)) throw new ApiError(400, "invalid date");
-    const { body } = bodySchema.parse(await req.json());
-    const entry = await upsertJournalEntry(session.profile_id, date, body);
+    const { body, aiGenerated } = bodySchema.parse(await req.json());
+    const entry = await upsertJournalEntry(session.profile_id, date, body, aiGenerated);
     return NextResponse.json({ entry });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });

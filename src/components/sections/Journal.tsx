@@ -128,7 +128,9 @@ export default function Journal() {
 
   const saveEntry = async () => {
     try {
-      await apiPut(`/api/journal/${date}`, { body: bodyDraft });
+      // isAiDraftは1文字でも編集するとfalseに戻る（onChange参照）。この時点でtrueなら
+      // AIの下書きを一切手直しせず保存したということなので、振り返りカレンダーの赤丸対象から外す。
+      await apiPut(`/api/journal/${date}`, { body: bodyDraft, aiGenerated: isAiDraft });
       setIsAiDraft(false);
       setSaveMsg("✓ 保存しました。");
       load();
