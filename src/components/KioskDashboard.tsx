@@ -235,22 +235,6 @@ function NotificationBell({ data }: { data: KioskResponse }) {
   );
 }
 
-function Clock() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  const date = now.toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short" });
-  const time = now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-  return (
-    <div className="kiosk-clock">
-      <span className="kiosk-time">{time}</span>
-      <span className="kiosk-date">{date}</span>
-    </div>
-  );
-}
-
 export default function KioskDashboard({ slug, exitHref }: { slug: string; exitHref?: string }) {
   const [data, setData] = useState<KioskResponse | null>(null);
 
@@ -278,7 +262,6 @@ export default function KioskDashboard({ slug, exitHref }: { slug: string; exitH
           <div className="kiosk-eyebrow">SAKA HOUSEHOLD LEDGER</div>
           <div className="kiosk-title">常設ダッシュボード</div>
         </div>
-        <Clock />
         <NotificationBell data={data} />
       </div>
 
