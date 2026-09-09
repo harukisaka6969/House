@@ -1,5 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { fetchOgImage } from "./ogImage";
+import { rateLimit } from "./rateLimit";
 
 // spec §2 / §8: サーバー側で claude-sonnet-4-6 を呼ぶ（現行版から踏襲）。
 const MODEL = "claude-sonnet-4-6";
@@ -1016,4 +1018,42 @@ ${listing}`,
   const clusterTitlesRaw = stripFence(joinText(res.content));
   const clusterTitlesArr = JSON.parse(clusterTitlesRaw);
   return Array.isArray(clusterTitlesArr) ? clusterTitlesArr.map((s) => String(s)) : [];
+}
+
+/** ウィッシュリスト用: 登録したURLからOGP画像を取得できなかった場合（ブランドサイトのBot対策等）の
+ * フォールバック。商品名でWeb検索し、写真が載っていそうなページ候補を挙げてもらい、上から順に
+ * OGP画像取得を試す。全滅すればnull（ベストエフォート・失敗しても呼び出し側は落とさない）。
+ * ownerIdを渡すと、他のAI機能と共通の上限でレート制限する（超過時は静かにnullを返し、
+ * アイテム自体の登録は妨げない）。 */
+export async function searchProductImageByName(name: string, ownerId?: string): Promise<string | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  if (ownerId && !rateLimit(`ai:${ownerId}`, 60, 60 * 60 * 1000).ok) return null;
+  try {
+    const res = await anthropic().messages.create({
+      model: MODEL,
+      max_tokens: 500,
+      messages: [
+        {
+          role: "user",
+          content: `「${trimmed}」という商品の写真が載っていそうなウェブページ（公式サイト・通販サイト・レビュー記事・ブログ等、幅広く）を検索してください。実物の写真が載っている可能性が高い順に最大4件、URLだけをJSON配列で返してください（他の文章は一切含めない）。見つからなければ [] とだけ返してください。
+形式: ["https://...","https://..."]`,
+        },
+      ],
+      tools: [{ type: "web_search_20260209", name: "web_search" }],
+    });
+    const raw = stripFence(joinText(res.content));
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return null;
+    const urls = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(urls)) return null;
+    for (const url of urls.slice(0, 4)) {
+      if (typeof url !== "string") continue;
+      const img = await fetchOgImage(url);
+      if (img) return img;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

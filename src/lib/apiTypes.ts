@@ -241,6 +241,15 @@ export interface WishlistItemOut {
   purchased_price: number | null;
   visible_to_family: boolean;
   created_at: string;
+  comments: WishlistCommentOut[];
+}
+
+export interface WishlistCommentOut {
+  id: string;
+  owner: string;
+  owner_name: string;
+  body: string;
+  created_at: string;
 }
 
 export interface LifeEventOut {

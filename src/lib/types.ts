@@ -113,6 +113,16 @@ export interface WishlistItemRow {
   created_at: string;
 }
 
+/** ウィッシュリストのアイテムへのコメント。登録者本人以外（パートナー）も付けられる
+ * （is_privateなアイテムは、登録者以外には表示自体されないので実質書けない）。 */
+export interface WishlistCommentRow {
+  id: string;
+  item_id: string;
+  owner: string;
+  body: string;
+  created_at: string;
+}
+
 export type ShoppingStore = "seiyu" | "amazon" | "conveni" | "other";
 
 /** 買い物リスト（夫婦で共有）。Amazon・その他はパートナーの承認が必要（needs_approval）。 */

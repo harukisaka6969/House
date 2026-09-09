@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAllWishlistItems, visibleWishlistItems, createWishlistItem } from "@/lib/wishlist";
+import { getWishlistCommentsForItems } from "@/lib/wishlistComments";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 
 export async function GET(req: Request) {
@@ -13,7 +14,12 @@ export async function GET(req: Request) {
     const nameOf = makeNameLookup(profiles);
     const visible = visibleWishlistItems(rows, session.profile_id);
     const scoped = owner ? visible.filter((r) => r.owner === owner) : visible;
-    const items = scoped.map((r) => ({ ...r, owner_name: nameOf(r.owner) }));
+    const comments = await getWishlistCommentsForItems(scoped.map((r) => r.id));
+    const items = scoped.map((r) => ({
+      ...r,
+      owner_name: nameOf(r.owner),
+      comments: comments.filter((c) => c.item_id === r.id).map((c) => ({ id: c.id, owner: c.owner, owner_name: nameOf(c.owner), body: c.body, created_at: c.created_at })),
+    }));
     return NextResponse.json({ items });
   } catch (e) {
     return errorResponse(e);

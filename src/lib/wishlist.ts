@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { todayStrJST } from "./date";
 import { fetchOgImage } from "./ogImage";
+import { searchProductImageByName } from "./anthropic";
 import type { WishlistItemRow } from "./types";
 
 export { visibleWishlistItems, toFamilyWishlist } from "./v2Privacy";
@@ -27,7 +28,7 @@ export interface NewWishlistInput {
 
 export async function createWishlistItem(ownerId: string, input: NewWishlistInput): Promise<WishlistItemRow> {
   const url = input.url?.trim() || null;
-  const imageUrl = url ? await fetchOgImage(url) : null;
+  const imageUrl = (url ? await fetchOgImage(url) : null) ?? (await searchProductImageByName(input.name, ownerId));
   const { data, error } = await db()
     .from("wishlist_items")
     .insert({
@@ -50,6 +51,11 @@ export async function createWishlistItem(ownerId: string, input: NewWishlistInpu
   return data as WishlistItemRow;
 }
 
+async function getWishlistItemName(id: string): Promise<string | null> {
+  const { data } = await db().from("wishlist_items").select("name").eq("id", id).maybeSingle();
+  return data?.name ?? null;
+}
+
 export interface UpdateWishlistInput extends Partial<NewWishlistInput> {
   status?: "planning" | "saving" | "purchased" | "dropped";
   saved?: number;
@@ -68,7 +74,12 @@ export async function updateWishlistItem(id: string, ownerId: string, input: Upd
   if (input.url !== undefined) {
     const url = input.url?.trim() || null;
     patch.url = url;
-    patch.image_url = url ? await fetchOgImage(url) : null;
+    let imageUrl = url ? await fetchOgImage(url) : null;
+    if (!imageUrl) {
+      const nameForSearch = input.name !== undefined ? input.name.trim() : await getWishlistItemName(id);
+      if (nameForSearch) imageUrl = await searchProductImageByName(nameForSearch, ownerId);
+    }
+    patch.image_url = imageUrl;
   }
   if (input.memo !== undefined) patch.memo = input.memo?.trim() ?? "";
   if (input.visible_to_family !== undefined) patch.visible_to_family = input.visible_to_family;

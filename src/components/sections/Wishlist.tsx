@@ -54,6 +54,8 @@ export default function Wishlist() {
   const [photoErr, setPhotoErr] = useState("");
   const photoTargetId = useRef<string | null>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+  const [commentBusyId, setCommentBusyId] = useState<string | null>(null);
 
   const load = () => {
     const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
@@ -162,6 +164,26 @@ export default function Wishlist() {
     setPhotoBusyId(id);
     await apiDelete(`/api/wishlist/${id}/photo`);
     setPhotoBusyId(null);
+    load();
+  };
+
+  // 登録した本人でなくても（非公開でない限り）コメントできる。
+  const submitComment = async (id: string) => {
+    const body = (commentDraft[id] ?? "").trim();
+    if (!body) return;
+    setCommentBusyId(id);
+    try {
+      await apiPost(`/api/wishlist/${id}/comments`, { body });
+      setCommentDraft((d) => ({ ...d, [id]: "" }));
+      load();
+    } catch {
+      // ベストエフォート: 失敗時は下書きを残したままにする
+    }
+    setCommentBusyId(null);
+  };
+
+  const removeComment = async (itemId: string, commentId: string) => {
+    await apiDelete(`/api/wishlist/${itemId}/comments/${commentId}`);
     load();
   };
 
@@ -354,6 +376,43 @@ export default function Wishlist() {
                     </a>
                   </div>
                 )}
+
+                <div style={{ marginTop: 8 }}>
+                  {i.comments.length > 0 && (
+                    <div style={{ marginBottom: 6 }}>
+                      {i.comments.map((c) => (
+                        <div key={c.id} className="mf-row" style={{ gap: 6, alignItems: "flex-start" }}>
+                          <span className="mf-numsub" style={{ flex: 1 }}>
+                            <b>{c.owner_name}</b>: {c.body}
+                          </span>
+                          {c.owner_name === meName && (
+                            <button className="mf-del" style={{ padding: "0 4px", fontSize: 12, flex: "0 0 auto" }} onClick={() => removeComment(i.id, c.id)}>
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mf-row" style={{ gap: 6 }}>
+                    <input
+                      className="mf-input"
+                      style={{ flex: 1, fontSize: 12, padding: "4px 8px" }}
+                      placeholder="コメントする"
+                      value={commentDraft[i.id] ?? ""}
+                      onChange={(e) => setCommentDraft((d) => ({ ...d, [i.id]: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && submitComment(i.id)}
+                    />
+                    <button
+                      className="mf-btn ghost"
+                      style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
+                      disabled={commentBusyId === i.id || !(commentDraft[i.id] ?? "").trim()}
+                      onClick={() => submitComment(i.id)}
+                    >
+                      送信
+                    </button>
+                  </div>
+                </div>
 
                 {mine && (tab === "planning" || tab === "saving") && (
                   <div className="mf-row" style={{ marginTop: 10, flexWrap: "wrap" }}>
