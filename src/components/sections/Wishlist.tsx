@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fmt } from "@/lib/judge";
 import { categoriesForAccount } from "@/lib/constants";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/apiClient";
@@ -50,6 +50,10 @@ export default function Wishlist() {
   const [contributeForm, setContributeForm] = useState({ amount: "", createExpense: false, account: "", category: "" });
   const [purchaseErr, setPurchaseErr] = useState("");
   const [contributeErr, setContributeErr] = useState("");
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
+  const [photoErr, setPhotoErr] = useState("");
+  const photoTargetId = useRef<string | null>(null);
+  const photoFileRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     const qs = ownerFilter ? `?owner=${ownerFilter}` : "";
@@ -126,6 +130,41 @@ export default function Wishlist() {
     load();
   };
 
+  // URLからのOGP画像自動取得はブランドサイト等のBot対策でしばしば失敗する（例: Akamaiが403/タイムアウトを
+  // 返す）ため、写真を直接アップロードして確実に表示できる手動経路を用意している。
+  const triggerPhotoUpload = (id: string) => {
+    photoTargetId.current = id;
+    photoFileRef.current?.click();
+  };
+
+  const onPhotoSelected = async (file: File) => {
+    const id = photoTargetId.current;
+    if (!id) return;
+    setPhotoBusyId(id);
+    setPhotoErr("");
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch(`/api/wishlist/${id}/photo`, { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error((body && body.error) || "アップロードに失敗しました。");
+      }
+      load();
+    } catch (e) {
+      setPhotoErr(e instanceof Error ? e.message : "アップロードに失敗しました。");
+    }
+    setPhotoBusyId(null);
+    if (photoFileRef.current) photoFileRef.current.value = "";
+  };
+
+  const removePhoto = async (id: string) => {
+    setPhotoBusyId(id);
+    await apiDelete(`/api/wishlist/${id}/photo`);
+    setPhotoBusyId(null);
+    load();
+  };
+
   const submitPurchase = async (id: string) => {
     setPurchaseErr("");
     if (!purchaseForm.price) {
@@ -181,6 +220,21 @@ export default function Wishlist() {
     <section className="mf-section">
       <SectionHead no="08" title="ウィッシュリスト" sub="車・ワインセラー等のラグジュアリー購入の計画と進捗。" />
       <MoneyViewToggle />
+      <input
+        ref={photoFileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onPhotoSelected(f);
+        }}
+      />
+      {photoErr && (
+        <div className="mf-hint" style={{ color: "#F26D5F" }}>
+          {photoErr}
+        </div>
+      )}
 
       <div className="mf-panel">
         <div className="mf-paneltitle">貯蓄中アイテムの状況</div>
@@ -245,6 +299,28 @@ export default function Wishlist() {
                       e.currentTarget.style.display = "none";
                     }}
                   />
+                )}
+                {mine && (
+                  <div className="mf-row" style={{ gap: 6, marginBottom: 4 }}>
+                    <button
+                      className="mf-btn ghost"
+                      style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
+                      disabled={photoBusyId === i.id}
+                      onClick={() => triggerPhotoUpload(i.id)}
+                    >
+                      {photoBusyId === i.id ? "アップロード中…" : i.image_url ? "📷 写真を変更" : "📷 写真をアップロード（URLから自動取得できない場合）"}
+                    </button>
+                    {i.image_url && (
+                      <button
+                        className="mf-btn ghost"
+                        style={{ padding: "3px 8px", fontSize: 12, flex: "0 0 auto" }}
+                        disabled={photoBusyId === i.id}
+                        onClick={() => removePhoto(i.id)}
+                      >
+                        写真を削除
+                      </button>
+                    )}
+                  </div>
                 )}
                 <div className="mf-acctnums">
                   <span className="mf-num">{fmt(i.saved)}</span>

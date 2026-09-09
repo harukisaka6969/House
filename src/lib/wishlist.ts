@@ -79,6 +79,14 @@ export async function updateWishlistItem(id: string, ownerId: string, input: Upd
   return data as WishlistItemRow | null;
 }
 
+/** URLからのOGP自動取得がブロックされるサイト（Akamai等のBot対策があるブランドサイトなど）向けに、
+ * 写真を直接アップロードして手動でimage_urlを差し替える／nullで削除する。 */
+export async function setWishlistItemImage(id: string, ownerId: string, imageUrl: string | null): Promise<WishlistItemRow | null> {
+  const { data, error } = await db().from("wishlist_items").update({ image_url: imageUrl }).eq("id", id).eq("owner", ownerId).select("*").maybeSingle();
+  if (error) throw error;
+  return data as WishlistItemRow | null;
+}
+
 export async function deleteWishlistItem(id: string, ownerId: string): Promise<boolean> {
   const { data, error } = await db().from("wishlist_items").delete().eq("id", id).eq("owner", ownerId).select("id");
   if (error) throw error;
