@@ -57,6 +57,7 @@ function summarize(log: RehabLogOut): string {
 export default function RehabPractice({ date, onSelectDate }: { date: string; onSelectDate: (d: string) => void }) {
   const monthKey = periodKeyOfDate(date);
   const [logs, setLogs] = useState<RehabLogOut[] | null>(null);
+  const [markedDates, setMarkedDates] = useState<string[]>([]);
   const [kind, setKind] = useState<RehabLogKind>("impulse");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [impulseForm, setImpulseForm] = useState<ImpulseData>(emptyImpulse);
@@ -69,12 +70,15 @@ export default function RehabPractice({ date, onSelectDate }: { date: string; on
     apiGet<{ logs: RehabLogOut[] }>(`/api/rehab-logs?month=${monthKey}`)
       .then((r) => setLogs(r.logs))
       .catch(() => setLogs([]));
+    apiGet<{ dates: string[] }>(`/api/rehab-logs/calendar?month=${monthKey}`)
+      .then((r) => setMarkedDates(r.dates))
+      .catch(() => setMarkedDates([]));
   };
   useEffect(load, [monthKey]);
 
   if (!logs) return <div className="mf-empty">読み込み中…</div>;
 
-  const markedDays = new Set(logs.map((l) => l.date));
+  const markedDays = new Set(markedDates);
   const dayLogs = logs.filter((l) => l.date === date).sort((a, b) => a.created_at.localeCompare(b.created_at));
   const today = todayStrJST();
 
