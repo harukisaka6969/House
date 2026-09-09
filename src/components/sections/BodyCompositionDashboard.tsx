@@ -102,31 +102,28 @@ function withTrend(points: Point[]): Point[] {
 
 /** アイソレーション種目の自己ベストとして追跡する種目名（gym_exercises.nameと完全一致・大文字小文字は無視）。 */
 const TRACKED_EXERCISES = ["Isolateral BP", "Isolateral DY Row", "Incline DB Curl"] as const;
+const ISOLATION_COLORS: Record<string, string> = { "Isolateral BP": "#c98500", "Isolateral DY Row": "#d55181", "Incline DB Curl": "#9085e9" };
 
-interface SetVolumePr {
-  weight: number;
-  reps: number;
-  /** そのセット1回分の総重量（重量×レップ数）。単発の挙上重量ではなく、セット全体の仕事量で
-   * 自己ベストを判定する。 */
-  volume: number;
-  date: string;
-}
-
-/** 種目名（完全一致）で、記録中の全セットから最も総重量（重量×レップ数）が大きいセットを拾う。 */
-function findSetVolumePr(logs: GymLogOut[], exercises: GymExerciseOut[], exerciseName: string): SetVolumePr | null {
+/** 種目名（完全一致）で、セッション（日）ごとの最大セット総重量（重量×レップ数）の推移を返す。
+ * 単発の自己ベスト値だけでは伸びが分からないため、他の記録と同じミニ折れ線＋トレンドラインで見せる。 */
+function buildVolumeHistory(logs: GymLogOut[], exercises: GymExerciseOut[], exerciseName: string, cutoff: string | null): Point[] {
   const target = exerciseName.trim().toLowerCase();
   const ids = new Set(exercises.filter((e) => e.name.trim().toLowerCase() === target).map((e) => e.id));
-  if (ids.size === 0) return null;
-  let best: SetVolumePr | null = null;
+  if (ids.size === 0) return [];
+  const bestByDate = new Map<string, number>();
   for (const log of logs) {
     if (!ids.has(log.exercise_id)) continue;
+    if (cutoff && log.date < cutoff) continue;
     for (const set of log.sets) {
       if (!Number.isFinite(set.weight) || !Number.isFinite(set.reps) || set.weight <= 0 || set.reps <= 0) continue;
       const volume = set.weight * set.reps;
-      if (!best || volume > best.volume) best = { weight: set.weight, reps: set.reps, volume, date: log.date };
+      if (volume > (bestByDate.get(log.date) ?? 0)) bestByDate.set(log.date, volume);
     }
   }
-  return best;
+  const points = [...bestByDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, value]) => ({ date: fmtDateShort(date), t: dateToDayNumber(date), value, raw: `${Math.round(value).toLocaleString("ja-JP")}kg` }));
+  return withTrend(points);
 }
 
 /** dateStr（YYYY-MM-DD）を含む週の月曜日を返す。 */
@@ -237,6 +234,96 @@ function fmtDeltaBadge(deltaPct: number | null, current: number): { text: string
   return { text: `${up ? "▲" : "▼"}${Math.abs(deltaPct)}%`, color: up ? "#3DDC97" : "#F26D5F" };
 }
 
+/** 点＋実線＋回帰直線の点線トレンドラインからなるミニ折れ線チャート。体組成の推移・種目の自己ベスト
+ * 推移など、日付軸のPoint配列を見せる箇所で共通利用する。headlineMode="max"は「直近値」ではなく
+ * 「期間内の最大値」を見出しの数値にする（筋トレの自己ベストは直近セッションが最新値とは限らないため）。 */
+function MiniTrendChart({
+  label,
+  color,
+  points,
+  headlineMode = "last",
+  positiveIsGood = false,
+}: {
+  label: string;
+  color: string;
+  points: Point[];
+  headlineMode?: "last" | "max";
+  positiveIsGood?: boolean;
+}) {
+  const first = points[0];
+  const last = points[points.length - 1];
+  const headline = headlineMode === "max" ? points.reduce((m, p) => (p.value > m.value ? p : m), points[0]) : last;
+  const diff = Math.round((headline.value - first.value) * 100) / 100;
+  const diffIsUp = diff > 0;
+  const diffColor = (positiveIsGood ? diffIsUp : !diffIsUp) ? "#3DDC97" : "#F26D5F";
+  const domain = computeDomain(points.flatMap((p) => (p.trend !== undefined ? [p.value, p.trend] : [p.value])));
+
+  return (
+    <div style={{ background: "#101418", borderRadius: 10, padding: "10px 10px 4px" }}>
+      <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+        <span className="mf-hint" style={{ margin: 0 }}>
+          {label}
+        </span>
+        <span className="mf-row" style={{ gap: 6 }}>
+          <b className="mf-mono">{headline.raw}</b>
+          {points.length >= 2 && diff !== 0 && (
+            <span className="mf-hint" style={{ margin: 0, color: diffColor }}>
+              {diffIsUp ? "▲" : "▼"}
+              {Math.abs(diff)}
+            </span>
+          )}
+        </span>
+      </div>
+      <div style={{ height: 130, marginTop: 4 }}>
+        <ResponsiveContainer>
+          <LineChart data={points} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+            <XAxis
+              dataKey="t"
+              type="number"
+              domain={["dataMin", "dataMax"]}
+              tickFormatter={dayNumberToShortLabel}
+              stroke="#93A0AE"
+              fontSize={10}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={24}
+            />
+            <YAxis domain={domain} stroke="#93A0AE" fontSize={10} tickLine={false} axisLine={false} width={38} tickCount={3} />
+            <Tooltip
+              cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+              content={({ active, payload }) => {
+                if (!active || !payload || !payload.length) return null;
+                const point = payload[0]?.payload as Point | undefined;
+                if (!point) return null;
+                return (
+                  <div style={TT}>
+                    <div style={{ opacity: 0.7, marginBottom: 2 }}>{point.date}</div>
+                    <b>{point.raw}</b>
+                  </div>
+                );
+              }}
+            />
+            {points.length >= 2 && (
+              <Line type="linear" dataKey="trend" stroke={color} strokeWidth={1.5} strokeDasharray="4 3" strokeOpacity={0.55} dot={false} isAnimationActive={false} />
+            )}
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={color}
+              strokeWidth={2}
+              strokeLinecap="round"
+              dot={{ r: 4, fill: color, strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 /** 体組成カテゴリ専用の一画面ダッシュボード。体重・体脂肪率・筋肉量は下限0固定にしないミニチャートで
  * 小さな変化まで見えるようにし（回帰直線の点線トレンドライン付き）、既存データから計算できる
  * ボディビル向けの参考指標（FFMI、筋トレ記録から拾ったアイソレーション種目の自己ベスト）を追加で表示する。 */
@@ -296,10 +383,12 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
     return { raw: Math.round(raw * 10) / 10, normalized: Math.round(normalized * 10) / 10 };
   }, [height, lbm]);
 
-  const isolationPrs = useMemo(() => {
+  const isolationSeries = useMemo(() => {
     if (!gymLogs || !gymExercises) return null;
-    return TRACKED_EXERCISES.map((name) => ({ name, pr: findSetVolumePr(gymLogs, gymExercises, name) }));
-  }, [gymLogs, gymExercises]);
+    return TRACKED_EXERCISES.map((name) => ({ name, color: ISOLATION_COLORS[name], points: buildVolumeHistory(gymLogs, gymExercises, name, cutoff) })).filter(
+      (s) => s.points.length > 0
+    );
+  }, [gymLogs, gymExercises, cutoff]);
 
   if (records.length === 0) return null;
 
@@ -320,89 +409,13 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 10 }}>
-          {headlineSeries.map((s) => {
-            const first = s.points[0];
-            const last = s.points[s.points.length - 1];
-            const diff = Math.round((last.value - first.value) * 100) / 100;
-            const domain = computeDomain(s.points.flatMap((p) => (p.trend !== undefined ? [p.value, p.trend] : [p.value])));
-            return (
-              <div key={s.label} style={{ background: "#101418", borderRadius: 10, padding: "10px 10px 4px" }}>
-                <div className="mf-row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span className="mf-hint" style={{ margin: 0 }}>
-                    {s.label}
-                  </span>
-                  <span className="mf-row" style={{ gap: 6 }}>
-                    <b className="mf-mono">{last.raw}</b>
-                    {s.points.length >= 2 && diff !== 0 && (
-                      <span className="mf-hint" style={{ margin: 0, color: diff > 0 ? "#F26D5F" : "#3DDC97" }}>
-                        {diff > 0 ? "▲" : "▼"}
-                        {Math.abs(diff)}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div style={{ height: 130, marginTop: 4 }}>
-                  <ResponsiveContainer>
-                    <LineChart data={s.points} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis
-                        dataKey="t"
-                        type="number"
-                        domain={["dataMin", "dataMax"]}
-                        tickFormatter={dayNumberToShortLabel}
-                        stroke="#93A0AE"
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                        minTickGap={24}
-                      />
-                      <YAxis domain={domain} stroke="#93A0AE" fontSize={10} tickLine={false} axisLine={false} width={38} tickCount={3} />
-                      <Tooltip
-                        cursor={{ stroke: "rgba(255,255,255,0.15)" }}
-                        content={({ active, payload }) => {
-                          if (!active || !payload || !payload.length) return null;
-                          const point = payload[0]?.payload as Point | undefined;
-                          if (!point) return null;
-                          return (
-                            <div style={TT}>
-                              <div style={{ opacity: 0.7, marginBottom: 2 }}>{point.date}</div>
-                              <b>{point.raw}</b>
-                            </div>
-                          );
-                        }}
-                      />
-                      {s.points.length >= 2 && (
-                        <Line
-                          type="linear"
-                          dataKey="trend"
-                          stroke={s.color}
-                          strokeWidth={1.5}
-                          strokeDasharray="4 3"
-                          strokeOpacity={0.55}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      )}
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke={s.color}
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        dot={{ r: 4, fill: s.color, strokeWidth: 0 }}
-                        activeDot={{ r: 6 }}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            );
-          })}
+          {headlineSeries.map((s) => (
+            <MiniTrendChart key={s.label} label={s.label} color={s.color} points={s.points} />
+          ))}
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12, marginTop: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 320px))", gap: 12, marginTop: 12 }}>
         <div style={{ background: "#101418", borderRadius: 10, padding: 12 }}>
           <div className="mf-hint" style={{ margin: 0 }}>
             FFMI（除脂肪量指数・筋肉量の目安）
@@ -420,39 +433,27 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
             </div>
           )}
         </div>
+      </div>
 
-        <div style={{ background: "#101418", borderRadius: 10, padding: 12 }}>
-          <div className="mf-hint" style={{ margin: 0 }}>
-            アイソレーション種目 自己ベスト（1セットの総重量＝重量×レップ数）
-          </div>
-          {!isolationPrs ? (
-            <div className="mf-hint" style={{ margin: "6px 0 0" }}>
-              読み込み中…
-            </div>
-          ) : isolationPrs.every((e) => !e.pr) ? (
-            <div className="mf-hint" style={{ margin: "6px 0 0" }}>
-              {TRACKED_EXERCISES.join("・")}の記録がまだありません。記録すると自動で表示されます。
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 6 }}>
-              {isolationPrs.map(({ name, pr }) => (
-                <div key={name}>
-                  <div className="mf-hint" style={{ margin: 0, fontSize: 11 }}>
-                    {name}
-                  </div>
-                  <div className="mf-mono" style={{ fontWeight: 700 }}>
-                    {pr ? `${Math.round(pr.volume).toLocaleString("ja-JP")}kg` : "—"}
-                  </div>
-                  {pr && (
-                    <div className="mf-hint" style={{ margin: "2px 0 0", fontSize: 10 }}>
-                      {pr.weight}kg×{pr.reps}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+      <div style={{ marginTop: 12 }}>
+        <div className="mf-hint" style={{ margin: 0 }}>
+          アイソレーション種目 自己ベストの推移（1セットの総重量＝重量×レップ数）
         </div>
+        {!isolationSeries ? (
+          <div className="mf-hint" style={{ margin: "6px 0 0" }}>
+            読み込み中…
+          </div>
+        ) : isolationSeries.length === 0 ? (
+          <div className="mf-hint" style={{ margin: "6px 0 0" }}>
+            この期間の{TRACKED_EXERCISES.join("・")}の記録がありません。記録すると自動で表示されます。
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 8 }}>
+            {isolationSeries.map((s) => (
+              <MiniTrendChart key={s.name} label={s.name} color={s.color} points={s.points} headlineMode="max" positiveIsGood />
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ background: "#101418", borderRadius: 10, padding: 12, marginTop: 12 }}>
