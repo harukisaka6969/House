@@ -228,6 +228,11 @@ export default function Wishlist() {
                   <span className="mf-chip" style={{ borderColor: "#8B7CF6", color: "#8B7CF6" }}>
                     {priorityLabel(i.priority)}
                   </span>
+                  {mine && tab !== "dropped" && (
+                    <button className="mf-del" style={{ marginLeft: "auto" }} onClick={() => remove(i.id)} title="削除（間違って登録した場合など）">
+                      ×
+                    </button>
+                  )}
                 </div>
                 {i.category && <div className="mf-numsub">{i.category}</div>}
                 {i.image_url && (
