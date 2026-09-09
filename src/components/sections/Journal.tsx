@@ -109,7 +109,20 @@ export default function Journal() {
 
   const myEntry = entries.find((e) => e.owner === meId && e.date === date);
   const dayLogs = sportLogs.filter((l) => l.date === date);
-  const gymDays = new Set(sportLogs.filter((l) => l.activity.includes("ジム")).map((l) => l.date));
+
+  // 日付ごとに「誰がジムに行ったか」を集計し、カレンダーには青丸の中に本人の頭文字（H/A）を出す。
+  const gymDaysByOwner = new Map<string, Set<string>>();
+  for (const l of sportLogs) {
+    if (!l.activity.includes("ジム")) continue;
+    const set = gymDaysByOwner.get(l.date) ?? new Set<string>();
+    set.add(l.owner);
+    gymDaysByOwner.set(l.date, set);
+  }
+  const initialFor = (ownerId: string): string => {
+    if (ownerId === meId) return (me?.profile.slug ?? "?").slice(0, 1).toUpperCase();
+    if (me?.partner && ownerId === me.partner.id) return me.partner.slug.slice(0, 1).toUpperCase();
+    return "?";
+  };
 
   const today = todayStrJST();
 
@@ -348,7 +361,7 @@ export default function Journal() {
 
       <div className="mf-panel">
         <div className="mf-paneltitle">この日のスポーツ記録</div>
-        {gymDays.size > 0 && (
+        {gymDaysByOwner.size > 0 && (
           <PeriodCalendar
             monthKey={monthKey}
             onSelectDate={setDate}
@@ -356,14 +369,23 @@ export default function Journal() {
             renderCell={(key, d) => (
               <>
                 {d}
-                {gymDays.has(key) && <span className="mf-rehabmark blue" />}
+                {gymDaysByOwner.has(key) && (
+                  <span className="mf-initialmarks">
+                    {[...gymDaysByOwner.get(key)!].map((ownerId) => (
+                      <span key={ownerId} className="mf-initialmark">
+                        {initialFor(ownerId)}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </>
             )}
           />
         )}
-        {gymDays.size > 0 && (
+        {gymDaysByOwner.size > 0 && (
           <div className="mf-hint" style={{ opacity: 0.7, marginBottom: 10 }}>
-            青丸はジムに行った日です（種目に「ジム」を含む記録）。
+            青丸の中の文字はジムに行った人です（{me?.profile.slug.slice(0, 1).toUpperCase()}={me?.profile.name}
+            {me?.partner && `、${me.partner.slug.slice(0, 1).toUpperCase()}=${me.partner.name}`}）。種目に「ジム」を含む記録が対象です。
           </div>
         )}
         {dayLogs.length === 0 ? (

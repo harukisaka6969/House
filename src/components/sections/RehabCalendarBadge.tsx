@@ -5,7 +5,8 @@ import { apiGet } from "@/lib/apiClient";
 import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 import PeriodCalendar from "../PeriodCalendar";
 
-/** ハルキの振り返り記録が「ある日」だけを見られる、内容非公開のカレンダー（アリサ側の表示用）。 */
+/** ハルキが「個人の振り返り」または「日記」を記録した日だけを見られる、内容非公開のカレンダー
+ * （アリサ側の表示用）。 */
 export default function RehabCalendarBadge({ date, onSelectDate }: { date: string; onSelectDate: (d: string) => void }) {
   const monthKey = periodKeyOfDate(date);
   const [dates, setDates] = useState<string[] | null>(null);
@@ -23,9 +24,9 @@ export default function RehabCalendarBadge({ date, onSelectDate }: { date: strin
 
   return (
     <div className="mf-panel">
-      <div className="mf-paneltitle">ハルキの振り返り記録（内容は非公開）</div>
+      <div className="mf-paneltitle">ハルキの振り返り・日記の記録（内容は非公開）</div>
       <div className="mf-hint" style={{ opacity: 0.75, marginBottom: 10 }}>
-        赤丸のある日は、ハルキが個人の振り返りを記録した日です。内容は表示されません。
+        赤丸のある日は、ハルキが個人の振り返りまたは日記を記録した日です。内容は表示されません。
       </div>
       <PeriodCalendar
         monthKey={monthKey}
