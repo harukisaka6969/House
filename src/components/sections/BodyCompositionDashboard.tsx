@@ -33,6 +33,18 @@ function fmtDateShort(d: string): string {
   return parts.length === 3 ? `${parts[1]}/${parts[2]}` : d;
 }
 
+/** YYYY-MM-DDを「1970-01-01からの経過日数」に変換する。折れ線グラフのX軸を実際の日付間隔に
+ * 比例させる（記録の間隔が空いている期間は詰めずにその分だけ間延びして見える）ために使う。 */
+function dateToDayNumber(d: string): number {
+  const [y, m, day] = d.split("-").map(Number);
+  return Date.UTC(y, m - 1, day) / 86400000;
+}
+
+function dayNumberToShortLabel(t: number): string {
+  const d = new Date(t * 86400000);
+  return `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 /** 同じ項目が複数回に分けて記録されることがあるため、日付→作成日時の新しい順に探して最新値を拾う。 */
 function findLatest(records: PersonalRecordOut[], label: string): { raw: string; num: number | null } | null {
   const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
@@ -54,7 +66,7 @@ function computeDomain(values: number[]): [number, number] {
   return [round(min - pad), round(max + pad)];
 }
 
-type Point = { date: string; value: number; raw: string };
+type Point = { date: string; t: number; value: number; raw: string };
 
 function buildSeries(records: PersonalRecordOut[], label: string, cutoff: string | null): Point[] {
   const ascending = [...records].sort((a, b) => a.date.localeCompare(b.date));
@@ -63,7 +75,7 @@ function buildSeries(records: PersonalRecordOut[], label: string, cutoff: string
     .map((r) => {
       const m = r.metrics.find((mm) => mm.label === label);
       const value = m ? leadingNumber(m.value) : null;
-      return m && value !== null ? { date: fmtDateShort(r.date), value, raw: m.value } : null;
+      return m && value !== null ? { date: fmtDateShort(r.date), t: dateToDayNumber(r.date), value, raw: m.value } : null;
     })
     .filter((p): p is Point => p !== null);
 }
@@ -336,17 +348,27 @@ export default function BodyCompositionDashboard({ records }: { records: Persona
                   <ResponsiveContainer>
                     <LineChart data={s.points} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
                       <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="date" stroke="#93A0AE" fontSize={10} tickLine={false} axisLine={false} minTickGap={24} />
+                      <XAxis
+                        dataKey="t"
+                        type="number"
+                        domain={["dataMin", "dataMax"]}
+                        tickFormatter={dayNumberToShortLabel}
+                        stroke="#93A0AE"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        minTickGap={24}
+                      />
                       <YAxis domain={domain} stroke="#93A0AE" fontSize={10} tickLine={false} axisLine={false} width={38} tickCount={3} />
                       <Tooltip
                         cursor={{ stroke: "rgba(255,255,255,0.15)" }}
-                        content={({ active, payload, label }) => {
+                        content={({ active, payload }) => {
                           if (!active || !payload || !payload.length) return null;
                           const point = payload[0]?.payload as Point | undefined;
                           if (!point) return null;
                           return (
                             <div style={TT}>
-                              <div style={{ opacity: 0.7, marginBottom: 2 }}>{label}</div>
+                              <div style={{ opacity: 0.7, marginBottom: 2 }}>{point.date}</div>
                               <b>{point.raw}</b>
                             </div>
                           );
