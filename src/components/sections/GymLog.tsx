@@ -37,6 +37,7 @@ export default function GymLog() {
   const [cardioInputs, setCardioInputs] = useState<Record<string, CardioInput>>({});
   const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
+  const [editingLogId, setEditingLogId] = useState<Record<string, string | null>>({});
 
   const load = () => {
     apiGet<{ splits: GymSplitOut[]; exercises: GymExerciseOut[]; logs: GymLogOut[] }>("/api/gym-log")
@@ -136,17 +137,24 @@ export default function GymLog() {
       return;
     }
     setMsg("");
+    const editId = editingLogId[exerciseId];
     try {
-      await apiPost("/api/gym-log/logs", {
-        exercise_id: exerciseId,
-        date: todayStrJST(),
-        sets,
-        note: noteInputs[exerciseId] ?? "",
-        splitLabel: split?.label,
-      });
+      if (editId) {
+        await apiPut(`/api/gym-log/logs/${editId}`, { sets, note: noteInputs[exerciseId] ?? "" });
+        setMsg("✓ 更新しました。");
+      } else {
+        await apiPost("/api/gym-log/logs", {
+          exercise_id: exerciseId,
+          date: todayStrJST(),
+          sets,
+          note: noteInputs[exerciseId] ?? "",
+          splitLabel: split?.label,
+        });
+        setMsg("✓ 記録しました。");
+      }
       setExerciseInputs(exerciseId, [{ ...emptySetInput }]);
       setNoteInputs((m) => ({ ...m, [exerciseId]: "" }));
-      setMsg("✓ 記録しました。");
+      setEditingLogId((m) => ({ ...m, [exerciseId]: null }));
       load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "記録に失敗しました。");
@@ -162,26 +170,59 @@ export default function GymLog() {
       return;
     }
     setMsg("");
+    const editId = editingLogId[exerciseId];
     try {
-      await apiPost("/api/gym-log/logs", {
-        exercise_id: exerciseId,
-        date: todayStrJST(),
-        duration_minutes: duration,
-        distance_km: distance,
-        note: noteInputs[exerciseId] ?? "",
-        splitLabel: split?.label,
-      });
+      if (editId) {
+        await apiPut(`/api/gym-log/logs/${editId}`, {
+          duration_minutes: duration,
+          distance_km: distance,
+          note: noteInputs[exerciseId] ?? "",
+        });
+        setMsg("✓ 更新しました。");
+      } else {
+        await apiPost("/api/gym-log/logs", {
+          exercise_id: exerciseId,
+          date: todayStrJST(),
+          duration_minutes: duration,
+          distance_km: distance,
+          note: noteInputs[exerciseId] ?? "",
+          splitLabel: split?.label,
+        });
+        setMsg("✓ 記録しました。");
+      }
       setCardioInput(exerciseId, { ...emptyCardioInput });
       setNoteInputs((m) => ({ ...m, [exerciseId]: "" }));
-      setMsg("✓ 記録しました。");
+      setEditingLogId((m) => ({ ...m, [exerciseId]: null }));
       load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "記録に失敗しました。");
     }
   };
 
-  const deleteLog = async (id: string) => {
+  const startEditLog = (ex: GymExerciseOut, log: GymLogOut) => {
+    if (ex.type === "cardio") {
+      setCardioInput(ex.id, { duration: log.duration_minutes != null ? String(log.duration_minutes) : "", distance: log.distance_km != null ? String(log.distance_km) : "" });
+    } else {
+      setExerciseInputs(
+        ex.id,
+        log.sets.length > 0 ? log.sets.map((s) => ({ weight: String(s.weight), reps: String(s.reps) })) : [{ ...emptySetInput }]
+      );
+    }
+    setNoteInputs((m) => ({ ...m, [ex.id]: log.note ?? "" }));
+    setEditingLogId((m) => ({ ...m, [ex.id]: log.id }));
+    setMsg("");
+  };
+
+  const cancelEditLog = (exerciseId: string) => {
+    setEditingLogId((m) => ({ ...m, [exerciseId]: null }));
+    setExerciseInputs(exerciseId, [{ ...emptySetInput }]);
+    setCardioInput(exerciseId, { ...emptyCardioInput });
+    setNoteInputs((m) => ({ ...m, [exerciseId]: "" }));
+  };
+
+  const deleteLog = async (exerciseId: string, id: string) => {
     await apiDelete(`/api/gym-log/logs/${id}`);
+    if (editingLogId[exerciseId] === id) cancelEditLog(exerciseId);
     load();
   };
 
@@ -308,10 +349,18 @@ export default function GymLog() {
                               .join(" ")
                           : formatSets(l.sets)}
                         <button
+                          className="mf-iconbtn"
+                          style={{ padding: "0 2px", marginLeft: 4 }}
+                          title="この記録を編集"
+                          onClick={() => startEditLog(ex, l)}
+                        >
+                          編集
+                        </button>
+                        <button
                           className="mf-del"
                           style={{ padding: "0 2px", marginLeft: 2 }}
                           title="この記録を削除"
-                          onClick={() => deleteLog(l.id)}
+                          onClick={() => deleteLog(ex.id, l.id)}
                         >
                           ×
                         </button>
@@ -399,8 +448,13 @@ export default function GymLog() {
                   />
                   <div className="mf-row" style={{ marginTop: 8 }}>
                     <button className="mf-btn primary" onClick={() => (isCardio ? submitCardioLog(ex.id) : submitStrengthLog(ex.id))}>
-                      記録する
+                      {editingLogId[ex.id] ? "更新する" : "記録する"}
                     </button>
+                    {editingLogId[ex.id] && (
+                      <button className="mf-btn ghost" onClick={() => cancelEditLog(ex.id)}>
+                        キャンセル
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

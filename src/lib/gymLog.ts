@@ -115,6 +115,24 @@ export async function createLog(ownerId: string, exerciseId: string, date: strin
   return data as GymLogRow;
 }
 
+export interface GymLogPatch {
+  sets?: GymSetEntry[];
+  durationMinutes?: number | null;
+  distanceKm?: number | null;
+  note?: string;
+}
+
+export async function updateLog(id: string, ownerId: string, patch: GymLogPatch): Promise<GymLogRow | null> {
+  const row: Record<string, unknown> = {};
+  if (patch.sets !== undefined) row.sets = patch.sets;
+  if (patch.durationMinutes !== undefined) row.duration_minutes = patch.durationMinutes;
+  if (patch.distanceKm !== undefined) row.distance_km = patch.distanceKm;
+  if (patch.note !== undefined) row.note = patch.note;
+  const { data, error } = await db().from("gym_logs").update(row).eq("id", id).eq("owner", ownerId).select("*").maybeSingle();
+  if (error) throw error;
+  return data as GymLogRow | null;
+}
+
 export async function deleteLog(id: string, ownerId: string): Promise<boolean> {
   const { data, error } = await db().from("gym_logs").delete().eq("id", id).eq("owner", ownerId).select("id");
   if (error) throw error;
