@@ -338,19 +338,20 @@ export default function GymLog() {
 
                 {exLogs.length > 0 && (
                   <div className="mf-hint" style={{ opacity: 0.6, marginTop: 4 }}>
-                    履歴:{" "}
-                    {exLogs.slice(0, 3).map((l, i) => (
-                      <span key={l.id}>
-                        {i > 0 && " ／ "}
-                        {l.date.slice(5)}:{" "}
-                        {isCardio
-                          ? [l.duration_minutes ? `${l.duration_minutes}分` : null, l.distance_km ? `${l.distance_km}km` : null]
-                              .filter(Boolean)
-                              .join(" ")
-                          : formatSets(l.sets)}
+                    履歴:
+                    {exLogs.slice(0, 3).map((l) => (
+                      <div key={l.id} className="mf-row" style={{ marginTop: 4 }}>
+                        <span>
+                          {l.date.slice(5)}:{" "}
+                          {isCardio
+                            ? [l.duration_minutes ? `${l.duration_minutes}分` : null, l.distance_km ? `${l.distance_km}km` : null]
+                                .filter(Boolean)
+                                .join(" ")
+                            : formatSets(l.sets)}
+                        </span>
                         <button
                           className="mf-iconbtn"
-                          style={{ padding: "0 2px", marginLeft: 4 }}
+                          style={{ width: "auto", height: "auto", padding: "3px 8px", marginLeft: 4, whiteSpace: "nowrap", flex: "0 0 auto", fontSize: 12 }}
                           title="この記録を編集"
                           onClick={() => startEditLog(ex, l)}
                         >
@@ -358,13 +359,13 @@ export default function GymLog() {
                         </button>
                         <button
                           className="mf-del"
-                          style={{ padding: "0 2px", marginLeft: 2 }}
+                          style={{ padding: "0 2px", marginLeft: 2, flex: "0 0 auto" }}
                           title="この記録を削除"
                           onClick={() => deleteLog(ex.id, l.id)}
                         >
                           ×
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
