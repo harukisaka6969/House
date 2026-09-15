@@ -9,7 +9,7 @@ import { TT, fmtTooltip } from "../common";
 import { useDashboard } from "../DashboardContext";
 import type { AnalysisExportResult } from "@/lib/analysisExport";
 
-type Dimension = "category" | "account" | "weekday" | "monthly" | "daily";
+type Dimension = "category" | "account" | "owner" | "weekday" | "monthly" | "daily";
 type ChartType = "bar" | "pie" | "line";
 type Preset = "thisMonth" | "lastMonth" | "3m" | "6m" | "1y" | "all" | "custom";
 type OwnerSel = "all" | "me";
@@ -36,6 +36,7 @@ const STORAGE_KEY = "house.summaryChartConfig.v1";
 const DIMENSION_LABEL: Record<Dimension, string> = {
   category: "カテゴリ別",
   account: "口座別",
+  owner: "誰の支出か別",
   weekday: "曜日別",
   monthly: "月別推移",
   daily: "日別推移",
@@ -44,6 +45,7 @@ const DIMENSION_LABEL: Record<Dimension, string> = {
 const CHART_TYPES_FOR: Record<Dimension, ChartType[]> = {
   category: ["bar", "pie"],
   account: ["bar", "pie"],
+  owner: ["bar", "pie"],
   weekday: ["bar", "pie"],
   monthly: ["bar", "line"],
   daily: ["bar", "line"],
@@ -121,6 +123,8 @@ function pointsFor(config: ChartConfig, result: AnalysisExportResult): Point[] {
       const nameOf = (id: string) => result.meta.accounts.find((a) => a.id === id)?.name.replace(/（.*）/, "") ?? id;
       return result.by_account.map((a) => ({ name: nameOf(a.account), 支出: a.total_all }));
     }
+    case "owner":
+      return result.by_owner.map((o) => ({ name: o.owner_name, 支出: o.total }));
     case "weekday":
       return WEEKDAY_LABELS.map((label, i) => ({ name: label, 支出: result.by_weekday[String(i)] ?? 0 }));
     case "monthly":

@@ -120,6 +120,16 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
     }))
     .sort((a, b) => b.total - a.total);
 
+  // --- by_owner（誰の支出か。ownerがnullは「2人の支出（共通）」。visibleRowsのみ） ---
+  const ownerMap = new Map<string, number>();
+  visibleRows.forEach((e) => {
+    const key = e.owner ?? "shared";
+    ownerMap.set(key, (ownerMap.get(key) ?? 0) + e.amount);
+  });
+  const by_owner = [...ownerMap.entries()]
+    .map(([owner, total]) => ({ owner, owner_name: owner === "shared" ? "共有" : nameOf(owner), total }))
+    .sort((a, b) => b.total - a.total);
+
   // --- by_account (total_all は常に世帯の真値) ---
   const accountsInScope = filters.accountIds ? accounts.filter((a) => filters.accountIds!.has(a.id)) : accounts;
   const by_account = accountsInScope.map((a) => {
@@ -255,6 +265,7 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
     monthly,
     daily: includeDaily ? daily : [],
     by_category,
+    by_owner,
     by_account,
     by_weekday,
     expenses: expensesOut,
