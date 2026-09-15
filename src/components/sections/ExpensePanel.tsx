@@ -96,6 +96,27 @@ export default function ExpensePanel() {
     };
   }, [currency]);
 
+  /** 「誰の支出か」ボタンは、押すたびに毎回サーバーへ送るとテンポよく連打できないので、押した時点では
+   * 画面表示だけ変えて保留しておき、ページ遷移（このパネルが閉じる）か「変更を保存する」ボタンでまとめて送る。 */
+  const [pendingOwner, setPendingOwner] = useState<Record<string, string | null>>({});
+  const pendingOwnerRef = useRef(pendingOwner);
+  useEffect(() => {
+    pendingOwnerRef.current = pendingOwner;
+  }, [pendingOwner]);
+
+  // ページ遷移（このパネルがアンマウントされる）時に、保留中の変更を保存してから離れる。
+  useEffect(() => {
+    return () => {
+      const entries = Object.entries(pendingOwnerRef.current);
+      if (entries.length > 0) {
+        Promise.all(entries.map(([id, owner]) => apiPut(`/api/expenses/${id}/owner`, { owner })))
+          .then(() => refreshMonth())
+          .catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!month) return null;
 
   const isForeign = currency !== "JPY" && currency.trim().length === 3;
@@ -435,14 +456,29 @@ export default function ExpensePanel() {
     refreshMonth();
   };
 
-  /** 「誰の支出か」を入力後に付け替える。すでにその人になっていれば押し直すと「2人の支出（共通）」に戻す。 */
-  const setExpenseOwner = async (id: string, owner: string | null) => {
+  const flushOwnerChanges = async (entries: [string, string | null][]) => {
+    if (entries.length === 0) return;
     try {
-      await apiPut(`/api/expenses/${id}/owner`, { owner });
+      await Promise.all(entries.map(([id, owner]) => apiPut(`/api/expenses/${id}/owner`, { owner })));
+      setPendingOwner({});
       refreshMonth();
     } catch {
-      setMsg("誰の支出かの変更に失敗しました。");
+      setMsg("誰の支出かの変更の保存に失敗しました。");
     }
+  };
+
+  /** 「誰の支出か」を入力後に付け替える。すでにその人になっていれば押し直すと「2人の支出（共通）」に戻す。
+   * ここでは画面表示（pendingOwner）だけ更新し、実際の保存はflushOwnerChangesにまとめて任せる。 */
+  const stageExpenseOwner = (id: string, owner: string | null) => {
+    setPendingOwner((m) => ({ ...m, [id]: owner }));
+  };
+
+  const ownerNameOfExpense = (e: { id: string; owner_name: string }): string => {
+    if (!(e.id in pendingOwner)) return e.owner_name;
+    const owner = pendingOwner[e.id];
+    if (owner === meId) return meName;
+    if (owner === partnerId) return partnerName;
+    return "共有";
   };
 
   const startEdit = (e: { id: string; date: string; account_id: string; category: string; sub: string | null; amount: number; memo: string }) => {
@@ -893,6 +929,18 @@ export default function ExpensePanel() {
           </div>
         )}
 
+        {Object.keys(pendingOwner).length > 0 && (
+          <div className="mf-row" style={{ marginBottom: 8, background: "#181E25", border: "1px solid rgba(245,165,36,0.4)", borderRadius: 8, padding: "8px 10px" }}>
+            <span className="mf-hint" style={{ margin: 0 }}>
+              「誰の支出か」の変更が{Object.keys(pendingOwner).length}件未保存です（ページを離れると自動保存されます）。
+            </span>
+            <span style={{ flex: 1 }} />
+            <button className="mf-btn primary" style={{ padding: "4px 12px" }} onClick={() => flushOwnerChanges(Object.entries(pendingOwner))}>
+              変更を保存する
+            </button>
+          </div>
+        )}
+
         {sorted.length === 0 ? (
           <div className="mf-empty">まだ支出がありません。上のフォームかレシート写真から追加できます。</div>
         ) : (
@@ -981,7 +1029,7 @@ export default function ExpensePanel() {
                     {e.category}
                     {e.sub ? `（${e.sub}）` : ""}
                   </span>
-                  {e.owner_name !== meName && <span className="mf-ownerchip">{e.owner_name}</span>}
+                  {ownerNameOfExpense(e) !== meName && <span className="mf-ownerchip">{ownerNameOfExpense(e)}</span>}
                   <span className="mf-listmemo">{e.memo}</span>
                   <span className="mf-mono mf-listamt">
                     {fmt(e.amount)}
@@ -997,24 +1045,25 @@ export default function ExpensePanel() {
                     </span>
                     {meId && (
                       <button
-                        className={"mf-chipbtn" + (e.owner_name === meName ? " on" : "")}
+                        className={"mf-chipbtn" + (ownerNameOfExpense(e) === meName ? " on" : "")}
                         style={{ padding: "2px 8px", fontSize: 11 }}
                         title={`${meName}の支出にする（もう一度押すと2人の支出に戻る）`}
-                        onClick={() => setExpenseOwner(e.id, e.owner_name === meName ? null : meId)}
+                        onClick={() => stageExpenseOwner(e.id, ownerNameOfExpense(e) === meName ? null : meId)}
                       >
                         {meName}
                       </button>
                     )}
                     {partnerId && (
                       <button
-                        className={"mf-chipbtn" + (e.owner_name === partnerName ? " on" : "")}
+                        className={"mf-chipbtn" + (ownerNameOfExpense(e) === partnerName ? " on" : "")}
                         style={{ padding: "2px 8px", fontSize: 11 }}
                         title={`${partnerName}の支出にする（もう一度押すと2人の支出に戻る）`}
-                        onClick={() => setExpenseOwner(e.id, e.owner_name === partnerName ? null : partnerId)}
+                        onClick={() => stageExpenseOwner(e.id, ownerNameOfExpense(e) === partnerName ? null : partnerId)}
                       >
                         {partnerName}
                       </button>
                     )}
+                    {e.id in pendingOwner && <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>（未保存）</span>}
                     <span style={{ flex: 1 }} />
                     <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
                       編集
