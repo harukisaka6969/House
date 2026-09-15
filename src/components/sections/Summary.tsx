@@ -8,6 +8,7 @@ import { apiGet } from "@/lib/apiClient";
 import type { UpcomingSummary, TrendPoint } from "@/lib/apiTypes";
 import { SectionHead, StatCard, TT, fmtTooltip, MoneyViewToggle } from "../common";
 import { useDashboard } from "../DashboardContext";
+import SummaryChartBuilder from "./SummaryChartBuilder";
 
 function dsub(cur: number, pv: number | null | undefined): string | null {
   if (pv == null) return null;
@@ -135,6 +136,7 @@ export default function Summary() {
           </div>
         </div>
       )}
+      <SummaryChartBuilder />
     </section>
   );
 }
