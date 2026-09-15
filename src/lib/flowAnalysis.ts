@@ -131,7 +131,7 @@ export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: str
         date: r.date,
         name: r.memo || r.category,
         amount: r.amount,
-        ownerName: nameOf(r.owner),
+        ownerName: r.owner ? nameOf(r.owner) : "共有",
       })),
   ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 

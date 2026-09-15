@@ -17,6 +17,9 @@ const SPLIT_RECENT_LIMIT = 5;
 export default function ExpensePanel() {
   const { month, monthKey, allCats, refreshMonth, refreshSettings, me, ownerFilter } = useDashboard();
   const meName = me?.profile.name ?? "";
+  const meId = me?.profile.id ?? null;
+  const partnerName = me?.partner?.name ?? "";
+  const partnerId = me?.partner?.id ?? null;
   const filterName = ownerFilterName(me, ownerFilter);
   const accounts = month?.aggregates.perAccount ?? [];
   const [entryMode, setEntryMode] = useState<"expense" | "income">("expense");
@@ -430,6 +433,16 @@ export default function ExpensePanel() {
   const deleteExpense = async (id: string) => {
     await apiDelete(`/api/expenses/${id}`);
     refreshMonth();
+  };
+
+  /** 「誰の支出か」を入力後に付け替える。すでにその人になっていれば押し直すと「2人の支出（共通）」に戻す。 */
+  const setExpenseOwner = async (id: string, owner: string | null) => {
+    try {
+      await apiPut(`/api/expenses/${id}/owner`, { owner });
+      refreshMonth();
+    } catch {
+      setMsg("誰の支出かの変更に失敗しました。");
+    }
   };
 
   const startEdit = (e: { id: string; date: string; account_id: string; category: string; sub: string | null; amount: number; memo: string }) => {
@@ -953,7 +966,7 @@ export default function ExpensePanel() {
                 );
               }
               return (
-                <div key={e.id} className="mf-listrow">
+                <div key={e.id} className="mf-listrow" style={{ flexWrap: "wrap" }}>
                   {bulkMode && (
                     <input
                       type="checkbox"
@@ -978,12 +991,38 @@ export default function ExpensePanel() {
                       </span>
                     )}
                   </span>
-                  <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
-                    編集
-                  </button>
-                  <button className="mf-del" onClick={() => deleteExpense(e.id)}>
-                    ×
-                  </button>
+                  <div className="mf-row" style={{ flexBasis: "100%", marginTop: 4, gap: 4 }}>
+                    <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>
+                      誰の支出か:
+                    </span>
+                    {meId && (
+                      <button
+                        className={"mf-chipbtn" + (e.owner_name === meName ? " on" : "")}
+                        style={{ padding: "2px 8px", fontSize: 11 }}
+                        title={`${meName}の支出にする（もう一度押すと2人の支出に戻る）`}
+                        onClick={() => setExpenseOwner(e.id, e.owner_name === meName ? null : meId)}
+                      >
+                        {meName}
+                      </button>
+                    )}
+                    {partnerId && (
+                      <button
+                        className={"mf-chipbtn" + (e.owner_name === partnerName ? " on" : "")}
+                        style={{ padding: "2px 8px", fontSize: 11 }}
+                        title={`${partnerName}の支出にする（もう一度押すと2人の支出に戻る）`}
+                        onClick={() => setExpenseOwner(e.id, e.owner_name === partnerName ? null : partnerId)}
+                      >
+                        {partnerName}
+                      </button>
+                    )}
+                    <span style={{ flex: 1 }} />
+                    <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
+                      編集
+                    </button>
+                    <button className="mf-del" onClick={() => deleteExpense(e.id)}>
+                      ×
+                    </button>
+                  </div>
                 </div>
               );
             })}

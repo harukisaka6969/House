@@ -4,6 +4,7 @@ import { businessDateJST, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
 import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import { VALID_ACCOUNT_IDS } from "./constants";
+import { isMaskedForViewer } from "./aggregate";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
@@ -167,6 +168,21 @@ export async function updateExpense(id: string, ownerId: string, patch: ExpenseP
   if (patch.sub !== undefined) update.sub = patch.sub?.trim() || null;
 
   const { data, error } = await db().from("expenses").update(update).eq("id", id).eq("owner", ownerId).select("*").single();
+  if (error) throw error;
+  return data as ExpenseRow;
+}
+
+/** 「誰の支出か」の後付けタグ変更。入力した本人でなくても、自分から見えている記録（相手の第3口座の
+ * 非公開分を除く）なら付け替えられる — 第1口座は入力者と実際の支出主が一致するとは限らないため。
+ * newOwner=nullは「2人の支出（共通）」を表す。自分から見えない記録（相手の第3口座）は404扱いにする。 */
+export async function updateExpenseOwner(id: string, callerId: string, newOwner: string | null): Promise<ExpenseRow | null> {
+  const { data: current, error: selErr } = await db().from("expenses").select("id, owner, account_id").eq("id", id).maybeSingle();
+  if (selErr) throw selErr;
+  if (!current) return null;
+  const row = current as Pick<ExpenseRow, "id" | "owner" | "account_id">;
+  if (isMaskedForViewer(row, callerId)) return null;
+
+  const { data, error } = await db().from("expenses").update({ owner: newOwner }).eq("id", id).select("*").single();
   if (error) throw error;
   return data as ExpenseRow;
 }

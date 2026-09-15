@@ -17,10 +17,11 @@ export interface Profile {
   role: ProfileRole;
 }
 
-/** Raw expense row as stored in the DB (owner's own view — never masked). */
+/** Raw expense row as stored in the DB (owner's own view — never masked). ownerがnullなのは
+ * 「2人の支出（共通）」— 誰か一方の記録ではないことを表す（初期値。入力後にボタンで割り当てる）。 */
 export interface ExpenseRow {
   id: string;
-  owner: string;
+  owner: string | null;
   date: string; // YYYY-MM-DD
   account_id: AccountId;
   category: string;

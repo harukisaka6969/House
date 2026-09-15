@@ -10,7 +10,7 @@ import type { Account, AccountAggregate, ExpenseOut, ExpenseRow, IncomeRow, Inve
  * naive client that ignores `masked` still can't recover the values.
  */
 export function isMaskedForViewer(row: Pick<ExpenseRow, "account_id" | "owner">, viewerProfileId: string): boolean {
-  return row.account_id === PRIVATE_ACCOUNT && row.owner !== viewerProfileId;
+  return row.account_id === PRIVATE_ACCOUNT && row.owner !== null && row.owner !== viewerProfileId;
 }
 
 export function maskExpenseRow(
@@ -26,12 +26,13 @@ export function maskExpenseRow(
   return { ...rest, owner_name: ownerName, masked: false };
 }
 
+/** ownerがnullの支出は、どちらか一方の記録ではなく「2人の支出（共通）」として扱う（spec上のowner_nameは"共有"）。 */
 export function maskExpenses(
   rows: ExpenseRow[],
   viewerProfileId: string,
   ownerNameOf: (profileId: string) => string
 ): ExpenseOut[] {
-  return rows.map((r) => maskExpenseRow(r, viewerProfileId, ownerNameOf(r.owner)));
+  return rows.map((r) => maskExpenseRow(r, viewerProfileId, r.owner ? ownerNameOf(r.owner) : "共有"));
 }
 
 /** Rows usable for aggregation that must exclude the partner's private-account spending. */

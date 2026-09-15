@@ -162,9 +162,9 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
             sub: e.sub,
             amount: e.amount,
             memo: e.memo,
-            owner: nameOf(e.owner),
+            owner: e.owner ? nameOf(e.owner) : "共有",
           })),
-          ...maskedRows.map((e) => ({ account: e.account_id, category: e.category, owner: nameOf(e.owner), masked: true as const })),
+          ...maskedRows.map((e) => ({ account: e.account_id, category: e.category, owner: e.owner ? nameOf(e.owner) : "共有", masked: true as const })),
         ]
       : []
     : [];
