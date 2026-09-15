@@ -32,6 +32,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     const patch = patchSchema.parse(await req.json());
     const allCats = await getAllCategories();
     const expense = await updateExpense(id, session.profile_id, patch, allCats);
+    if (!expense) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({ expense });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });

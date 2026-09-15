@@ -88,7 +88,9 @@ async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise
   };
 }
 
-/** Adds one or more expenses for `ownerId`, applying the §7 "その他"→カスタムカテゴリ promotion rule atomically via a DB function.
+/** 支出を追加する。§7 "その他"→カスタムカテゴリ昇格ルールをDB関数内でアトミックに適用する。
+ * 支出自体は「誰の支出か」未指定（owner=null、2人の支出）で登録される — 何のボタンも押していない
+ * 標準状態は家族全員の支出として扱う。`ownerId`は品目履歴（検索専用）の記録者としてのみ使う。
  * 戻り値のentriesは実際に円換算された最終金額を含む（外貨入力時の確認メッセージ表示などに使う）。 */
 export async function addExpenseEntries(
   ownerId: string,
@@ -132,8 +134,21 @@ export async function addExpenseEntries(
   return { promoted, entries: prepared };
 }
 
-export async function deleteExpense(id: string, ownerId: string): Promise<boolean> {
-  const { data, error } = await db().from("expenses").delete().eq("id", id).eq("owner", ownerId).select("id");
+/** 支出はowner未指定（＝2人の支出）が初期状態なので、編集・削除・付け替えの権限は「入力した本人か」
+ * ではなく「自分から見えているか」（相手の第3口座の非公開分でないか）で判定する。見えない記録は
+ * 呼び出し元でnull/false（=404扱い）として扱う。 */
+async function assertVisibleExpense(id: string, callerId: string): Promise<Pick<ExpenseRow, "id" | "owner" | "account_id"> | null> {
+  const { data, error } = await db().from("expenses").select("id, owner, account_id").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as Pick<ExpenseRow, "id" | "owner" | "account_id">;
+  if (isMaskedForViewer(row, callerId)) return null;
+  return row;
+}
+
+export async function deleteExpense(id: string, callerId: string): Promise<boolean> {
+  if (!(await assertVisibleExpense(id, callerId))) return false;
+  const { data, error } = await db().from("expenses").delete().eq("id", id).select("id");
   if (error) throw error;
   return (data?.length ?? 0) > 0;
 }
@@ -148,7 +163,9 @@ export interface ExpensePatch {
 }
 
 /** 既存の支出（日記由来含む）を部分更新する。渡されたフィールドのみ検証・反映。 */
-export async function updateExpense(id: string, ownerId: string, patch: ExpensePatch, allCats: string[]): Promise<ExpenseRow> {
+export async function updateExpense(id: string, callerId: string, patch: ExpensePatch, allCats: string[]): Promise<ExpenseRow | null> {
+  if (!(await assertVisibleExpense(id, callerId))) return null;
+
   const update: Record<string, unknown> = {};
   if (patch.account_id !== undefined) {
     if (!VALID_ACCOUNTS.includes(patch.account_id as AccountId)) throw new ValidationError(`invalid account_id: ${patch.account_id}`);
@@ -167,20 +184,14 @@ export async function updateExpense(id: string, ownerId: string, patch: ExpenseP
   if (patch.memo !== undefined) update.memo = patch.memo.trim();
   if (patch.sub !== undefined) update.sub = patch.sub?.trim() || null;
 
-  const { data, error } = await db().from("expenses").update(update).eq("id", id).eq("owner", ownerId).select("*").single();
+  const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
   if (error) throw error;
   return data as ExpenseRow;
 }
 
-/** 「誰の支出か」の後付けタグ変更。入力した本人でなくても、自分から見えている記録（相手の第3口座の
- * 非公開分を除く）なら付け替えられる — 第1口座は入力者と実際の支出主が一致するとは限らないため。
- * newOwner=nullは「2人の支出（共通）」を表す。自分から見えない記録（相手の第3口座）は404扱いにする。 */
+/** 「誰の支出か」の後付けタグ変更。newOwner=nullは「2人の支出（共通）」を表す。 */
 export async function updateExpenseOwner(id: string, callerId: string, newOwner: string | null): Promise<ExpenseRow | null> {
-  const { data: current, error: selErr } = await db().from("expenses").select("id, owner, account_id").eq("id", id).maybeSingle();
-  if (selErr) throw selErr;
-  if (!current) return null;
-  const row = current as Pick<ExpenseRow, "id" | "owner" | "account_id">;
-  if (isMaskedForViewer(row, callerId)) return null;
+  if (!(await assertVisibleExpense(id, callerId))) return null;
 
   const { data, error } = await db().from("expenses").update({ owner: newOwner }).eq("id", id).select("*").single();
   if (error) throw error;
