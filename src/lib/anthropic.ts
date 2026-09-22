@@ -1061,3 +1061,72 @@ export async function searchProductImageByName(name: string, ownerId?: string): 
     return null;
   }
 }
+
+export interface ParkingOption {
+  type: string;
+  name: string;
+  estimated_cost: number;
+  walk_minutes: number | null;
+  notes: string;
+  timing_advice: string | null;
+}
+
+export interface ParkingResearch {
+  destination: string;
+  options: ParkingOption[];
+  general_notes: string;
+}
+
+/** 車移動用: 目的地・滞在時間から、コスパの良い駐車方法をWeb検索で複数パターン調べる。
+ * 徒歩を混ぜる／買い物で駐車券が出るショッピングセンター／無料駐車場（条件つき含む）／
+ * 公式ではないが実質無料で停められそうな場所／時間帯で料金が変わる駐車場の出庫・入庫タイミング、
+ * といった観点を1回のリクエストでまとめて調べさせる。検索結果が古い・不確かな場合はnotesにその旨が入る。 */
+export async function researchParkingOptions(destination: string, date: string, startTime: string, endTime: string): Promise<ParkingResearch> {
+  const res = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 2500,
+    messages: [
+      {
+        role: "user",
+        content: `あなたは駐車場代を節約するための実用的なアドバイザーです。次の外出予定について、Web検索で実在する駐車場情報を調べ、コストパフォーマンスの良い駐車方法を複数パターン提案してください。
+
+目的地: ${destination}
+日時: ${date} ${startTime}〜${endTime}（この滞在時間で実際にかかる料金を計算すること）
+
+含めてほしい観点（目的地の状況に応じて該当するものだけでよい。無理に全種類そろえなくてよい）:
+1. 少し離れた安い駐車場・無料駐車場に停めて徒歩を組み合わせる方法（目的地までの徒歩時間の目安つき）
+2. 一定額の買い物で駐車券が無料・割引になるショッピングセンター等（何円以上買えば何時間無料になるか、具体的な金額を明記）
+3. 完全に無料の駐車場（時間制限があれば明記）
+4. 公式な有料駐車場ではないが、実質無料または非常に安く停められそうな場所（コインパーキングの短時間無料枠など）。法的・マナー上のリスクや不確実性がある場合は必ずnotesに明記すること
+5. 時間帯によって料金や上限額が変わる駐車場。この場合、何時までに出庫すべき・何時以降に入庫すべきかをtiming_adviceに具体的に書くこと
+
+各選択肢のestimated_costは、上記の滞在時間で実際にかかる金額の目安（円、整数）。不確かでも一般的な相場から妥当な推定値を必ず入れること（0にしない）。検索で得た情報が古い・不確かな場合はnotesにその旨を書くこと。
+
+次のJSON形式のみを返してください。前置き・コードブロック不要。
+{"destination":"目的地名","options":[{"type":"分類の短い名前（例: 徒歩併用/買い物で割引/無料/実質無料/時間帯で有利）","name":"駐車場名やエリア名","estimated_cost":0,"walk_minutes":null,"notes":"詳細・注意点","timing_advice":null}],"general_notes":"全体を通しての補足（あれば）"}`,
+      },
+    ],
+    tools: [{ type: "web_search_20260209", name: "web_search" }],
+  });
+  const raw = stripFence(joinText(res.content));
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("駐車場情報を取得できませんでした。");
+  const parsed = JSON.parse(jsonMatch[0]) as { destination?: unknown; options?: unknown; general_notes?: unknown };
+  const options: ParkingOption[] = Array.isArray(parsed.options)
+    ? parsed.options
+        .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")
+        .map((o) => ({
+          type: typeof o.type === "string" ? o.type : "駐車方法",
+          name: typeof o.name === "string" ? o.name : "",
+          estimated_cost: Number(o.estimated_cost) || 0,
+          walk_minutes: typeof o.walk_minutes === "number" ? o.walk_minutes : null,
+          notes: typeof o.notes === "string" ? o.notes : "",
+          timing_advice: typeof o.timing_advice === "string" ? o.timing_advice : null,
+        }))
+    : [];
+  return {
+    destination: typeof parsed.destination === "string" ? parsed.destination : destination,
+    options,
+    general_notes: typeof parsed.general_notes === "string" ? parsed.general_notes : "",
+  };
+}
