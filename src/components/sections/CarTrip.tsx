@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
@@ -29,6 +29,14 @@ export default function CarTrip() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState<ParkingResearch | null>(null);
+  const [progress, setProgress] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopProgress = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  };
+  useEffect(() => stopProgress, []);
 
   const search = async () => {
     if (!destination.trim()) {
@@ -42,6 +50,17 @@ export default function CarTrip() {
     setBusy(true);
     setErr("");
     setResult(null);
+
+    // サーバーからの進捗は取れないので、経過時間から見込みの進捗を出す（30秒で約85%、
+    // 頭打ちは95%。実際に返ってきた時点で100%にする）。
+    setProgress(0);
+    const startedAt = Date.now();
+    stopProgress();
+    timerRef.current = setInterval(() => {
+      const elapsedSec = (Date.now() - startedAt) / 1000;
+      setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 13))));
+    }, 300);
+
     try {
       const { result: r } = await apiPost<{ result: ParkingResearch }>("/api/car-trip/parking", {
         destination: destination.trim(),
@@ -53,6 +72,8 @@ export default function CarTrip() {
     } catch {
       setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
     }
+    stopProgress();
+    setProgress(100);
     setBusy(false);
   };
 
@@ -101,6 +122,16 @@ export default function CarTrip() {
         <button className="mf-btn primary" style={{ marginTop: 10 }} disabled={busy} onClick={search}>
           {busy ? "検索中…（30秒ほどかかります）" : "コスパの良い駐車方法を調べる"}
         </button>
+        {busy && (
+          <>
+            <div className="mf-bar">
+              <div className="mf-barfill" style={{ width: `${progress}%`, background: "#4C9AFF" }} />
+            </div>
+            <div className="mf-numsub mf-mono" style={{ marginTop: 4 }}>
+              {progress}%
+            </div>
+          </>
+        )}
         {err && <div className="mf-hint" style={{ color: "#F26D5F" }}>{err}</div>}
       </div>
 
