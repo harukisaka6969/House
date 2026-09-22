@@ -3,8 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { fetchOgImage } from "./ogImage";
 import { rateLimit } from "./rateLimit";
 
-// spec §2 / §8: サーバー側で claude-sonnet-4-6 を呼ぶ（現行版から踏襲）。
-const MODEL = "claude-sonnet-4-6";
+// spec §2 / §8: サーバー側でClaudeを呼ぶ。旧モデルID（claude-sonnet-4-6）がAnthropic側で
+// 廃止され、LINEの写真・文章読み取りなど全てのAI機能が一斉に失敗するようになったため、
+// 現行のSonnetモデルに更新した。
+const MODEL = "claude-sonnet-5";
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
