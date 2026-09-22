@@ -63,7 +63,7 @@ export default function CarTrip() {
       <SectionHead
         no="30"
         title="車移動"
-        sub="行き先と時間帯を入力すると、コスパの良い駐車方法をAIがWeb検索して複数パターン提案します。"
+        sub="行き先と時間帯を入力すると、徒歩や電車・バスとの組み合わせも含め、コスパの良い駐車方法をAIがWeb検索して複数パターン提案します。"
       />
 
       <div className="mf-panel">
