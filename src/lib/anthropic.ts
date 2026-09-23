@@ -325,7 +325,7 @@ export async function classifyLinePhoto(base64: string, mediaType: string): Prom
           { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
           {
             type: "text",
-            text: "この画像は「食事・料理の写真」「レシート・領収書」「Amazon等の通販サイトの注文詳細・注文履歴のスクリーンショット」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。meal / receipt / amazon_order / gym / other のいずれか1単語のみを返してください。",
+            text: "この画像は「食事・料理の写真、または食べる市販食品のパッケージ・栄養成分表示ラベルの写真（缶詰・お菓子・飲料・プロテイン等）」「レシート・領収書」「Amazon等の通販サイトの注文詳細・注文履歴のスクリーンショット」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。商品パッケージに栄養成分表示が写っている場合はmealです（レシートと混同しないこと）。meal / receipt / amazon_order / gym / other のいずれか1単語のみを返してください。",
           },
         ],
       },
@@ -527,7 +527,7 @@ export async function extractIncomeFromText(text: string): Promise<ParsedIncomeE
 export async function estimateMealNutrition(base64: string, mediaType: string): Promise<MealEstimate> {
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 500,
+    max_tokens: 1200,
     messages: [
       {
         role: "user",
@@ -535,12 +535,16 @@ export async function estimateMealNutrition(base64: string, mediaType: string): 
           { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
           {
             type: "text",
-            text: `この食事の写真から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
-{"description":"料理名や内容の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}`,
+            text: `この写真から、食べた（食べる）ものの内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。
+市販食品のパッケージや栄養成分表示ラベルが写っている場合は、推測ではなくラベルに印字された数値をそのまま読み取ってください。「1缶当たり」「1袋当たり」ならその数値をそのまま使い、「100g当たり」表記で内容量が別に書かれている場合は内容量分に換算してください。descriptionには商品名（例:「シーチキンマイルド1缶」）を入れてください。
+ラベルの数値が読み取れない市販商品の場合は、Web検索でその商品の栄養成分を調べてから数値を出してください。
+次のJSONのみを返してください。前置きやコードブロックは不要です。
+{"description":"料理名・商品名の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}`,
           },
         ],
       },
     ],
+    tools: [{ type: "web_search_20260209", name: "web_search" }],
   });
   const text = stripFence(joinText(res.content));
   return JSON.parse(text) as MealEstimate;
