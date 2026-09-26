@@ -1087,43 +1087,61 @@ export interface ParkingResearch {
   general_notes: string;
 }
 
-/** 車移動用: 目的地・滞在時間から、コスパの良い駐車方法をWeb検索で複数パターン調べる。
- * 徒歩を混ぜる／電車・バスを混ぜる（パークアンドライド的な乗り換え）／買い物で駐車券が出る
- * ショッピングセンター／無料駐車場（条件つき含む）／公式ではないが実質無料で停められそうな場所／
- * 時間帯で料金が変わる駐車場の出庫・入庫タイミング、といった観点を1回のリクエストでまとめて調べさせる。
- * 検索結果が古い・不確かな場合はnotesにその旨が入る。 */
-export async function researchParkingOptions(destination: string, date: string, startTime: string, endTime: string): Promise<ParkingResearch> {
+/** 車移動用: 目的地・滞在時間から、コスパの良い移動・駐車方法を複数パターン提案する。
+ * 徒歩を混ぜる／パークアンドライド／電車だけで行く／買い物で駐車券が出るショッピングセンター／
+ * 無料駐車場（条件つき含む）／公式ではないが実質無料で停められそうな場所／時間帯で料金が変わる
+ * 駐車場の出庫・入庫タイミング、という観点で出す。
+ *
+ * mode="quick" はWeb検索なしでAIの知識だけから即答する（数秒。画面にまず出す用）。
+ * mode="detailed" はWeb検索ありで実在の料金を確認する（遅いので検索回数を絞り、出力も短めにする）。
+ * 画面側は両方を同時に投げ、quickが返った時点で表示し、detailedが返ったら差し替える。 */
+export async function researchParkingOptions(input: {
+  destination: string;
+  origin: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  mode: "quick" | "detailed";
+}): Promise<ParkingResearch> {
+  const { destination, origin, date, startTime, endTime, mode } = input;
+  const detailed = mode === "detailed";
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 2500,
+    max_tokens: detailed ? 1800 : 1200,
     messages: [
       {
         role: "user",
-        content: `あなたは駐車場代を節約するための実用的なアドバイザーです。次の外出予定について、Web検索で実在する駐車場・交通情報を調べ、コストパフォーマンスの良い移動・駐車方法を複数パターン提案してください。
+        content: `あなたは駐車場代を節約するための実用的なアドバイザーです。次の外出予定について、コストパフォーマンスの良い移動・駐車方法を提案してください。
+${
+  detailed
+    ? "Web検索で実在する駐車場・交通情報を確認してください。ただし時間をかけすぎないこと: 検索は最大3回までにまとめ、1回の検索で複数の情報をまとめて拾うようにしてください。"
+    : "Web検索はせず、あなたの知識だけから素早く答えてください（速さ優先の暫定回答です）。料金は一般的な相場からの推定でよく、notesの末尾に「相場からの概算」と書いてください。"
+}
 
 目的地: ${destination}
+${origin ? `出発地: ${origin}（電車・バスの経路と運賃はここからの往復で計算）` : "出発地: 未指定（電車・バスの運賃は目的地周辺の一般的な区間から概算し、notesに「出発地未指定のため概算」と書く）"}
 日時: ${date} ${startTime}〜${endTime}（この滞在時間で実際にかかる料金を計算すること）
 
-含めてほしい観点（目的地の状況に応じて該当するものだけでよい。無理に全種類そろえなくてよい）:
+観点（目的地の状況に応じて該当するものだけでよい。3〜5個に絞ること）:
 1. 少し離れた安い駐車場・無料駐車場に停めて徒歩を組み合わせる方法（目的地までの徒歩時間の目安つき）
-2. 目的地から離れた駅・バス停の近くの安い/無料駐車場に停めて、そこから電車やバスに乗り換えて移動する方法（パークアンドライド）。estimated_costには駐車料金と往復の運賃を合算した金額を入れ、notesに乗り換え駅・路線名・所要時間の目安を書くこと
-3. 一定額の買い物で駐車券が無料・割引になるショッピングセンター等（何円以上買えば何時間無料になるか、具体的な金額を明記）
-4. 完全に無料の駐車場（時間制限があれば明記）
-5. 公式な有料駐車場ではないが、実質無料または非常に安く停められそうな場所（コインパーキングの短時間無料枠など）。法的・マナー上のリスクや不確実性がある場合は必ずnotesに明記すること
-6. 時間帯によって料金や上限額が変わる駐車場。この場合、何時までに出庫すべき・何時以降に入庫すべきかをtiming_adviceに具体的に書くこと
+2. 目的地から離れた駅・バス停の近くの安い/無料駐車場に停めて、そこから電車やバスに乗り換える方法（パークアンドライド）。estimated_costは駐車料金＋往復運賃の合計。notesに乗換駅・路線名・所要時間の目安を書く
+3. そもそも車を使わず、自宅から電車・バスだけで行く方法。estimated_costは往復運賃。notesに主な経路と所要時間の目安を書く（駐車場代0円との比較用）
+4. 一定額の買い物で駐車券が無料・割引になるショッピングセンター等（何円以上で何時間無料か明記）
+5. 完全に無料の駐車場（時間制限があれば明記）
+6. 公式な有料駐車場ではないが、実質無料または非常に安く停められそうな場所。法的・マナー上のリスクや不確実性は必ずnotesに明記
+7. 時間帯によって料金や上限額が変わる駐車場。何時までに出庫すべき・何時以降に入庫すべきかをtiming_adviceに書く
 
-各選択肢のestimated_costは、上記の滞在時間で実際にかかる金額の目安（円、整数。電車・バスを使う場合は運賃込み）。不確かでも一般的な相場から妥当な推定値を必ず入れること（0にしない）。検索で得た情報が古い・不確かな場合はnotesにその旨を書くこと。
+estimated_costは上記の滞在時間で実際にかかる金額の目安（円、整数。電車・バスを使う場合は運賃込み）。不確かでも相場から妥当な推定値を必ず入れること（0にしない。ただし「車を使わない」案の駐車場代は0円扱いでよい）。notesは80字以内で簡潔に。
 
 次のJSON形式のみを返してください。前置き・コードブロック不要。
-{"destination":"目的地名","options":[{"type":"分類の短い名前（例: 徒歩併用/電車・バス併用/買い物で割引/無料/実質無料/時間帯で有利）","name":"駐車場名やエリア名（電車・バス併用なら乗換駅名も含める）","estimated_cost":0,"walk_minutes":null,"notes":"詳細・注意点","timing_advice":null}],"general_notes":"全体を通しての補足（あれば）"}`,
+{"destination":"目的地名","options":[{"type":"分類の短い名前（例: 徒歩併用/パークアンドライド/電車のみ/買い物で割引/無料/実質無料/時間帯で有利）","name":"駐車場名やエリア名（乗換を使うなら駅名も含める）","estimated_cost":0,"walk_minutes":null,"notes":"詳細・注意点","timing_advice":null}],"general_notes":"全体の補足（任意・40字以内）"}`,
       },
     ],
-    tools: [{ type: "web_search_20260209", name: "web_search" }],
+    ...(detailed ? { tools: [{ type: "web_search_20260209" as const, name: "web_search", max_uses: 3 }] } : {}),
   });
-  const raw = stripFence(joinText(res.content));
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("駐車場情報を取得できませんでした。");
-  const parsed = JSON.parse(jsonMatch[0]) as { destination?: unknown; options?: unknown; general_notes?: unknown };
+  const parsedRaw = extractJsonObject(joinText(res.content));
+  if (!parsedRaw || typeof parsedRaw !== "object") throw new Error("駐車場情報を取得できませんでした。");
+  const parsed = parsedRaw as { destination?: unknown; options?: unknown; general_notes?: unknown };
   const options: ParkingOption[] = Array.isArray(parsed.options)
     ? parsed.options
         .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")

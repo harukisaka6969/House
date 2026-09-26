@@ -21,16 +21,32 @@ interface ParkingResearch {
   general_notes: string;
 }
 
+const ORIGIN_KEY = "house.carTrip.origin";
+
 export default function CarTrip() {
   const [destination, setDestination] = useState("");
+  /** 電車・バスの経路と運賃を出すために必要な出発地。毎回打つのは面倒なので前回の値を覚えておく。 */
+  const [origin, setOrigin] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return localStorage.getItem(ORIGIN_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [date, setDate] = useState(todayStrJST());
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("12:00");
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [result, setResult] = useState<ParkingResearch | null>(null);
+  /** quick=Web検索なしの暫定表示、detailed=Web検索で確認済み。 */
+  const [resultMode, setResultMode] = useState<"quick" | "detailed" | null>(null);
+  /** idle→loading（まだ何も出ていない）→quick（暫定表示中・検索継続）→done。 */
+  const [phase, setPhase] = useState<"idle" | "loading" | "quick" | "done">("idle");
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 連続で検索したとき、古いリクエストの結果で上書きしないための世代番号。 */
+  const runIdRef = useRef(0);
 
   const stopProgress = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -38,7 +54,9 @@ export default function CarTrip() {
   };
   useEffect(() => stopProgress, []);
 
-  const search = async () => {
+  const busy = phase === "loading" || phase === "quick";
+
+  const search = () => {
     if (!destination.trim()) {
       setErr("行き先を入力してください。");
       return;
@@ -47,34 +65,79 @@ export default function CarTrip() {
       setErr("終了時刻は開始時刻より後にしてください。");
       return;
     }
-    setBusy(true);
+    const runId = ++runIdRef.current;
     setErr("");
     setResult(null);
+    setResultMode(null);
+    setPhase("loading");
 
-    // サーバーからの進捗は取れないので、経過時間から見込みの進捗を出す（30秒で約85%、
-    // 頭打ちは95%。実際に返ってきた時点で100%にする）。
+    // サーバーからの進捗は取れないので、経過時間から見込みの進捗を出す（20秒で約80%、
+    // 頭打ちは95%。検索が返ってきた時点で100%にする）。
     setProgress(0);
     const startedAt = Date.now();
     stopProgress();
     timerRef.current = setInterval(() => {
       const elapsedSec = (Date.now() - startedAt) / 1000;
-      setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 13))));
+      setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 12))));
     }, 300);
 
     try {
-      const { result: r } = await apiPost<{ result: ParkingResearch }>("/api/car-trip/parking", {
-        destination: destination.trim(),
-        date,
-        start_time: startTime,
-        end_time: endTime,
-      });
-      setResult(r);
+      localStorage.setItem(ORIGIN_KEY, origin.trim());
     } catch {
-      setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
+      /* 保存できなくても検索自体はできる */
     }
-    stopProgress();
-    setProgress(100);
-    setBusy(false);
+
+    const body = { destination: destination.trim(), origin: origin.trim() || undefined, date, start_time: startTime, end_time: endTime };
+    const post = (mode: "quick" | "detailed") => apiPost<{ result: ParkingResearch }>("/api/car-trip/parking", { ...body, mode });
+
+    // 速さのために2本同時に投げる。検索なしの暫定結果（数秒）をまず表示し、
+    // Web検索つきの結果が返ってきたら差し替える。
+    let quickFailed = false;
+    let quickShown = false;
+    let detailedDone = false;
+    let detailedFailed = false;
+
+    post("quick")
+      .then(({ result: r }) => {
+        if (runId !== runIdRef.current || detailedDone) return;
+        quickShown = true;
+        setResult(r);
+        setResultMode("quick");
+        setPhase("quick");
+      })
+      .catch(() => {
+        quickFailed = true;
+        // 検索つきが先に失敗していた場合は、この時点で初めて「両方失敗」が確定する。
+        if (runId === runIdRef.current && detailedFailed) {
+          setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
+        }
+      });
+
+    post("detailed")
+      .then(({ result: r }) => {
+        detailedDone = true;
+        if (runId !== runIdRef.current) return;
+        setResult(r);
+        setResultMode("detailed");
+        setPhase("done");
+        stopProgress();
+        setProgress(100);
+      })
+      .catch(() => {
+        detailedDone = true;
+        detailedFailed = true;
+        if (runId !== runIdRef.current) return;
+        stopProgress();
+        setProgress(100);
+        if (quickShown) {
+          // 暫定結果だけでも出ていれば、それを残したまま検索失敗を伝える。
+          setErr("Web検索での確認に失敗しました。以下はAIの知識だけによる概算です。");
+          setPhase("done");
+          return;
+        }
+        setPhase("idle");
+        if (quickFailed) setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
+      });
   };
 
   const sorted = result ? [...result.options].sort((a, b) => a.estimated_cost - b.estimated_cost) : [];
@@ -84,7 +147,7 @@ export default function CarTrip() {
       <SectionHead
         no="30"
         title="車移動"
-        sub="行き先と時間帯を入力すると、徒歩や電車・バスとの組み合わせも含め、コスパの良い駐車方法をAIがWeb検索して複数パターン提案します。"
+        sub="行き先と時間帯を入力すると、徒歩・パークアンドライド・電車のみの場合も含め、コスパの良い移動方法をAIが複数パターン提案します。まず概算をすぐ表示し、Web検索で確認した結果に差し替えます。"
       />
 
       <div className="mf-panel">
@@ -97,6 +160,17 @@ export default function CarTrip() {
           placeholder="例: 渋谷スクランブルスクエア、〇〇市〇〇町のイオン"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
+        />
+
+        <label className="mf-fieldlabel" htmlFor="ct-origin">
+          出発地（任意・電車やバスの経路と運賃の計算に使います）
+        </label>
+        <input
+          id="ct-origin"
+          className="mf-input"
+          placeholder="例: 自宅の最寄り駅、〇〇市〇〇町"
+          value={origin}
+          onChange={(e) => setOrigin(e.target.value)}
         />
 
         <label className="mf-fieldlabel" htmlFor="ct-date">
@@ -120,7 +194,7 @@ export default function CarTrip() {
         </div>
 
         <button className="mf-btn primary" style={{ marginTop: 10 }} disabled={busy} onClick={search}>
-          {busy ? "検索中…（30秒ほどかかります）" : "コスパの良い駐車方法を調べる"}
+          {busy ? "検索中…" : "コスパの良い駐車方法を調べる"}
         </button>
         {busy && (
           <>
@@ -129,6 +203,9 @@ export default function CarTrip() {
             </div>
             <div className="mf-numsub mf-mono" style={{ marginTop: 4 }}>
               {progress}%
+              <span className="mf-mono" style={{ marginLeft: 8, fontFamily: "inherit" }}>
+                {phase === "quick" ? "Web検索で実際の料金を確認中…（下は概算）" : "まず概算を出しています…"}
+              </span>
             </div>
           </>
         )}
@@ -137,6 +214,9 @@ export default function CarTrip() {
 
       {result && (
         <>
+          <div className="mf-hint" style={{ opacity: 0.75 }}>
+            {resultMode === "detailed" ? "✓ Web検索で料金・条件を確認した結果です。" : "⏳ AIの知識だけによる概算です（Web検索の結果に差し替わります）。"}
+          </div>
           {sorted.length === 0 ? (
             <div className="mf-panel">
               <div className="mf-empty">この行き先の駐車場情報が見つかりませんでした。行き先をもう少し具体的に（施設名や住所）入力してみてください。</div>
