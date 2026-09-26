@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { fetchOgImage } from "./ogImage";
 import { rateLimit } from "./rateLimit";
 import { extractJsonObject, toMealEstimate, type MealEstimate } from "./aiJson";
+import { parseParkingResearch, type ParkingOption, type ParkingResearch } from "./parkingParse";
 
 // spec §2 / §8: サーバー側でClaudeを呼ぶ。旧モデルID（claude-sonnet-4-6）がAnthropic側で
 // 廃止され、LINEの写真・文章読み取りなど全てのAI機能が一斉に失敗するようになったため、
@@ -1072,20 +1073,7 @@ export async function searchProductImageByName(name: string, ownerId?: string): 
   }
 }
 
-export interface ParkingOption {
-  type: string;
-  name: string;
-  estimated_cost: number;
-  walk_minutes: number | null;
-  notes: string;
-  timing_advice: string | null;
-}
-
-export interface ParkingResearch {
-  destination: string;
-  options: ParkingOption[];
-  general_notes: string;
-}
+export type { ParkingOption, ParkingResearch };
 
 /** 車移動用: 目的地・滞在時間から、コスパの良い移動・駐車方法を複数パターン提案する。
  * 徒歩を混ぜる／手前の駅に停めて1〜2駅だけ電車／蕨駅から電車だけで行く／買い物で駐車券が出るショッピングセンター／
@@ -1109,7 +1097,7 @@ export async function researchParkingOptions(input: {
   const detailed = mode === "detailed";
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: detailed ? 1800 : 1200,
+    max_tokens: detailed ? 8000 : 1500,
     messages: [
       {
         role: "user",
@@ -1124,7 +1112,9 @@ ${
 自宅の最寄り駅: ${HOME_STATION}（電車で行く案の運賃は、この駅から目的地までの往復で計算する）
 日時: ${date} ${startTime}〜${endTime}（この滞在時間で実際にかかる料金を計算すること）
 
-観点（目的地の状況に応じて該当するものだけでよい。3〜5個に絞ること）:
+optionsは必ず3件以上（最大5件）入れること。空配列は禁止。目的地の駐車場情報が検索で確認できなかった場合でも、その周辺の一般的な相場・よくあるパターン（近隣のコインパーキング、駅前の時間貸し、商業施設の提携駐車場など）から推定して必ず提案を出し、notesに「相場からの推定」と書くこと。「情報が見つかりませんでした」という回答は不可。
+
+観点（目的地の状況に応じて該当するものを選ぶ）:
 1. 少し離れた安い駐車場・無料駐車場に停めて徒歩を組み合わせる方法（目的地までの徒歩時間の目安つき）
 2. 目的地の1〜2駅ぶん手前など、近隣の駅の周辺にある安い/無料駐車場に車を停めて、そこから電車やバスで短い区間だけ移動する方法（都心の高い駐車場を避ける用）。estimated_costは駐車料金＋人数分の往復運賃の合計。notesに「どの駅に停めてどの駅まで何駅ぶん乗るか」と所要時間の目安を書く
 3. そもそも車を使わず、${HOME_STATION}から電車だけで目的地まで行く方法。estimated_costは${HOME_STATION}からの往復運賃（駐車場代は0円）。notesに主な経路と所要時間の目安を書く（車で行く案との比較用）
@@ -1141,24 +1131,14 @@ estimated_costは上記の滞在時間で実際にかかる金額の目安（円
     ],
     ...(detailed ? { tools: [{ type: "web_search_20260209" as const, name: "web_search", max_uses: 3 }] } : {}),
   });
-  const parsedRaw = extractJsonObject(joinText(res.content));
-  if (!parsedRaw || typeof parsedRaw !== "object") throw new Error("駐車場情報を取得できませんでした。");
-  const parsed = parsedRaw as { destination?: unknown; options?: unknown; general_notes?: unknown };
-  const options: ParkingOption[] = Array.isArray(parsed.options)
-    ? parsed.options
-        .filter((o): o is Record<string, unknown> => !!o && typeof o === "object")
-        .map((o) => ({
-          type: typeof o.type === "string" ? o.type : "駐車方法",
-          name: typeof o.name === "string" ? o.name : "",
-          estimated_cost: Number(o.estimated_cost) || 0,
-          walk_minutes: typeof o.walk_minutes === "number" ? o.walk_minutes : null,
-          notes: typeof o.notes === "string" ? o.notes : "",
-          timing_advice: typeof o.timing_advice === "string" ? o.timing_advice : null,
-        }))
-    : [];
-  return {
-    destination: typeof parsed.destination === "string" ? parsed.destination : destination,
-    options,
-    general_notes: typeof parsed.general_notes === "string" ? parsed.general_notes : "",
-  };
+  const parsed = parseParkingResearch(joinText(res.content), destination);
+  if (parsed) return parsed;
+
+  console.error(`parking research: no options parsed (mode=${mode}, stop=${res.stop_reason})`);
+  if (detailed) {
+    // 検索つきの応答が途中で切れた等で1件も取れなかった場合は、検索なしでもう一度だけ投げ直す
+    // （「見つかりませんでした」と表示するより、相場からの概算でも出したほうが役に立つため）。
+    return researchParkingOptions({ ...input, mode: "quick" });
+  }
+  throw new Error("駐車場情報を取得できませんでした。");
 }

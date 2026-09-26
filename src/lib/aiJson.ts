@@ -16,16 +16,22 @@ function stripFence(text: string): string {
   return text.replace(/```json|```/g, "").trim();
 }
 
-/** 応答テキストからJSONオブジェクトを取り出す。文字列リテラル内の波括弧を考慮して対応を取り、
- * 有効なJSONのうち最後に現れたものを返す（説明文→検索→最終回答の順に並ぶため）。無ければnull。 */
-export function extractJsonObject(raw: string): unknown | null {
-  const text = stripFence(raw);
+interface JsonCandidate {
+  value: unknown;
+  start: number;
+  end: number;
+}
+
+/** 応答テキストに含まれるJSONオブジェクトを、出現位置つきで全部取り出す。文字列リテラル内の
+ * 波括弧は無視して対応を取る。外側のオブジェクトが途中で切れていても内側の完成している
+ * オブジェクトは拾えるように、入れ子も含めて総当たりで試す。 */
+function scanJsonCandidates(text: string): JsonCandidate[] {
+  const found: JsonCandidate[] = [];
   try {
-    return JSON.parse(text.trim());
+    return [{ value: JSON.parse(text.trim()), start: 0, end: text.length }];
   } catch {
-    /* 説明文が混ざっている場合は下で候補を探す */
+    /* 説明文が混ざっている・途中で切れている場合は下で候補を探す */
   }
-  let found: unknown | null = null;
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== "{") continue;
     let depth = 0;
@@ -48,17 +54,31 @@ export function extractJsonObject(raw: string): unknown | null {
         depth--;
         if (depth === 0) {
           try {
-            found = JSON.parse(text.slice(i, j + 1));
+            found.push({ value: JSON.parse(text.slice(i, j + 1)), start: i, end: j });
           } catch {
             /* この候補は不正。次の '{' から探し直す */
           }
-          i = j;
           break;
         }
       }
     }
   }
   return found;
+}
+
+/** 応答テキストに含まれるJSONオブジェクトを出現順に全部返す（入れ子の内側も含む）。
+ * 外側が途中で切れている応答から、完成している部分だけを拾い直すのに使う。 */
+export function extractJsonObjects(raw: string): unknown[] {
+  return scanJsonCandidates(stripFence(raw)).map((c) => c.value);
+}
+
+/** 応答テキストからJSONオブジェクトを1つ取り出す。他のオブジェクトの内側に入っていない候補のうち、
+ * 最後に現れたものを返す（説明文→検索→最終回答の順に並ぶため）。無ければnull。 */
+export function extractJsonObject(raw: string): unknown | null {
+  const candidates = scanJsonCandidates(stripFence(raw));
+  const outermost = candidates.filter((c) => !candidates.some((o) => o !== c && o.start < c.start && c.end <= o.end));
+  const pick = outermost.length > 0 ? outermost : candidates;
+  return pick.length > 0 ? pick[pick.length - 1].value : null;
 }
 
 /** 栄養価のJSONをMealEstimateに整える。数値が文字列で返ってきても受け付け、PFCの欠落は0扱いにする

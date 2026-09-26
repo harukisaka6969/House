@@ -100,11 +100,16 @@ export default function CarTrip() {
       .then(({ result: r }) => {
         detailedDone = true;
         if (runId !== runIdRef.current) return;
+        stopProgress();
+        setProgress(100);
+        // 検索つきの結果が空だった場合は、先に出した概算を消さずそのまま残す。
+        if (r.options.length === 0 && quickShown) {
+          setPhase("done");
+          return;
+        }
         setResult(r);
         setResultMode("detailed");
         setPhase("done");
-        stopProgress();
-        setProgress(100);
       })
       .catch(() => {
         detailedDone = true;
