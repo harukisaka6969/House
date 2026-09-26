@@ -9,6 +9,9 @@ import { generateDigest } from "@/lib/anthropic";
 import { getProfileById } from "@/lib/pinAuth";
 import type { DigestKind } from "@/lib/types";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const NO_CONTENT_MESSAGE = "この日は記録がほとんどありませんでした。次はちょっとしたことでも日記や記録を残してみましょう。";
 
 /** 直近の完了済み対象期間: daily=前日、weekly=直近の月曜始まりで既に終わった週。 */

@@ -8,6 +8,9 @@ import { isValidDateStr } from "@/lib/date";
 import type { JournalEncounterOut } from "@/lib/apiTypes";
 import type { JournalEncounterRow } from "@/lib/types";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const bodySchema = z.object({ text: z.string().max(5000) });
 const AI_ERROR_MESSAGE = "AIによる抽出に失敗しました。時間をおいてもう一度お試しください。";
 

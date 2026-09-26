@@ -4,6 +4,9 @@ import { getExpensesInRange } from "@/lib/expenses";
 import { draftJournalFromExpenses } from "@/lib/anthropic";
 import { isValidDateStr, nextDayStr } from "@/lib/date";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 /** その日の自分の支出から日記の下書きを生成する（日記が未記入のときの自動下書き用）。 */
 export async function POST(_req: Request, ctx: { params: Promise<{ date: string }> }) {
   try {

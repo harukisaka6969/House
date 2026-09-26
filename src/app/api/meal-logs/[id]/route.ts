@@ -5,6 +5,9 @@ import { rateLimit } from "@/lib/rateLimit";
 import { updateMealLog, deleteMealLog } from "@/lib/mealLog";
 import { estimateMealNutritionFromText } from "@/lib/anthropic";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const patchSchema = z.object({
   description: z.string().max(80).optional(),
   calories: z.number().min(0).max(20000).optional(),

@@ -6,6 +6,9 @@ import { estimateMealNutrition, estimateMealNutritionFromText } from "@/lib/anth
 import { isValidMonthKey, nowMonthKeyJST, isValidDateStr } from "@/lib/date";
 import { monthRange } from "@/lib/expenses";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export async function GET(req: Request) {

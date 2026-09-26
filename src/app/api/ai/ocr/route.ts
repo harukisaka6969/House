@@ -5,6 +5,9 @@ import { ocrReceipt } from "@/lib/anthropic";
 import { getAllCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export async function POST(req: Request) {

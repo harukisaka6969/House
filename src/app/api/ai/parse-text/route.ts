@@ -7,6 +7,9 @@ import { getAllCategories } from "@/lib/categories";
 import { getAccounts } from "@/lib/accounts";
 import { businessDateJST } from "@/lib/date";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const bodySchema = z.object({ text: z.string().min(1).max(2000) });
 
 export async function POST(req: Request) {

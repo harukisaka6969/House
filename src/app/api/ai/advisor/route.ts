@@ -7,6 +7,9 @@ import { buildAdvisorContext } from "@/lib/advisorContext";
 import { getProfileById } from "@/lib/pinAuth";
 import { nowMonthKeyJST, isValidMonthKey } from "@/lib/date";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const bodySchema = z.object({
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))

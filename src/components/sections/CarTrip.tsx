@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { apiPost } from "@/lib/apiClient";
+import { apiPost, ApiClientError } from "@/lib/apiClient";
 import { fmt } from "@/lib/judge";
 import { todayStrJST } from "@/lib/date";
 import { SectionHead } from "../common";
@@ -77,28 +77,40 @@ export default function CarTrip() {
     // Web検索つきの結果が返ってきたら差し替える。
     let quickFailed = false;
     let quickShown = false;
-    let detailedDone = false;
+    let detailedShown = false;
     let detailedFailed = false;
+
+    /** 原因が画面で分かるように、サーバーが返したエラー内容とHTTPステータスをそのまま添える
+     * （504なら実行時間切れ、429なら利用上限、400ならAIのAPI側の問題）。 */
+    const failureMessage = (e: unknown): string => {
+      const base = "駐車場情報の取得に失敗しました。";
+      if (e instanceof ApiClientError) {
+        if (e.status === 429) return `${base}AI機能の利用回数上限に達しています。1時間ほどおいて試してください。`;
+        if (e.status === 504 || e.status === 408) return `${base}時間がかかりすぎて中断されました（タイムアウト）。もう一度試してください。`;
+        return `${base}（${e.status}: ${e.message || "不明なエラー"}）`;
+      }
+      return `${base}通信に失敗しました。電波の状況を確認してもう一度試してください。`;
+    };
 
     post("quick")
       .then(({ result: r }) => {
-        if (runId !== runIdRef.current || detailedDone) return;
+        if (runId !== runIdRef.current) return;
         quickShown = true;
+        // 検索つきが先に表示できていればそのまま。失敗していた場合は概算を出して救う。
+        if (detailedShown) return;
         setResult(r);
         setResultMode("quick");
-        setPhase("quick");
+        setPhase(detailedFailed ? "done" : "quick");
+        if (detailedFailed) setErr("Web検索での確認に失敗しました。以下はAIの知識だけによる概算です。");
       })
-      .catch(() => {
+      .catch((e) => {
         quickFailed = true;
         // 検索つきが先に失敗していた場合は、この時点で初めて「両方失敗」が確定する。
-        if (runId === runIdRef.current && detailedFailed) {
-          setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
-        }
+        if (runId === runIdRef.current && detailedFailed) setErr(failureMessage(e));
       });
 
     post("detailed")
       .then(({ result: r }) => {
-        detailedDone = true;
         if (runId !== runIdRef.current) return;
         stopProgress();
         setProgress(100);
@@ -107,12 +119,12 @@ export default function CarTrip() {
           setPhase("done");
           return;
         }
+        detailedShown = true;
         setResult(r);
         setResultMode("detailed");
         setPhase("done");
       })
-      .catch(() => {
-        detailedDone = true;
+      .catch((e) => {
         detailedFailed = true;
         if (runId !== runIdRef.current) return;
         stopProgress();
@@ -123,8 +135,11 @@ export default function CarTrip() {
           setPhase("done");
           return;
         }
-        setPhase("idle");
-        if (quickFailed) setErr("駐車場情報の取得に失敗しました。時間をおいてもう一度試してください。");
+        // 概算のほうがまだ返っていなければ、その結果を待つ（両方失敗したときだけエラーを出す）。
+        if (quickFailed) {
+          setPhase("idle");
+          setErr(failureMessage(e));
+        }
       });
   };
 

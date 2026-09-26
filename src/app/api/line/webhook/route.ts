@@ -41,6 +41,9 @@ import {
 import { todayStrJST, businessDateJST, nowMonthKeyJST, nextDayStr } from "@/lib/date";
 import { rateLimit } from "@/lib/rateLimit";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 interface LineEvent {
   type: string;
   replyToken?: string;

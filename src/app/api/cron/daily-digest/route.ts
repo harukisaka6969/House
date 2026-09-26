@@ -5,6 +5,9 @@ import { getDigest, upsertDigest } from "@/lib/digests";
 import { gatherDigestData, hasAnyContent, buildDailyDigestPrompt, buildWeeklyDigestPrompt } from "@/lib/digestContext";
 import { generateDigest } from "@/lib/anthropic";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const NO_CONTENT_MESSAGE = "この日は記録がほとんどありませんでした。次はちょっとしたことでも日記や記録を残してみましょう。";
 
 /** Vercel Cronから毎日呼ばれる。前日分の日次ダイジェストを（owner毎に）生成し、

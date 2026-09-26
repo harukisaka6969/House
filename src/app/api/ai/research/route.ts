@@ -4,6 +4,9 @@ import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { rateLimit } from "@/lib/rateLimit";
 import { runResearch } from "@/lib/anthropic";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 const bodySchema = z.object({ query: z.string().min(1).max(300) });
 
 export async function POST(req: Request) {

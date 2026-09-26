@@ -1097,7 +1097,7 @@ export async function researchParkingOptions(input: {
   const detailed = mode === "detailed";
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: detailed ? 8000 : 1500,
+    max_tokens: detailed ? 4000 : 1500,
     messages: [
       {
         role: "user",
@@ -1134,11 +1134,8 @@ estimated_costは上記の滞在時間で実際にかかる金額の目安（円
   const parsed = parseParkingResearch(joinText(res.content), destination);
   if (parsed) return parsed;
 
+  // ここでもう一度AIを呼ぶと1リクエストの所要時間が倍になり関数の実行時間上限に当たるため、
+  // やり直しはしない（画面側が検索なしの概算を並行して取得しているので、そちらが残る）。
   console.error(`parking research: no options parsed (mode=${mode}, stop=${res.stop_reason})`);
-  if (detailed) {
-    // 検索つきの応答が途中で切れた等で1件も取れなかった場合は、検索なしでもう一度だけ投げ直す
-    // （「見つかりませんでした」と表示するより、相場からの概算でも出したほうが役に立つため）。
-    return researchParkingOptions({ ...input, mode: "quick" });
-  }
   throw new Error("駐車場情報を取得できませんでした。");
 }

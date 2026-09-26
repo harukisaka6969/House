@@ -13,6 +13,9 @@ import { estimateSavingsAction } from "@/lib/anthropic";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { todayStrJST, businessDateJST, isValidDateStr } from "@/lib/date";
 
+/** AI呼び出しは既定の10秒（Vercel Hobby）では終わらないことがあるため上限を延ばす。 */
+export const maxDuration = 60;
+
 export async function GET(req: Request) {
   try {
     await requireOwnerSession();

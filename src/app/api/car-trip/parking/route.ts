@@ -5,6 +5,10 @@ import { rateLimit } from "@/lib/rateLimit";
 import { researchParkingOptions } from "@/lib/anthropic";
 import { isValidDateStr } from "@/lib/date";
 
+/** Web検索つきのAI呼び出しは10秒では終わらない。Vercelの関数は既定10秒（Hobby）で打ち切られ、
+ * 毎回「取得に失敗しました」になるため、このルートだけ上限を延ばす。 */
+export const maxDuration = 60;
+
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const bodySchema = z.object({
