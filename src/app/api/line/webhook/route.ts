@@ -34,7 +34,8 @@ import {
   getMonthlyAdvanceTotal,
   ValidationError as ExpenseValidationError,
 } from "@/lib/expenses";
-import { parseAdvanceKeyword, isAdvanceOnlyMessage } from "@/lib/lineAdvance";
+import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
+import { recordLineAction, undoLineLastAction } from "@/lib/lineLastAction";
 import { profileNameOf } from "@/lib/profiles";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
 import { getAccounts } from "@/lib/accounts";
@@ -65,7 +66,7 @@ const ID_MESSAGE = (userId: string) =>
   `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・直前に送った記録の取り消し「取り消し」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string, buttons?: LineQuickReplyButton[]): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text, buttons);
@@ -98,6 +99,22 @@ async function applyAdvance(event: LineEvent, profileId: string, ids: string[], 
   }
   const total = await getMonthlyAdvanceTotal(profileId, nowMonthKeyJST());
   await reply(event, `💳 ${myName}の立替として記録しました（${updated}件）。\n今月の立替合計: ${total.toLocaleString()}円`);
+}
+
+/** 「取り消し」が送られてきたとき: 直前にLINEから登録した内容（支出・食事・筋トレ）を消す。 */
+async function handleCancelCommand(event: LineEvent, profileId: string): Promise<void> {
+  const result = await undoLineLastAction(profileId);
+  if (result.ok) {
+    await reply(event, `🗑 取り消しました: ${result.label}`);
+    return;
+  }
+  const messages: Record<string, string> = {
+    none: "取り消せる記録がありません（LINEから登録した支出・食事・筋トレが対象です）。",
+    already: "直前の記録はすでに取り消し済みです。",
+    expired: "24時間以上前の記録は取り消せません。アプリから削除してください。",
+    failed: "取り消しに失敗しました。アプリから削除してください。",
+  };
+  await reply(event, messages[result.reason]);
 }
 
 /** 「立替」だけが送られてきたとき: 直前に登録した支出に後から適用する（写真を送った直後など）。 */
@@ -208,6 +225,12 @@ async function handleMealText(event: LineEvent, profileId: string, text: string)
   if (matched) {
     try {
       const { log } = await consumeMealPrep(matched.prep.id, profileId, matched.grams, date);
+      await recordLineAction(
+        profileId,
+        "meal",
+        { mealLogIds: [log.id], prepRestore: { prepId: matched.prep.id, grams: matched.grams } },
+        `${log.description}（食事）`
+      );
       const summary = await formatDailyPfcSummary(profileId, date);
       await reply(event, `🍚 食事を記録しました: ${log.description}（約${Math.round(log.calories)}kcal）\n\n${summary}`);
       return;
@@ -217,7 +240,7 @@ async function handleMealText(event: LineEvent, profileId: string, text: string)
   }
 
   const estimate = await estimateMealNutritionFromText(text);
-  await createMealLog(profileId, {
+  const mealLog = await createMealLog(profileId, {
     date,
     description: estimate.description || "",
     calories: Number(estimate.calories) || 0,
@@ -225,6 +248,7 @@ async function handleMealText(event: LineEvent, profileId: string, text: string)
     fat_g: Number(estimate.fat_g) || 0,
     carb_g: Number(estimate.carb_g) || 0,
   });
+  await recordLineAction(profileId, "meal", { mealLogIds: [mealLog.id] }, `${estimate.description || text}（食事）`);
   const summary = await formatDailyPfcSummary(profileId, date);
   await reply(event, `🍚 食事を記録しました: ${estimate.description || text}（約${Math.round(estimate.calories) || 0}kcal）\n\n${summary}`);
 }
@@ -265,6 +289,7 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
     .join("\n");
 
   const myName = await profileNameOf(profileId);
+  await recordLineAction(profileId, "expense", { expenseIds: ids }, `${summary.replace(/^・/, "").split("\n")[0]} 他計${total.toLocaleString()}円（支出）`);
   if (advance?.command === "set") {
     await updateExpensePaidBy(ids, profileId, profileId);
     const advanceTotal = await getMonthlyAdvanceTotal(profileId, nowMonthKeyJST());
@@ -338,6 +363,7 @@ async function handleGymItems(event: LineEvent, profileId: string, exercises: Gy
   let lineSplitId: string | null = null;
   const today = todayStrJST();
   const summaries: string[] = [];
+  const createdLogIds: string[] = [];
 
   for (const item of usable) {
     let exercise = item.matched_exercise_id ? exerciseById.get(item.matched_exercise_id) ?? null : null;
@@ -348,12 +374,13 @@ async function handleGymItems(event: LineEvent, profileId: string, exercises: Gy
       exercises.push(exercise);
       exerciseById.set(exercise.id, exercise);
     }
-    await createGymLog(profileId, exercise.id, today, {
+    const gymLog = await createGymLog(profileId, exercise.id, today, {
       sets: item.sets,
       durationMinutes: item.duration_minutes,
       distanceKm: item.distance_km,
       note: item.note,
     });
+    createdLogIds.push(gymLog.id);
     const summary =
       exercise.type === "cardio"
         ? [item.duration_minutes ? `${item.duration_minutes}分` : null, item.distance_km ? `${item.distance_km}km` : null].filter(Boolean).join(" ")
@@ -361,6 +388,7 @@ async function handleGymItems(event: LineEvent, profileId: string, exercises: Gy
     summaries.push(`${exercise.name}: ${summary}`);
   }
 
+  await recordLineAction(profileId, "gym", { gymLogIds: createdLogIds }, `${summaries.join(" / ")}（筋トレ）`);
   await reply(event, `💪 筋トレを記録しました:\n${summaries.map((s) => `・${s}`).join("\n")}`);
 }
 
@@ -419,7 +447,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
     if (kind === "meal") {
       const estimate = await estimateMealNutrition(content.base64, content.mediaType);
       const date = businessDateJST();
-      await createMealLog(profileId, {
+      const mealLog = await createMealLog(profileId, {
         date,
         description: estimate.description || "",
         calories: Number(estimate.calories) || 0,
@@ -427,6 +455,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         fat_g: Number(estimate.fat_g) || 0,
         carb_g: Number(estimate.carb_g) || 0,
       });
+      await recordLineAction(profileId, "meal", { mealLogIds: [mealLog.id] }, `${estimate.description || "食事の写真"}（食事）`);
       const summary = await formatDailyPfcSummary(profileId, date);
       await reply(event, `🍚 食事を記録しました: ${estimate.description || "内容不明"}（約${Math.round(estimate.calories) || 0}kcal）\n\n${summary}`);
       return;
@@ -541,6 +570,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
           console.error("receipt gift-card savings action failed", e);
         }
       }
+      await recordLineAction(profileId, "expense", { expenseIds: ids }, `${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円（支出）`);
       await reply(
         event,
         `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${giftCardNote}${redeemedNote}`,
@@ -577,6 +607,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       );
       const total = resolved.reduce((s, e) => s + e.amount, 0);
       const itemLines = resolved.map((e) => `・${e.memo}（${e.amount.toLocaleString()}円）`).join("\n");
+      await recordLineAction(profileId, "expense", { expenseIds: ids }, `Amazon ${resolved.length}件 計${total.toLocaleString()}円（支出）`);
       await reply(
         event,
         `🧾 支出を記録しました（Amazon・${resolved.length}件、計${total.toLocaleString()}円）（${category} / ${account.name}）\n${itemLines}`,
@@ -632,7 +663,10 @@ export async function POST(req: Request) {
         await reply(event, ID_MESSAGE(userId));
         continue;
       }
-      if (isAdvanceOnlyMessage(text)) {
+      if (isCancelMessage(text)) {
+        // 「取り消し」「とりけし」「キャンセル」等 → 直前にLINEから登録した内容を消す。
+        await handleCancelCommand(event, profileId);
+      } else if (isAdvanceOnlyMessage(text)) {
         // 「立替」だけ（写真を送った直後など）→ 直前に登録した支出に後から適用する。
         await handleAdvanceOnlyText(event, profileId, text);
       } else if (text === "承認") {

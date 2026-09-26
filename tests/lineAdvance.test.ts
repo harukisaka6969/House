@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAdvanceKeyword, isAdvanceOnlyMessage } from "@/lib/lineAdvance";
+import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 
 describe("parseAdvanceKeyword", () => {
   it("支出の文章に混ざった「立替」を読み取り、語を除いた残りを返す", () => {
@@ -42,5 +42,51 @@ describe("isAdvanceOnlyMessage", () => {
 
   it("「立替」が無いメッセージは対象外", () => {
     expect(isAdvanceOnlyMessage("コンビニで480円")).toBe(false);
+  });
+});
+
+describe("表記ゆれの許容（立替）", () => {
+  it("漢字・ひらがな・カタカナ・送り仮名の違いを吸収する", () => {
+    for (const t of ["立替", "立て替え", "立替え", "たてかえ", "タテカエ", "たて替え", "立てかえ"]) {
+      expect(parseAdvanceKeyword(t)?.command, t).toBe("set");
+    }
+  });
+
+  it("「建て替え」のような変換ミス・「立て変え」のような誤字も拾う", () => {
+    for (const t of ["建て替え", "建替", "建てかえ", "立て変え", "立て換え", "タテ替え"]) {
+      expect(parseAdvanceKeyword(t)?.command, t).toBe("set");
+    }
+  });
+
+  it("全角数字・全角スペースが混ざっていても金額付きとして扱う", () => {
+    expect(isAdvanceOnlyMessage("コスメ　３８００円　立替")).toBe(false);
+  });
+
+  it("解除の表記ゆれも吸収する", () => {
+    for (const t of ["立替取消", "たてかえ取り消し", "建て替え キャンセル", "立替 解除", "タテカエなし"]) {
+      expect(parseAdvanceKeyword(t)?.command, t).toBe("clear");
+    }
+  });
+});
+
+describe("isCancelMessage", () => {
+  it("取り消し系の表記ゆれを受け付ける", () => {
+    for (const t of ["取り消し", "取消", "とりけし", "トリケシ", "キャンセル", "削除", "消して", "取り消して", "やっぱなし"]) {
+      expect(isCancelMessage(t), t).toBe(true);
+    }
+  });
+
+  it("立替の解除は取り消しとして扱わない（別処理のため）", () => {
+    expect(isCancelMessage("立替 取消")).toBe(false);
+    expect(isCancelMessage("たてかえキャンセル")).toBe(false);
+  });
+
+  it("通常の記録メッセージは取り消しではない", () => {
+    expect(isCancelMessage("コンビニで480円")).toBe(false);
+    expect(isCancelMessage("朝ごはんは卵かけご飯")).toBe(false);
+  });
+
+  it("長文に偶然含まれた場合は無視する", () => {
+    expect(isCancelMessage("今日は予定が取り消しになったので家で作業して夕飯は自炊した")).toBe(false);
   });
 });

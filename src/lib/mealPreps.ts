@@ -39,6 +39,18 @@ export async function createMealPrep(ownerId: string, input: NewMealPrepInput): 
   return data as MealPrepRow;
 }
 
+/** 食べた記録を取り消したときに、作り置きの残量を食べた分だけ戻す（総量は超えないように丸める）。 */
+export async function restoreMealPrepAmount(id: string, ownerId: string, grams: number): Promise<boolean> {
+  const { data: prepData, error: getErr } = await db().from("meal_preps").select("*").eq("id", id).eq("owner", ownerId).maybeSingle();
+  if (getErr) throw getErr;
+  const prep = prepData as MealPrepRow | null;
+  if (!prep) return false;
+  const remaining_weight_g = Math.min(prep.total_weight_g, prep.remaining_weight_g + Math.max(0, grams));
+  const { error } = await db().from("meal_preps").update({ remaining_weight_g }).eq("id", id).eq("owner", ownerId);
+  if (error) throw error;
+  return true;
+}
+
 export async function deleteMealPrep(id: string, ownerId: string): Promise<boolean> {
   const { data, error } = await db().from("meal_preps").delete().eq("id", id).eq("owner", ownerId).select("id");
   if (error) throw error;

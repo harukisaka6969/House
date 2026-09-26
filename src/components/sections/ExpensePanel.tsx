@@ -118,6 +118,22 @@ export default function ExpensePanel() {
     setSplitBusy(false);
   };
 
+  // 立替（この口座から払うべき分を誰のカードで払ったか）の設定・解除。
+  const [paidByTargetId, setPaidByTargetId] = useState<string | null>(null);
+  const [paidByBusy, setPaidByBusy] = useState(false);
+
+  const savePaidBy = async (id: string, paidBy: string | null) => {
+    setPaidByBusy(true);
+    try {
+      await apiPut(`/api/expenses/${id}/paid-by`, { paid_by: paidBy });
+      setPaidByTargetId(null);
+      refreshMonth();
+    } catch {
+      setMsg("立替の設定に失敗しました。");
+    }
+    setPaidByBusy(false);
+  };
+
   /** 「誰の支出か」ボタンは、押すたびに毎回サーバーへ送るとテンポよく連打できないので、押した時点では
    * 画面表示だけ変えて保留しておき、ページ遷移（このパネルが閉じる）か「変更を保存する」ボタンでまとめて送る。 */
   const [pendingOwner, setPendingOwner] = useState<Record<string, string | null>>({});
@@ -1105,6 +1121,14 @@ export default function ExpensePanel() {
                     >
                       割り勘{e.split_num && e.split_den ? ` ${e.split_num}/${e.split_den}` : ""}
                     </button>
+                    <button
+                      className="mf-btn ghost"
+                      style={{ padding: "2px 8px", fontSize: 11, ...(e.paid_by_name ? { borderColor: "#F5A524", color: "#F5A524" } : {}) }}
+                      title="この口座から払うべき分を、誰が自分のカードで立て替えたかを記録する"
+                      onClick={() => setPaidByTargetId(paidByTargetId === e.id ? null : e.id)}
+                    >
+                      立替{e.paid_by_name ? ` ${e.paid_by_name}` : ""}
+                    </button>
                     <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
                       編集
                     </button>
@@ -1112,6 +1136,41 @@ export default function ExpensePanel() {
                       ×
                     </button>
                   </div>
+                  {paidByTargetId === e.id && (
+                    <div className="mf-row" style={{ flexBasis: "100%", marginTop: 6, gap: 6 }}>
+                      <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>
+                        立て替えた人:
+                      </span>
+                      {meId && (
+                        <button
+                          className={"mf-chipbtn" + (e.paid_by_name === meName ? " on" : "")}
+                          style={{ padding: "2px 8px", fontSize: 11 }}
+                          disabled={paidByBusy}
+                          onClick={() => savePaidBy(e.id, meId)}
+                        >
+                          {meName}
+                        </button>
+                      )}
+                      {partnerId && (
+                        <button
+                          className={"mf-chipbtn" + (e.paid_by_name === partnerName ? " on" : "")}
+                          style={{ padding: "2px 8px", fontSize: 11 }}
+                          disabled={paidByBusy}
+                          onClick={() => savePaidBy(e.id, partnerId)}
+                        >
+                          {partnerName}
+                        </button>
+                      )}
+                      <button
+                        className={"mf-chipbtn" + (!e.paid_by_name ? " on" : "")}
+                        style={{ padding: "2px 8px", fontSize: 11 }}
+                        disabled={paidByBusy}
+                        onClick={() => savePaidBy(e.id, null)}
+                      >
+                        立替なし
+                      </button>
+                    </div>
+                  )}
                   {splitTargetId === e.id && (
                     <div className="mf-row" style={{ flexBasis: "100%", marginTop: 6, gap: 6, alignItems: "flex-end" }}>
                       <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>合計</span>
