@@ -34,6 +34,8 @@ export type ExpenseOut =
       split_num: number | null;
       split_den: number | null;
       split_total_amount: number | null;
+      /** 立て替えて支払った人の名前（立替でなければnull）。 */
+      paid_by_name: string | null;
     }
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
 

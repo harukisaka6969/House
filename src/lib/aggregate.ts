@@ -16,14 +16,16 @@ export function isMaskedForViewer(row: Pick<ExpenseRow, "account_id" | "owner">,
 export function maskExpenseRow(
   row: ExpenseRow,
   viewerProfileId: string,
-  ownerName: string
+  ownerName: string,
+  paidByName: string | null = null
 ): ExpenseOut {
   if (isMaskedForViewer(row, viewerProfileId)) {
     return { id: row.id, account_id: row.account_id, category: row.category, owner_name: ownerName, masked: true };
   }
-  const { owner: _owner, ...rest } = row;
+  const { owner: _owner, paid_by: _paidBy, ...rest } = row;
   void _owner;
-  return { ...rest, owner_name: ownerName, masked: false };
+  void _paidBy;
+  return { ...rest, owner_name: ownerName, paid_by_name: paidByName, masked: false };
 }
 
 /** ownerがnullの支出は、どちらか一方の記録ではなく「2人の支出（共通）」として扱う（spec上のowner_nameは"共有"）。 */
@@ -32,7 +34,9 @@ export function maskExpenses(
   viewerProfileId: string,
   ownerNameOf: (profileId: string) => string
 ): ExpenseOut[] {
-  return rows.map((r) => maskExpenseRow(r, viewerProfileId, r.owner ? ownerNameOf(r.owner) : "共有"));
+  return rows.map((r) =>
+    maskExpenseRow(r, viewerProfileId, r.owner ? ownerNameOf(r.owner) : "共有", r.paid_by ? ownerNameOf(r.paid_by) : null)
+  );
 }
 
 /** Rows usable for aggregation that must exclude the partner's private-account spending. */

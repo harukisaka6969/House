@@ -41,11 +41,14 @@ export interface ExpenseRow {
   split_num: number | null;
   split_den: number | null;
   split_total_amount: number | null;
+  /** 実際に立て替えて支払った人。例: 第3口座の支出をアリサが自分のカードで払った場合はアリサ。
+   * nullは通常（その口座から直接支払った）。金額・口座・集計には影響せず、立替の把握だけに使う。 */
+  paid_by: string | null;
 }
 
 /** Expense as returned by the API — may be masked for the partner's private-account rows. */
 export type ExpenseOut =
-  | (Omit<ExpenseRow, "owner"> & { owner_name: string; masked?: false })
+  | (Omit<ExpenseRow, "owner" | "paid_by"> & { owner_name: string; paid_by_name: string | null; masked?: false })
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
 
 export interface IncomeRow {

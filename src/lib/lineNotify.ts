@@ -27,9 +27,35 @@ export async function sendLineMessage(lineUserId: string, text: string): Promise
   await callLineApi(PUSH_URL, { to: lineUserId, messages: [{ type: "text", text }] }).catch((e) => console.error("sendLineMessage failed", e));
 }
 
-/** Webhookで受け取ったreplyTokenへ即時返信する（自分のユーザーID案内など）。 */
-export async function replyLineMessage(replyToken: string, text: string): Promise<void> {
-  await callLineApi(REPLY_URL, { replyToken, messages: [{ type: "text", text }] }).catch((e) => console.error("replyLineMessage failed", e));
+/** 返信に添えるワンタップのボタン（LINEのクイックリプライ）。押すとpostbackイベントとしてdataが返る。 */
+export interface LineQuickReplyButton {
+  label: string;
+  /** postbackで送り返される値（例: "paidby:<支出id>"）。 */
+  data: string;
+  /** 押したときにトーク画面に表示されるテキスト（何を押したか履歴に残すため）。 */
+  displayText: string;
+}
+
+function quickReplyPayload(buttons: LineQuickReplyButton[] | undefined) {
+  if (!buttons || buttons.length === 0) return {};
+  return {
+    quickReply: {
+      // LINEの仕様上、labelは20文字まで。
+      items: buttons.slice(0, 13).map((b) => ({
+        type: "action" as const,
+        action: { type: "postback" as const, label: b.label.slice(0, 20), data: b.data, displayText: b.displayText },
+      })),
+    },
+  };
+}
+
+/** Webhookで受け取ったreplyTokenへ即時返信する（自分のユーザーID案内など）。
+ * buttonsを渡すと、返信にワンタップのボタン（クイックリプライ）を添える。 */
+export async function replyLineMessage(replyToken: string, text: string, buttons?: LineQuickReplyButton[]): Promise<void> {
+  await callLineApi(REPLY_URL, {
+    replyToken,
+    messages: [{ type: "text", text, ...quickReplyPayload(buttons) }],
+  }).catch((e) => console.error("replyLineMessage failed", e));
 }
 
 /** Claude APIの画像1枚あたりの上限は base64 で 5MB。base64は元バイト数の約4/3になるため、

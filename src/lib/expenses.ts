@@ -96,8 +96,8 @@ export async function addExpenseEntries(
   ownerId: string,
   entries: NewExpenseInput[],
   allCats: string[]
-): Promise<{ promoted: string[]; entries: PreparedExpense[] }> {
-  if (entries.length === 0) return { promoted: [], entries: [] };
+): Promise<{ promoted: string[]; entries: PreparedExpense[]; ids: string[] }> {
+  if (entries.length === 0) return { promoted: [], entries: [], ids: [] };
   const prepared = await Promise.all(entries.map((e) => validateEntry(e, allCats)));
   const { data, error } = await db().rpc("add_expense_entries", {
     p_owner: ownerId,
@@ -131,7 +131,7 @@ export async function addExpenseEntries(
     console.error("item history logging failed", e);
   }
 
-  return { promoted, entries: prepared };
+  return { promoted, entries: prepared, ids: expenseIds };
 }
 
 /** 支出はowner未指定（＝2人の支出）が初期状態なので、編集・削除・付け替えの権限は「入力した本人か」
@@ -233,6 +233,48 @@ export async function updateExpenseSplit(
   const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
   if (error) throw error;
   return data as ExpenseRow;
+}
+
+/** 立替（実際に誰の財布から出たか）の設定・解除。account_id・amountは変えず、paid_byだけを更新する。
+ * 第3口座から払うべきものをアリサが自分のカードで払った、というケースを記録するために使う。
+ * 自分から見えない記録（相手の第3口座の非公開分）は対象外。 */
+export async function updateExpensePaidBy(ids: string[], callerId: string, paidBy: string | null): Promise<number> {
+  const visible: string[] = [];
+  for (const id of ids) {
+    if (await assertVisibleExpense(id, callerId)) visible.push(id);
+  }
+  if (visible.length === 0) return 0;
+  const { data, error } = await db().from("expenses").update({ paid_by: paidBy }).in("id", visible).select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+/** 直近に登録された支出（世帯全体でcreated_atが最も新しいもの）。LINEで写真や文章を送った直後に
+ * 「立替」と送ったときの対象にする。古い記録を巻き込まないよう、24時間以内のものだけを見る。 */
+export async function getLatestExpense(callerId: string): Promise<ExpenseRow | null> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db()
+    .from("expenses")
+    .select("*")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error) throw error;
+  const rows = (data ?? []) as ExpenseRow[];
+  return rows.find((r) => !isMaskedForViewer(r, callerId)) ?? null;
+}
+
+/** 指定した人が当月（家計簿の月）に立て替えた合計額。LINEの返信で残高として示す。 */
+export async function getMonthlyAdvanceTotal(paidBy: string, monthKey: string): Promise<number> {
+  const { from, toExclusive } = periodRange(monthKey);
+  const { data, error } = await db()
+    .from("expenses")
+    .select("amount")
+    .eq("paid_by", paidBy)
+    .gte("date", from)
+    .lt("date", toExclusive);
+  if (error) throw error;
+  return ((data ?? []) as { amount: number }[]).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 }
 
 /** 「誰の支出か」の後付けタグ変更。newOwner=nullは「2人の支出（共通）」を表す。 */

@@ -39,6 +39,7 @@ function row(overrides: Partial<ExpenseRow>): ExpenseRow {
     split_num: null,
     split_den: null,
     split_total_amount: null,
+    paid_by: null,
     ...overrides,
   };
 }

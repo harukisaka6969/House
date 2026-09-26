@@ -1052,6 +1052,11 @@ export default function ExpensePanel() {
                     {e.sub ? `（${e.sub}）` : ""}
                   </span>
                   {ownerNameOfExpense(e) !== meName && <span className="mf-ownerchip">{ownerNameOfExpense(e)}</span>}
+                  {e.paid_by_name && (
+                    <span className="mf-chip" style={{ fontSize: 10, color: "#F5A524" }} title="この口座から払うべき分を立て替えた人">
+                      💳 {e.paid_by_name}立替
+                    </span>
+                  )}
                   <span className="mf-listmemo">{e.memo}</span>
                   <span className="mf-mono mf-listamt">
                     {fmt(e.amount)}
