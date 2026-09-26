@@ -36,6 +36,9 @@ function row(overrides: Partial<ExpenseRow>): ExpenseRow {
     original_currency: null,
     original_amount: null,
     exchange_rate: null,
+    split_num: null,
+    split_den: null,
+    split_total_amount: null,
     ...overrides,
   };
 }

@@ -36,6 +36,11 @@ export interface ExpenseRow {
   original_amount: number | null;
   /** original_currency 1単位あたりの円換算レート（入力時点）。 */
   exchange_rate: number | null;
+  /** 友達と割り勘した支出の「合計人数のうち自分たちの人数」（例: 4人で食事して2人分なら2/4）。
+   * 設定時、amountには実質負担分が入り、立て替えた全額はsplit_total_amountに残る。未設定ならnull。 */
+  split_num: number | null;
+  split_den: number | null;
+  split_total_amount: number | null;
 }
 
 /** Expense as returned by the API — may be masked for the partner's private-account rows. */

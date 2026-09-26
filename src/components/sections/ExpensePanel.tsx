@@ -96,6 +96,28 @@ export default function ExpensePanel() {
     };
   }, [currency]);
 
+  // 友達との割り勘（何人中何人分が自分たちの負担か）の後付け設定。
+  const [splitTargetId, setSplitTargetId] = useState<string | null>(null);
+  const [splitForm, setSplitForm] = useState<{ num: string; den: string }>({ num: "2", den: "4" });
+  const [splitBusy, setSplitBusy] = useState(false);
+
+  const openSplit = (e: { id: string; split_num: number | null; split_den: number | null }) => {
+    setSplitTargetId(e.id);
+    setSplitForm({ num: String(e.split_num ?? 2), den: String(e.split_den ?? 4) });
+  };
+
+  const saveSplit = async (id: string, split: { num: number; den: number } | null) => {
+    setSplitBusy(true);
+    try {
+      await apiPut(`/api/expenses/${id}/split`, split === null ? { num: null } : { num: split.num, den: split.den });
+      setSplitTargetId(null);
+      refreshMonth();
+    } catch {
+      setMsg("割り勘の設定に失敗しました。");
+    }
+    setSplitBusy(false);
+  };
+
   /** 「誰の支出か」ボタンは、押すたびに毎回サーバーへ送るとテンポよく連打できないので、押した時点では
    * 画面表示だけ変えて保留しておき、ページ遷移（このパネルが閉じる）か「変更を保存する」ボタンでまとめて送る。 */
   const [pendingOwner, setPendingOwner] = useState<Record<string, string | null>>({});
@@ -1038,6 +1060,11 @@ export default function ExpensePanel() {
                         {e.original_amount} {e.original_currency}
                       </span>
                     )}
+                    {e.split_num && e.split_den && e.split_total_amount && (
+                      <span style={{ display: "block", fontSize: 10, color: "#6B7684", fontWeight: 400 }}>
+                        {fmt(e.split_total_amount)}の{e.split_num}/{e.split_den}
+                      </span>
+                    )}
                   </span>
                   <div className="mf-row" style={{ flexBasis: "100%", marginTop: 4, gap: 4 }}>
                     <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>
@@ -1065,6 +1092,14 @@ export default function ExpensePanel() {
                     )}
                     {e.id in pendingOwner && <span className="mf-hint" style={{ margin: 0, opacity: 0.6 }}>（未保存）</span>}
                     <span style={{ flex: 1 }} />
+                    <button
+                      className={"mf-btn ghost" + (e.split_num ? " " : "")}
+                      style={{ padding: "2px 8px", fontSize: 11, ...(e.split_num ? { borderColor: "#F5A524", color: "#F5A524" } : {}) }}
+                      title="友達と割り勘した分を設定する"
+                      onClick={() => (splitTargetId === e.id ? setSplitTargetId(null) : openSplit(e))}
+                    >
+                      割り勘{e.split_num && e.split_den ? ` ${e.split_num}/${e.split_den}` : ""}
+                    </button>
                     <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
                       編集
                     </button>
@@ -1072,6 +1107,61 @@ export default function ExpensePanel() {
                       ×
                     </button>
                   </div>
+                  {splitTargetId === e.id && (
+                    <div className="mf-row" style={{ flexBasis: "100%", marginTop: 6, gap: 6, alignItems: "flex-end" }}>
+                      <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>合計</span>
+                      <input
+                        className="mf-input mf-mono"
+                        style={{ width: 56, padding: "4px 6px" }}
+                        type="number"
+                        min={1}
+                        value={splitForm.den}
+                        onChange={(ev) => setSplitForm((f) => ({ ...f, den: ev.target.value }))}
+                      />
+                      <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>人のうち 自分たち</span>
+                      <input
+                        className="mf-input mf-mono"
+                        style={{ width: 56, padding: "4px 6px" }}
+                        type="number"
+                        min={1}
+                        value={splitForm.num}
+                        onChange={(ev) => setSplitForm((f) => ({ ...f, num: ev.target.value }))}
+                      />
+                      <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>人分</span>
+                      {(() => {
+                        const full = e.split_total_amount ?? e.amount;
+                        const num = Number(splitForm.num);
+                        const den = Number(splitForm.den);
+                        const valid = Number.isInteger(num) && Number.isInteger(den) && num >= 1 && den >= 1 && num <= den;
+                        const mine = valid ? Math.round((full * num) / den) : 0;
+                        return (
+                          <>
+                            <span className="mf-hint mf-mono" style={{ margin: 0, flexBasis: "100%" }}>
+                              {valid
+                                ? `${fmt(full)} → 自分たちの負担 ${fmt(mine)}（友達の分 ${fmt(full - mine)}）`
+                                : "人数を正しく入力してください（自分たちの人数 ≦ 合計人数）"}
+                            </span>
+                            <button
+                              className="mf-btn primary"
+                              style={{ padding: "4px 12px", fontSize: 12 }}
+                              disabled={!valid || splitBusy}
+                              onClick={() => saveSplit(e.id, { num, den })}
+                            >
+                              この割合にする
+                            </button>
+                          </>
+                        );
+                      })()}
+                      {e.split_num && (
+                        <button className="mf-btn ghost" style={{ padding: "4px 12px", fontSize: 12 }} disabled={splitBusy} onClick={() => saveSplit(e.id, null)}>
+                          割り勘を解除
+                        </button>
+                      )}
+                      <button className="mf-btn ghost" style={{ padding: "4px 12px", fontSize: 12 }} onClick={() => setSplitTargetId(null)}>
+                        キャンセル
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

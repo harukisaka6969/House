@@ -137,11 +137,17 @@ export async function addExpenseEntries(
 /** 支出はowner未指定（＝2人の支出）が初期状態なので、編集・削除・付け替えの権限は「入力した本人か」
  * ではなく「自分から見えているか」（相手の第3口座の非公開分でないか）で判定する。見えない記録は
  * 呼び出し元でnull/false（=404扱い）として扱う。 */
-async function assertVisibleExpense(id: string, callerId: string): Promise<Pick<ExpenseRow, "id" | "owner" | "account_id"> | null> {
-  const { data, error } = await db().from("expenses").select("id, owner, account_id").eq("id", id).maybeSingle();
+type VisibleExpense = Pick<ExpenseRow, "id" | "owner" | "account_id" | "amount" | "split_num" | "split_den" | "split_total_amount">;
+
+async function assertVisibleExpense(id: string, callerId: string): Promise<VisibleExpense | null> {
+  const { data, error } = await db()
+    .from("expenses")
+    .select("id, owner, account_id, amount, split_num, split_den, split_total_amount")
+    .eq("id", id)
+    .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const row = data as Pick<ExpenseRow, "id" | "owner" | "account_id">;
+  const row = data as VisibleExpense;
   if (isMaskedForViewer(row, callerId)) return null;
   return row;
 }
@@ -164,7 +170,8 @@ export interface ExpensePatch {
 
 /** 既存の支出（日記由来含む）を部分更新する。渡されたフィールドのみ検証・反映。 */
 export async function updateExpense(id: string, callerId: string, patch: ExpensePatch, allCats: string[]): Promise<ExpenseRow | null> {
-  if (!(await assertVisibleExpense(id, callerId))) return null;
+  const current = await assertVisibleExpense(id, callerId);
+  if (!current) return null;
 
   const update: Record<string, unknown> = {};
   if (patch.account_id !== undefined) {
@@ -179,10 +186,49 @@ export async function updateExpense(id: string, callerId: string, patch: Expense
     const amount = Math.round(Number(patch.amount));
     if (!Number.isFinite(amount) || amount <= 0) throw new ValidationError(`invalid amount: ${patch.amount}`);
     update.amount = amount;
+    // 割り勘中の記録では、一覧・編集欄に出ている金額は「自分たちの負担分」なので、
+    // 編集された金額も負担分とみなし、立て替えた全額のほうを比率から逆算し直す。
+    if (current.split_num && current.split_den) {
+      update.split_total_amount = Math.round((amount * current.split_den) / current.split_num);
+    }
   }
   if (patch.date !== undefined && patch.date.trim()) update.date = patch.date.trim();
   if (patch.memo !== undefined) update.memo = patch.memo.trim();
   if (patch.sub !== undefined) update.sub = patch.sub?.trim() || null;
+
+  const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
+  if (error) throw error;
+  return data as ExpenseRow;
+}
+
+/** 友達との割り勘の後付け設定。numが人数分の分子（自分たちの人数）、denが合計人数。
+ * 立て替えた全額をsplit_total_amountに残し、amountを実質負担分（全額×num/den）に置き換えるので、
+ * 口座・カテゴリ・グラフなどの既存の集計はそのまま実質負担額ベースになる。
+ * num=nullで割り勘を解除し、amountを立て替えた全額に戻す。 */
+export async function updateExpenseSplit(
+  id: string,
+  callerId: string,
+  split: { num: number; den: number } | null
+): Promise<ExpenseRow | null> {
+  const current = await assertVisibleExpense(id, callerId);
+  if (!current) return null;
+
+  // 割り勘を設定し直す場合も、基準は常に「立て替えた全額」。掛け算が重ならないようにする。
+  const fullAmount = current.split_total_amount ?? current.amount;
+
+  const update =
+    split === null
+      ? { amount: fullAmount, split_num: null, split_den: null, split_total_amount: null }
+      : (() => {
+          if (!Number.isInteger(split.num) || !Number.isInteger(split.den)) throw new ValidationError("invalid split");
+          if (split.den < 1 || split.num < 1 || split.num > split.den) throw new ValidationError("invalid split");
+          return {
+            amount: Math.round((fullAmount * split.num) / split.den),
+            split_num: split.num,
+            split_den: split.den,
+            split_total_amount: fullAmount,
+          };
+        })();
 
   const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
   if (error) throw error;

@@ -30,6 +30,10 @@ export type ExpenseOut =
       original_currency: string | null;
       original_amount: number | null;
       exchange_rate: number | null;
+      /** 友達と割り勘した支出。amountは自分たちの負担分で、split_total_amountが立て替えた全額。 */
+      split_num: number | null;
+      split_den: number | null;
+      split_total_amount: number | null;
     }
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
 
