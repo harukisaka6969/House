@@ -32,21 +32,39 @@ export async function replyLineMessage(replyToken: string, text: string): Promis
   await callLineApi(REPLY_URL, { replyToken, messages: [{ type: "text", text }] }).catch((e) => console.error("replyLineMessage failed", e));
 }
 
+/** Claude APIの画像1枚あたりの上限は base64 で 5MB。base64は元バイト数の約4/3になるため、
+ * 元データで3.5MBを超えていたら送らずにLINEのプレビュー画像へ切り替える
+ * （スマホの高画質写真はこの上限を超えることがあり、そのままではリクエストが400で必ず失敗する）。 */
+const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
+
+async function fetchLineContent(url: string, token: string): Promise<{ base64: string; mediaType: string; bytes: number } | null> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    console.error(`LINE content fetch error ${res.status} (${url})`);
+    return null;
+  }
+  const mediaType = res.headers.get("content-type") || "image/jpeg";
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { base64: buf.toString("base64"), mediaType, bytes: buf.byteLength };
+}
+
 /** Webhookで受け取った画像メッセージの実体データを取得する（食事写真・レシート写真の自動登録用）。 */
 export async function fetchLineImageContent(messageId: string): Promise<{ base64: string; mediaType: string } | null> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token) return null;
   try {
-    const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      console.error(`LINE content fetch error ${res.status}`);
-      return null;
+    const base = `https://api-data.line.me/v2/bot/message/${messageId}/content`;
+    const original = await fetchLineContent(base, token);
+    if (!original) return null;
+    if (original.bytes <= MAX_IMAGE_BYTES) return { base64: original.base64, mediaType: original.mediaType };
+
+    const preview = await fetchLineContent(`${base}/preview`, token);
+    if (preview && preview.bytes <= MAX_IMAGE_BYTES) {
+      console.error(`LINE image too large (${original.bytes} bytes), using preview (${preview.bytes} bytes)`);
+      return { base64: preview.base64, mediaType: preview.mediaType };
     }
-    const mediaType = res.headers.get("content-type") || "image/jpeg";
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { base64: buf.toString("base64"), mediaType };
+    console.error(`LINE image too large (${original.bytes} bytes) and preview unavailable`);
+    return null;
   } catch (e) {
     console.error("fetchLineImageContent failed", e);
     return null;

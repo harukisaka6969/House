@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchOgImage } from "./ogImage";
 import { rateLimit } from "./rateLimit";
+import { extractJsonObject, toMealEstimate, type MealEstimate } from "./aiJson";
 
 // spec §2 / §8: サーバー側でClaudeを呼ぶ。旧モデルID（claude-sonnet-4-6）がAnthropic側で
 // 廃止され、LINEの写真・文章読み取りなど全てのAI機能が一斉に失敗するようになったため、
@@ -25,6 +26,41 @@ function joinText(content: Anthropic.ContentBlock[]): string {
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n");
+}
+
+type SupportedImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+/** LINEやブラウザから渡ってくるContent-Typeを、APIが受け付ける4種類に正規化する。
+ * パラメータ付き（例: "image/jpeg;charset=binary"）やapplication/octet-streamのまま渡すと
+ * リクエスト全体が400になり、写真の読み取りが必ず失敗するため、判別できない場合はjpeg扱いにする。 */
+function normalizeImageMediaType(mediaType: string): SupportedImageMediaType {
+  const base = (mediaType || "").split(";")[0].trim().toLowerCase();
+  if (base === "image/png") return "image/png";
+  if (base === "image/gif") return "image/gif";
+  if (base === "image/webp") return "image/webp";
+  return "image/jpeg";
+}
+
+/** 食事の栄養推定の共通処理。1回目はWeb検索あり（市販商品の栄養成分表示を調べられるように）。
+ * 検索中の説明文が混ざる・トークン上限で途中で切れる等でJSONが取れなかった場合は、
+ * 検索なしでもう一度だけ投げ直す（推定だけなら検索は必須ではないため、確実に記録できるようにする）。 */
+async function requestMealEstimate(content: Anthropic.MessageParam["content"]): Promise<MealEstimate> {
+  for (const useWebSearch of [true, false]) {
+    try {
+      const res = await anthropic().messages.create({
+        model: MODEL,
+        max_tokens: useWebSearch ? 2500 : 500,
+        messages: [{ role: "user", content }],
+        ...(useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" }] } : {}),
+      });
+      const estimate = toMealEstimate(extractJsonObject(joinText(res.content)));
+      if (estimate) return estimate;
+      console.error(`meal estimate: no JSON in response (webSearch=${useWebSearch}, stop=${res.stop_reason})`);
+    } catch (e) {
+      console.error(`meal estimate request failed (webSearch=${useWebSearch})`, e);
+    }
+  }
+  throw new Error("食事内容を読み取れませんでした。");
 }
 
 /** 口座推定ルール（parseExpenseText / extractExpensesFromJournal / ocrReceipt で共通利用）。
@@ -81,7 +117,7 @@ export async function ocrReceipt(
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: `このレシート画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
@@ -303,13 +339,7 @@ export async function extractJournalEncounters(text: string, knownNames: string[
   }
 }
 
-export interface MealEstimate {
-  description: string;
-  calories: number;
-  protein_g: number;
-  fat_g: number;
-  carb_g: number;
-}
+export type { MealEstimate };
 
 export type LinePhotoKind = "meal" | "receipt" | "amazon_order" | "gym" | "other";
 
@@ -317,12 +347,12 @@ export type LinePhotoKind = "meal" | "receipt" | "amazon_order" | "gym" | "other
 export async function classifyLinePhoto(base64: string, mediaType: string): Promise<LinePhotoKind> {
   const res = await anthropic().messages.create({
     model: MODEL,
-    max_tokens: 10,
+    max_tokens: 24,
     messages: [
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: "この画像は「食事・料理の写真、または食べる市販食品のパッケージ・栄養成分表示ラベルの写真（缶詰・お菓子・飲料・プロテイン等）」「レシート・領収書」「Amazon等の通販サイトの注文詳細・注文履歴のスクリーンショット」「筋トレ・運動の記録（トレーニングノート、マシンの表示画面、ホワイトボード等）」「それ以外」のどれですか。商品パッケージに栄養成分表示が写っている場合はmealです（レシートと混同しないこと）。meal / receipt / amazon_order / gym / other のいずれか1単語のみを返してください。",
@@ -366,7 +396,7 @@ export async function ocrAmazonOrder(
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: `この通販サイトの注文詳細画面の画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
@@ -525,54 +555,30 @@ export async function extractIncomeFromText(text: string): Promise<ParsedIncomeE
 
 /** 食事写真 → {description, calories, protein_g, fat_g, carb_g}。大まかな推定であることを前提とする。 */
 export async function estimateMealNutrition(base64: string, mediaType: string): Promise<MealEstimate> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 1200,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
-          {
-            type: "text",
-            text: `この写真から、食べた（食べる）ものの内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。
+  return requestMealEstimate([
+    { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
+    {
+      type: "text",
+      text: `この写真から、食べた（食べる）ものの内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、写真に何らかの食べ物・飲み物・食品が写っていれば必ず数値を返してください。料理名が特定できない場合でも、見た目から材料と量を推測して概算値を返すこと（「分からない」という回答は不可）。
 市販食品のパッケージや栄養成分表示ラベルが写っている場合は、推測ではなくラベルに印字された数値をそのまま読み取ってください。「1缶当たり」「1袋当たり」ならその数値をそのまま使い、「100g当たり」表記で内容量が別に書かれている場合は内容量分に換算してください。descriptionには商品名（例:「シーチキンマイルド1缶」）を入れてください。
-ラベルの数値が読み取れない市販商品の場合は、Web検索でその商品の栄養成分を調べてから数値を出してください。
-次のJSONのみを返してください。前置きやコードブロックは不要です。
+ラベルの数値が読み取れず、商品名だけが分かる市販商品の場合のみ、Web検索でその商品の栄養成分を調べてください。手料理や外食の写真では検索は不要です。
+回答は次のJSONのみ。前置き・説明・コードブロックは一切付けないこと。
 {"description":"料理名・商品名の簡潔な説明（15文字程度）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}`,
-          },
-        ],
-      },
-    ],
-    tools: [{ type: "web_search_20260209", name: "web_search" }],
-  });
-  const text = stripFence(joinText(res.content));
-  return JSON.parse(text) as MealEstimate;
+    },
+  ]);
 }
 
 /** 食事の文章の説明 → {description, calories, protein_g, fat_g, carb_g}。写真が無いときのテキスト入力用。
  * 外食は具体的に何を食べたか書くのが面倒・難しいことが多いため、店名＋満腹度（1〜10割）だけの
  * 報告にも対応する（例:「サイゼリヤで外食、満腹度8割」）。 */
 export async function estimateMealNutritionFromText(description: string): Promise<MealEstimate> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 1200,
-    messages: [
-      {
-        role: "user",
-        content: `次の食事の説明から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。
+  return requestMealEstimate(`次の食事の説明から、内容とおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。
 外食の店名だけが書かれていて具体的に何を食べたかの記載が無い場合（例:「サイゼリヤで外食した」）は、その店の一般的なメニュー構成・価格帯・提供カロリーの傾向から、その店で標準的な1食分の内容を推定してください。
 「満腹度○割」「満腹度○/10」のように満腹度（1〜10割）の記載がある場合、10割をその店での標準的な1食分の満腹とみなし、その割合に比例させてカロリー・PFCを増減させてください（例: 満腹度6割なら標準的な1食分のおよそ6割の量として計算する）。満腹度の記載が無ければ10割（標準的な1食分）として計算してください。
 プロテインパウダー・サプリメント・市販のパッケージ食品など、具体的な商品名・ブランド名が含まれていて、一般的な知識だけでは1食分（1スクープ・1袋など）あたりの正確なカロリー・PFCに自信が持てない場合は、Web検索でその商品の公式な栄養成分表示を調べてから数値を出してください。検索しても見つからない場合は、同種の商品の一般的な値で構わないので必ず数値は返してください。
-次のJSONのみを返してください。前置きやコードブロックは不要です。
+回答は次のJSONのみ。前置き・説明・コードブロックは一切付けないこと。
 {"description":"料理名や内容の簡潔な説明（15文字程度。店名だけの場合は店名と満腹度を含める）","calories":総カロリーの数値(kcal),"protein_g":タンパク質の数値(g),"fat_g":脂質の数値(g),"carb_g":炭水化物の数値(g)}
-食事の説明: ${description}`,
-      },
-    ],
-    tools: [{ type: "web_search_20260209", name: "web_search" }],
-  });
-  const text = stripFence(joinText(res.content));
-  return JSON.parse(text) as MealEstimate;
+食事の説明: ${description}`);
 }
 
 export interface MealPrepEstimate {
@@ -612,7 +618,7 @@ export async function estimateMealPrepNutritionFromPhoto(base64: string, mediaTy
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: `この写真は、まとめて作り置きした料理のできあがり全体です。写真の見た目と、これが合計${totalWeightG}g分（この量まるごと）であるという情報から、1人前・1食分ではなく総量ぶん全体のおおよその栄養価を推定してください。厳密な計測ではなく大まかな目安でよいので、必ず数値を返してください。次のJSONのみを返してください。前置きやコードブロックは不要です。
@@ -719,7 +725,7 @@ export async function extractRecordFromPhoto(base64: string, mediaType: string, 
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: `この画像は、体組成計の測定結果・ランニングアプリの記録・ボルダリングの記録など、何らかの個人の記録です。画像から読み取れる情報をもとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
@@ -805,7 +811,7 @@ export async function extractGymLogFromPhoto(
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
+          { type: "image", source: { type: "base64", media_type: normalizeImageMediaType(mediaType), data: base64 } },
           {
             type: "text",
             text: `この画像は筋トレ・運動の記録です（トレーニングノート、マシンの表示画面、ホワイトボード等）。写っている種目ごとに、次のJSONのみを返してください。前置きやコードブロックは不要です。
