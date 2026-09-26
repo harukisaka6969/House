@@ -10,6 +10,9 @@ import { parseParkingResearch, type ParkingOption, type ParkingResearch } from "
 // 現行のSonnetモデルに更新した。
 const MODEL = "claude-sonnet-5";
 
+/** 速さが重要で、内容の難易度は高くない用途（駐車場検索など）で使う高速モデル。 */
+const FAST_MODEL = "claude-haiku-4-5-20251001";
+
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
   if (client) return client;
@@ -1095,16 +1098,18 @@ export async function researchParkingOptions(input: {
 }): Promise<ParkingResearch> {
   const { destination, date, startTime, endTime, mode } = input;
   const detailed = mode === "detailed";
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: detailed ? 4000 : 1500,
+  // 速さが最優先の機能なので、高性能モデルではなく高速モデルを使い、出力も短く抑える。
+  const res = await anthropic().messages.create(
+    {
+      model: FAST_MODEL,
+      max_tokens: detailed ? 2000 : 1200,
     messages: [
       {
         role: "user",
         content: `あなたは駐車場代を節約するための実用的なアドバイザーです。次の外出予定について、コストパフォーマンスの良い移動・駐車方法を提案してください。
 ${
   detailed
-    ? "Web検索で実在する駐車場・交通情報を確認してください。ただし時間をかけすぎないこと: 検索は最大3回までにまとめ、1回の検索で複数の情報をまとめて拾うようにしてください。"
+    ? "Web検索は1回だけ行い（「（目的地名） 駐車場 料金」のような1つのクエリにまとめる）、その結果だけを使って素早く答えてください。追加の検索はせず、分からない部分は相場から推定して補ってください。"
     : "Web検索はせず、あなたの知識だけから素早く答えてください（速さ優先の暫定回答です）。料金は一般的な相場からの推定でよく、notesの末尾に「相場からの概算」と書いてください。"
 }
 
@@ -1112,25 +1117,25 @@ ${
 自宅の最寄り駅: ${HOME_STATION}（電車で行く案の運賃は、この駅から目的地までの往復で計算する）
 日時: ${date} ${startTime}〜${endTime}（この滞在時間で実際にかかる料金を計算すること）
 
-optionsは必ず3件以上（最大5件）入れること。空配列は禁止。目的地の駐車場情報が検索で確認できなかった場合でも、その周辺の一般的な相場・よくあるパターン（近隣のコインパーキング、駅前の時間貸し、商業施設の提携駐車場など）から推定して必ず提案を出し、notesに「相場からの推定」と書くこと。「情報が見つかりませんでした」という回答は不可。
+optionsはちょうど3件。空配列は禁止。目的地の駐車場情報が検索で確認できなかった場合でも、その周辺の一般的な相場・よくあるパターン（近隣のコインパーキング、駅前の時間貸し、商業施設の提携駐車場など）から推定して必ず提案を出し、notesに「相場からの推定」と書くこと。「情報が見つかりませんでした」という回答は不可。
 
-観点（目的地の状況に応じて該当するものを選ぶ）:
-1. 少し離れた安い駐車場・無料駐車場に停めて徒歩を組み合わせる方法（目的地までの徒歩時間の目安つき）
-2. 目的地の1〜2駅ぶん手前など、近隣の駅の周辺にある安い/無料駐車場に車を停めて、そこから電車やバスで短い区間だけ移動する方法（都心の高い駐車場を避ける用）。estimated_costは駐車料金＋人数分の往復運賃の合計。notesに「どの駅に停めてどの駅まで何駅ぶん乗るか」と所要時間の目安を書く
-3. そもそも車を使わず、${HOME_STATION}から電車だけで目的地まで行く方法。estimated_costは${HOME_STATION}からの往復運賃（駐車場代は0円）。notesに主な経路と所要時間の目安を書く（車で行く案との比較用）
-4. 一定額の買い物で駐車券が無料・割引になるショッピングセンター等（何円以上で何時間無料か明記）
-5. 完全に無料の駐車場（時間制限があれば明記）
-6. 公式な有料駐車場ではないが、実質無料または非常に安く停められそうな場所。法的・マナー上のリスクや不確実性は必ずnotesに明記
-7. 時間帯によって料金や上限額が変わる駐車場。何時までに出庫すべき・何時以降に入庫すべきかをtiming_adviceに書く
+観点（目的地に合うものから3件選ぶ。考え込まず手早く）:
+1. 目的地に近い駐車場（最安のもの）。時間帯で上限額が変わるなら、何時までに出庫/何時以降に入庫すべきかをtiming_adviceに書く
+2. 少し離れた安い/無料の駐車場＋徒歩（徒歩時間の目安をwalk_minutesに）。買い物で駐車券が無料・割引になる施設があればそれを優先し、何円以上で何時間無料かをnotesに書く
+3. 目的地の1〜2駅手前の駅周辺の安い/無料駐車場に停めて、短い区間だけ電車に乗る方法（estimated_costは駐車料金＋2人分の往復運賃）。この案が不自然な近距離の目的地なら、代わりに${HOME_STATION}から電車だけで行く案（estimated_costは2人分の往復運賃、駐車場代0円）にする
 
-estimated_costは上記の滞在時間で実際にかかる金額の目安（円、整数。電車・バスを使う場合は運賃込み）。不確かでも相場から妥当な推定値を必ず入れること（0にしない。ただし「車を使わない」案の駐車場代は0円扱いでよい）。notesは80字以内で簡潔に。
+estimated_costは上記の滞在時間で実際にかかる金額の目安（円、整数。電車を使う場合は運賃込み）。不確かでも相場から妥当な推定値を必ず入れること（0にしない。ただし「車を使わない」案の駐車場代は0円扱いでよい）。notesは50字以内。
 
 次のJSON形式のみを返してください。前置き・コードブロック不要。
 {"destination":"目的地名","options":[{"type":"分類の短い名前（例: 徒歩併用/パークアンドライド/電車のみ/買い物で割引/無料/実質無料/時間帯で有利）","name":"駐車場名やエリア名（乗換を使うなら駅名も含める）","estimated_cost":0,"walk_minutes":null,"notes":"詳細・注意点","timing_advice":null}],"general_notes":"全体の補足（任意・40字以内）"}`,
       },
     ],
-    ...(detailed ? { tools: [{ type: "web_search_20260209" as const, name: "web_search", max_uses: 3 }] } : {}),
-  });
+      ...(detailed ? { tools: [{ type: "web_search_20260209" as const, name: "web_search", max_uses: 1 }] } : {}),
+    },
+    // Vercelの関数上限（60秒）に達して502/504になる前に自分で打ち切る。リトライは待ち時間が
+    // 倍になるだけなので無効化する（画面側は検索なしの概算を並行取得しているのでそれが残る）。
+    { timeout: detailed ? 40_000 : 20_000, maxRetries: 0 }
+  );
   const parsed = parseParkingResearch(joinText(res.content), destination);
   if (parsed) return parsed;
 

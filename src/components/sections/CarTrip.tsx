@@ -60,14 +60,14 @@ export default function CarTrip() {
     setResultMode(null);
     setPhase("loading");
 
-    // サーバーからの進捗は取れないので、経過時間から見込みの進捗を出す（20秒で約80%、
+    // サーバーからの進捗は取れないので、経過時間から見込みの進捗を出す（20秒で約87%、
     // 頭打ちは95%。検索が返ってきた時点で100%にする）。
     setProgress(0);
     const startedAt = Date.now();
     stopProgress();
     timerRef.current = setInterval(() => {
       const elapsedSec = (Date.now() - startedAt) / 1000;
-      setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 12))));
+      setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 8))));
     }, 300);
 
     const body = { destination: destination.trim(), date, start_time: startTime, end_time: endTime };
