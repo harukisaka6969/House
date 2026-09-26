@@ -44,6 +44,8 @@ export interface ExpenseRow {
   /** 実際に立て替えて支払った人。例: 第3口座の支出をアリサが自分のカードで払った場合はアリサ。
    * nullは通常（その口座から直接支払った）。金額・口座・集計には影響せず、立替の把握だけに使う。 */
   paid_by: string | null;
+  /** 何で支払ったか（例: 共用カード / アリサEPOS / PayPay / 現金）。読み取れなければnull。 */
+  payment_method: string | null;
 }
 
 /** Expense as returned by the API — may be masked for the partner's private-account rows. */

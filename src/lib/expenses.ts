@@ -23,6 +23,8 @@ export interface NewExpenseInput {
   /** レシートOCR等で読み取れた購入品ごとの{name, price}（あれば）。品目履歴（検索専用）に残す。
    * 未指定ならmemoを1件（金額はこの支出全体の金額）として残す。 */
   items?: { name: string; price?: number | null }[] | null;
+  /** 何で支払ったか（共用カード・PayPayなど）。判定できなければ省略。 */
+  payment_method?: string | null;
 }
 
 export interface PreparedExpense {
@@ -35,6 +37,7 @@ export interface PreparedExpense {
   original_currency: string | null;
   original_amount: number | null;
   exchange_rate: number | null;
+  payment_method: string | null;
 }
 
 export class ValidationError extends Error {}
@@ -85,6 +88,7 @@ async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise
     original_currency,
     original_amount,
     exchange_rate,
+    payment_method: input.payment_method?.trim() || null,
   };
 }
 
@@ -166,6 +170,8 @@ export interface ExpensePatch {
   sub?: string | null;
   amount?: number;
   memo?: string;
+  /** 何で支払ったか。空文字・nullで未設定に戻す。 */
+  payment_method?: string | null;
 }
 
 /** 既存の支出（日記由来含む）を部分更新する。渡されたフィールドのみ検証・反映。 */
@@ -195,6 +201,7 @@ export async function updateExpense(id: string, callerId: string, patch: Expense
   if (patch.date !== undefined && patch.date.trim()) update.date = patch.date.trim();
   if (patch.memo !== undefined) update.memo = patch.memo.trim();
   if (patch.sub !== undefined) update.sub = patch.sub?.trim() || null;
+  if (patch.payment_method !== undefined) update.payment_method = patch.payment_method?.trim() || null;
 
   const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
   if (error) throw error;

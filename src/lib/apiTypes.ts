@@ -36,6 +36,8 @@ export type ExpenseOut =
       split_total_amount: number | null;
       /** 立て替えて支払った人の名前（立替でなければnull）。 */
       paid_by_name: string | null;
+      /** 何で支払ったか（例: 共用カード / PayPay）。未設定ならnull。 */
+      payment_method: string | null;
     }
   | { id: string; account_id: AccountId; category: string; owner_name: string; masked: true };
 

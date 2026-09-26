@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recha
 import { fmt } from "@/lib/judge";
 import { businessDateJST } from "@/lib/date";
 import { CAT_COLORS, CURRENCIES, categoriesForAccount } from "@/lib/constants";
+import { PAYMENT_METHODS } from "@/lib/paymentMethod";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut, SavingsActionOut } from "@/lib/apiTypes";
 import { TT, fmtTooltip, MoneyViewToggle, ownerFilterName } from "../common";
@@ -118,6 +119,24 @@ export default function ExpensePanel() {
     setSplitBusy(false);
   };
 
+  // 支払い方法（何で払ったか）の後から設定。
+  /** 新規入力フォームで選んだ支払い方法（未選択はnull）。 */
+  const [formPaymentMethod, setFormPaymentMethod] = useState<string | null>(null);
+  const [payMethodTargetId, setPayMethodTargetId] = useState<string | null>(null);
+  const [payMethodBusy, setPayMethodBusy] = useState(false);
+
+  const savePaymentMethod = async (id: string, method: string | null) => {
+    setPayMethodBusy(true);
+    try {
+      await apiPut(`/api/expenses/${id}`, { payment_method: method });
+      setPayMethodTargetId(null);
+      refreshMonth();
+    } catch {
+      setMsg("支払い方法の設定に失敗しました。");
+    }
+    setPayMethodBusy(false);
+  };
+
   // 立替（この口座から払うべき分を誰のカードで払ったか）の設定・解除。
   const [paidByTargetId, setPaidByTargetId] = useState<string | null>(null);
   const [paidByBusy, setPaidByBusy] = useState(false);
@@ -209,6 +228,7 @@ export default function ExpensePanel() {
             sub: form.category === "その他" ? form.sub.trim() : undefined,
             ...(isForeign ? { original_currency: currency, original_amount: Number(foreignAmount), exchange_rate: rate } : {}),
             ...(ocrItems && ocrItems.length > 0 ? { items: ocrItems } : {}),
+            ...(formPaymentMethod ? { payment_method: formPaymentMethod } : {}),
           },
         ],
       });
@@ -836,6 +856,19 @@ export default function ExpensePanel() {
           </div>
         )}
 
+        <div className="mf-quicklabel">支払い方法（任意）</div>
+        <div className="mf-chips">
+          {PAYMENT_METHODS.map((m) => (
+            <button
+              key={m}
+              className={"mf-chipbtn" + (formPaymentMethod === m ? " on" : "")}
+              onClick={() => setFormPaymentMethod(formPaymentMethod === m ? null : m)}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+
         <div className="mf-row" style={{ marginTop: 10 }}>
           <button className="mf-btn primary" disabled={busy || (!!linkEvent && !linkDetail)} onClick={addExpense}>
             {linkEvent && !linkDetail ? "割り勘イベントを読み込み中…" : "追加する"}
@@ -1068,6 +1101,11 @@ export default function ExpensePanel() {
                     {e.sub ? `（${e.sub}）` : ""}
                   </span>
                   {ownerNameOfExpense(e) !== meName && <span className="mf-ownerchip">{ownerNameOfExpense(e)}</span>}
+                  {e.payment_method && (
+                    <span className="mf-chip" style={{ fontSize: 10 }} title="何で支払ったか">
+                      {e.payment_method}
+                    </span>
+                  )}
                   {e.paid_by_name && (
                     <span className="mf-chip" style={{ fontSize: 10, color: "#F5A524" }} title="この口座から払うべき分を立て替えた人">
                       💳 {e.paid_by_name}立替
@@ -1129,6 +1167,14 @@ export default function ExpensePanel() {
                     >
                       立替{e.paid_by_name ? ` ${e.paid_by_name}` : ""}
                     </button>
+                    <button
+                      className="mf-btn ghost"
+                      style={{ padding: "2px 8px", fontSize: 11, ...(e.payment_method ? { borderColor: "#F5A524", color: "#F5A524" } : {}) }}
+                      title="何で支払ったかを記録する"
+                      onClick={() => setPayMethodTargetId(payMethodTargetId === e.id ? null : e.id)}
+                    >
+                      支払い方法
+                    </button>
                     <button className="mf-btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={() => startEdit(e)}>
                       編集
                     </button>
@@ -1136,6 +1182,32 @@ export default function ExpensePanel() {
                       ×
                     </button>
                   </div>
+                  {payMethodTargetId === e.id && (
+                    <div className="mf-row" style={{ flexBasis: "100%", marginTop: 6, gap: 4, flexWrap: "wrap" }}>
+                      <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>
+                        支払い方法:
+                      </span>
+                      {PAYMENT_METHODS.map((m) => (
+                        <button
+                          key={m}
+                          className={"mf-chipbtn" + (e.payment_method === m ? " on" : "")}
+                          style={{ padding: "2px 8px", fontSize: 11 }}
+                          disabled={payMethodBusy}
+                          onClick={() => savePaymentMethod(e.id, m)}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                      <button
+                        className={"mf-chipbtn" + (!e.payment_method ? " on" : "")}
+                        style={{ padding: "2px 8px", fontSize: 11 }}
+                        disabled={payMethodBusy}
+                        onClick={() => savePaymentMethod(e.id, null)}
+                      >
+                        未設定
+                      </button>
+                    </div>
+                  )}
                   {paidByTargetId === e.id && (
                     <div className="mf-row" style={{ flexBasis: "100%", marginTop: 6, gap: 6 }}>
                       <span className="mf-hint" style={{ margin: 0, opacity: 0.75 }}>

@@ -15,6 +15,7 @@ const entrySchema = z.object({
   original_amount: z.number().optional().nullable(),
   exchange_rate: z.number().optional().nullable(),
   items: z.array(z.object({ name: z.string().min(1).max(100), price: z.number().positive().optional().nullable() })).max(30).optional().nullable(),
+  payment_method: z.string().max(40).optional().nullable(),
 });
 const bodySchema = z.object({ entries: z.array(entrySchema).min(1).max(50) });
 

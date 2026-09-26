@@ -35,6 +35,7 @@ import {
   ValidationError as ExpenseValidationError,
 } from "@/lib/expenses";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
+import { resolvePaymentMethod } from "@/lib/paymentMethod";
 import { recordLineAction, undoLineLastAction } from "@/lib/lineLastAction";
 import { profileNameOf } from "@/lib/profiles";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
@@ -266,9 +267,12 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
     await reply(event, "支出の内容を読み取れませんでした。金額を含めて送ってください。（例: コンビニで480円）");
     return;
   }
+  // 「PayPayで」「末尾6725」など、文章から何で払ったかが分かる場合は一緒に記録する。
+  const paymentMethod = resolvePaymentMethod({ rawText: text });
   const entries = valid.map((p) => {
     const currency = p.currency && p.currency.toUpperCase() !== "JPY" ? p.currency.toUpperCase() : null;
     return {
+      payment_method: paymentMethod,
       date: p.date,
       account_id: accounts.some((a) => a.id === p.account) ? p.account! : (accounts[0]?.id ?? "a1"),
       category: p.category && categories.includes(p.category) ? p.category : "その他",
@@ -535,6 +539,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
             original_currency: currency,
             original_amount: currency ? ocr.total : null,
             items: ocr.items,
+            payment_method: resolvePaymentMethod({ cardLast4: ocr.card_last4, rawText: ocr.payment_text }),
           },
         ],
         categories

@@ -23,6 +23,7 @@ const patchSchema = z.object({
   sub: z.string().nullable().optional(),
   amount: z.number().optional(),
   memo: z.string().optional(),
+  payment_method: z.string().max(40).nullable().optional(),
 });
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
