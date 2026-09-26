@@ -1088,22 +1088,24 @@ export interface ParkingResearch {
 }
 
 /** 車移動用: 目的地・滞在時間から、コスパの良い移動・駐車方法を複数パターン提案する。
- * 徒歩を混ぜる／パークアンドライド／電車だけで行く／買い物で駐車券が出るショッピングセンター／
+ * 徒歩を混ぜる／手前の駅に停めて1〜2駅だけ電車／蕨駅から電車だけで行く／買い物で駐車券が出るショッピングセンター／
  * 無料駐車場（条件つき含む）／公式ではないが実質無料で停められそうな場所／時間帯で料金が変わる
  * 駐車場の出庫・入庫タイミング、という観点で出す。
  *
  * mode="quick" はWeb検索なしでAIの知識だけから即答する（数秒。画面にまず出す用）。
  * mode="detailed" はWeb検索ありで実在の料金を確認する（遅いので検索回数を絞り、出力も短めにする）。
  * 画面側は両方を同時に投げ、quickが返った時点で表示し、detailedが返ったら差し替える。 */
+/** 自宅の最寄り駅。「車を使わず電車だけで行く」案の運賃比較は常にここからの往復で計算する。 */
+const HOME_STATION = "蕨駅";
+
 export async function researchParkingOptions(input: {
   destination: string;
-  origin: string | null;
   date: string;
   startTime: string;
   endTime: string;
   mode: "quick" | "detailed";
 }): Promise<ParkingResearch> {
-  const { destination, origin, date, startTime, endTime, mode } = input;
+  const { destination, date, startTime, endTime, mode } = input;
   const detailed = mode === "detailed";
   const res = await anthropic().messages.create({
     model: MODEL,
@@ -1119,13 +1121,13 @@ ${
 }
 
 目的地: ${destination}
-${origin ? `出発地: ${origin}（電車・バスの経路と運賃はここからの往復で計算）` : "出発地: 未指定（電車・バスの運賃は目的地周辺の一般的な区間から概算し、notesに「出発地未指定のため概算」と書く）"}
+自宅の最寄り駅: ${HOME_STATION}（電車で行く案の運賃は、この駅から目的地までの往復で計算する）
 日時: ${date} ${startTime}〜${endTime}（この滞在時間で実際にかかる料金を計算すること）
 
 観点（目的地の状況に応じて該当するものだけでよい。3〜5個に絞ること）:
 1. 少し離れた安い駐車場・無料駐車場に停めて徒歩を組み合わせる方法（目的地までの徒歩時間の目安つき）
-2. 目的地から離れた駅・バス停の近くの安い/無料駐車場に停めて、そこから電車やバスに乗り換える方法（パークアンドライド）。estimated_costは駐車料金＋往復運賃の合計。notesに乗換駅・路線名・所要時間の目安を書く
-3. そもそも車を使わず、自宅から電車・バスだけで行く方法。estimated_costは往復運賃。notesに主な経路と所要時間の目安を書く（駐車場代0円との比較用）
+2. 目的地の1〜2駅ぶん手前など、近隣の駅の周辺にある安い/無料駐車場に車を停めて、そこから電車やバスで短い区間だけ移動する方法（都心の高い駐車場を避ける用）。estimated_costは駐車料金＋人数分の往復運賃の合計。notesに「どの駅に停めてどの駅まで何駅ぶん乗るか」と所要時間の目安を書く
+3. そもそも車を使わず、${HOME_STATION}から電車だけで目的地まで行く方法。estimated_costは${HOME_STATION}からの往復運賃（駐車場代は0円）。notesに主な経路と所要時間の目安を書く（車で行く案との比較用）
 4. 一定額の買い物で駐車券が無料・割引になるショッピングセンター等（何円以上で何時間無料か明記）
 5. 完全に無料の駐車場（時間制限があれば明記）
 6. 公式な有料駐車場ではないが、実質無料または非常に安く停められそうな場所。法的・マナー上のリスクや不確実性は必ずnotesに明記

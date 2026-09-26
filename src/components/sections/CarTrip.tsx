@@ -21,19 +21,8 @@ interface ParkingResearch {
   general_notes: string;
 }
 
-const ORIGIN_KEY = "house.carTrip.origin";
-
 export default function CarTrip() {
   const [destination, setDestination] = useState("");
-  /** 電車・バスの経路と運賃を出すために必要な出発地。毎回打つのは面倒なので前回の値を覚えておく。 */
-  const [origin, setOrigin] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    try {
-      return localStorage.getItem(ORIGIN_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
   const [date, setDate] = useState(todayStrJST());
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("12:00");
@@ -81,13 +70,7 @@ export default function CarTrip() {
       setProgress(Math.round(95 * (1 - Math.exp(-elapsedSec / 12))));
     }, 300);
 
-    try {
-      localStorage.setItem(ORIGIN_KEY, origin.trim());
-    } catch {
-      /* 保存できなくても検索自体はできる */
-    }
-
-    const body = { destination: destination.trim(), origin: origin.trim() || undefined, date, start_time: startTime, end_time: endTime };
+    const body = { destination: destination.trim(), date, start_time: startTime, end_time: endTime };
     const post = (mode: "quick" | "detailed") => apiPost<{ result: ParkingResearch }>("/api/car-trip/parking", { ...body, mode });
 
     // 速さのために2本同時に投げる。検索なしの暫定結果（数秒）をまず表示し、
@@ -147,7 +130,7 @@ export default function CarTrip() {
       <SectionHead
         no="30"
         title="車移動"
-        sub="行き先と時間帯を入力すると、徒歩・パークアンドライド・電車のみの場合も含め、コスパの良い移動方法をAIが複数パターン提案します。まず概算をすぐ表示し、Web検索で確認した結果に差し替えます。"
+        sub="行き先と時間帯を入力すると、徒歩併用・手前の駅に停めて1〜2駅だけ電車・蕨駅から電車のみ（往復運賃）も含め、コスパの良い移動方法をAIが複数パターン提案します。まず概算をすぐ表示し、Web検索で確認した結果に差し替えます。"
       />
 
       <div className="mf-panel">
@@ -160,17 +143,6 @@ export default function CarTrip() {
           placeholder="例: 渋谷スクランブルスクエア、〇〇市〇〇町のイオン"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
-        />
-
-        <label className="mf-fieldlabel" htmlFor="ct-origin">
-          出発地（任意・電車やバスの経路と運賃の計算に使います）
-        </label>
-        <input
-          id="ct-origin"
-          className="mf-input"
-          placeholder="例: 自宅の最寄り駅、〇〇市〇〇町"
-          value={origin}
-          onChange={(e) => setOrigin(e.target.value)}
         />
 
         <label className="mf-fieldlabel" htmlFor="ct-date">
