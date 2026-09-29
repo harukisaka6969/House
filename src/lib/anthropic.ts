@@ -200,6 +200,7 @@ export async function parseExpenseText(
 ${accountRuleText(acctList)}
 カテゴリ候補: ${categories.join("|")}
 海外通貨（ドル・ユーロ・ウォンなど）での支出と読み取れる場合、amountはその通貨での金額そのままにしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円ならcurrencyは省略するか"JPY"にしてください。
+人数での割り勘の指示（例「3人で夜ご飯を食べて50000円だった。2人分。」）が書かれていても、amountは割らずに支払った合計額そのまま（この例なら50000）にしてください。割り勘の計算は別のシステムが行います。
 形式: [{"date":"YYYY-MM-DD","account":"口座id","category":"カテゴリ","amount":金額の数値（外貨ならその通貨のまま、換算しない）,"memo":"店名や品名","currency":"外貨の場合のみISO 4217コード"}]
 文章: ${text}`,
       },

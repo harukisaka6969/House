@@ -30,10 +30,13 @@ import { isDuplicateLineMessage } from "@/lib/lineDedup";
 import {
   addExpenseEntries,
   updateExpensePaidBy,
+  updateExpenseSplit,
+  updateExpenseOwner,
   getLatestExpense,
   getMonthlyAdvanceTotal,
   ValidationError as ExpenseValidationError,
 } from "@/lib/expenses";
+import { parseSplitHint, isSplitOnlyMessage, findMentionedPersonId, type SplitHint } from "@/lib/splitText";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
 import { containsMoneyAmount } from "@/lib/moneyText";
@@ -68,7 +71,7 @@ const ID_MESSAGE = (userId: string) =>
   `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・直前に送った記録の取り消し「取り消し」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・友達との割り勘「3人で夜ご飯を食べて50000円だった。2人分」（自分たちの負担分だけを支出にします。「1人分」なら参加した1人の支出に）、写真を送った直後なら「3人で2人分」だけでもOK\n・直前に送った記録の取り消し「取り消し」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string, buttons?: LineQuickReplyButton[]): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text, buttons);
@@ -141,6 +144,23 @@ async function handleAdvanceOnlyText(event: LineEvent, profileId: string, text: 
   }
   const total = await getMonthlyAdvanceTotal(profileId, nowMonthKeyJST());
   await reply(event, `💳 ${myName}の立替として記録しました: ${label}\n今月の立替合計: ${total.toLocaleString()}円`);
+}
+
+/** 「3人で2人分」だけが送られてきたとき: 直前に登録した支出に後から割り勘を適用する
+ * （レシートの写真を送った直後に人数だけ伝えるケース）。 */
+async function handleSplitOnlyText(event: LineEvent, profileId: string, text: string): Promise<void> {
+  const latest = await getLatestExpense(profileId);
+  if (!latest) {
+    await reply(event, "直前に登録した支出が見つかりませんでした（24時間以内の記録が対象です）。");
+    return;
+  }
+  const applied = await applySplitFromText([latest.id], profileId, text);
+  if (!applied) {
+    await reply(event, "割り勘の人数を読み取れませんでした。「3人で2人分」のように送ってください。");
+    return;
+  }
+  const label = `${latest.date.slice(5)} ${latest.memo || latest.category}`;
+  await reply(event, `🧮 割り勘を適用しました: ${label}\n\n${applied.message}`);
 }
 
 /** テキスト「承認」: 自分が承認できる（パートナーが追加した）承認待ちの買い物をすべて承認する。 */
@@ -284,28 +304,76 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
     };
   });
   const { entries: resolved, ids } = await addExpenseEntries(profileId, entries, categories);
-  const total = resolved.reduce((s, e) => s + e.amount, 0);
+
+  // 「3人で夜ご飯を食べて50,000円だった。2人分。」のように人数が書かれていたら、
+  // 立て替えた全額ではなく自分たちの負担分（全額×num/den）を支出額にする。
+  const splitNote = await applySplitFromText(ids, profileId, text);
+  const share = (amount: number) => (splitNote ? Math.round((amount * splitNote.num) / splitNote.den) : amount);
+
+  const total = resolved.reduce((s, e) => s + share(e.amount), 0);
   const summary = resolved
     .map((e) =>
       e.original_currency
-        ? `・${e.memo || e.category} ${e.amount.toLocaleString()}円（${e.original_amount}${e.original_currency}）`
-        : `・${e.memo || e.category} ${e.amount.toLocaleString()}円`
+        ? `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円（${e.original_amount}${e.original_currency}）`
+        : `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円`
     )
     .join("\n");
 
   const myName = await profileNameOf(profileId);
   await recordLineAction(profileId, "expense", { expenseIds: ids }, `${summary.replace(/^・/, "").split("\n")[0]} 他計${total.toLocaleString()}円（支出）`);
+  const splitLine = splitNote ? `\n\n${splitNote.message}` : "";
   if (advance?.command === "set") {
     await updateExpensePaidBy(ids, profileId, profileId);
     const advanceTotal = await getMonthlyAdvanceTotal(profileId, nowMonthKeyJST());
     await reply(
       event,
-      `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}\n\n💳 ${myName}の立替として記録しました。今月の立替合計: ${advanceTotal.toLocaleString()}円`,
+      `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}${splitLine}\n\n💳 ${myName}の立替として記録しました。今月の立替合計: ${advanceTotal.toLocaleString()}円`,
       advanceButtons(ids, myName)
     );
     return;
   }
-  await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}`, advanceButtons(ids, myName));
+  await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}${splitLine}`, advanceButtons(ids, myName));
+}
+
+interface AppliedSplit extends SplitHint {
+  /** 返信に添える説明文（全額と負担分、1人分のときは誰の支出にしたか）。 */
+  message: string;
+}
+
+/**
+ * 文章から読み取った人数で割り勘を適用する。
+ * 「2人分」なら遥希とアリサの2人分なので家族共通（owner=null）のまま、
+ * 「1人分」ならどちらか1人だけが参加しているので、その人の支出として記録する
+ * （文中に名前があればその人、なければ送信者本人）。
+ */
+async function applySplitFromText(ids: string[], profileId: string, text: string): Promise<AppliedSplit | null> {
+  const split = parseSplitHint(text);
+  if (!split || ids.length === 0) return null;
+
+  let full = 0;
+  let ours = 0;
+  for (const id of ids) {
+    const updated = await updateExpenseSplit(id, profileId, split);
+    if (!updated) continue;
+    full += updated.split_total_amount ?? updated.amount;
+    ours += updated.amount;
+  }
+  if (ours === 0) return null;
+
+  let ownerNote = "";
+  if (split.num === 1) {
+    const owners = (await getAllProfiles()).filter((p) => p.role === "owner");
+    // 相手の名前が書かれていればその人、書かれていなければ送った本人が参加したとみなす。
+    const mentioned = findMentionedPersonId(text, owners.filter((p) => p.id !== profileId));
+    const attendee = mentioned ?? profileId;
+    for (const id of ids) await updateExpenseOwner(id, profileId, attendee);
+    ownerNote = `\n👤 ${await profileNameOf(attendee)}の支出として記録しました（違う場合はアプリから変更できます）`;
+  }
+
+  return {
+    ...split,
+    message: `👥 ${split.den}人で計${full.toLocaleString()}円のうち、${split.num}人分の${ours.toLocaleString()}円を支出にしました（残りは友達からの回収分）${ownerNote}`,
+  };
 }
 
 async function handleIncomeText(event: LineEvent, profileId: string, text: string): Promise<void> {
@@ -693,6 +761,9 @@ export async function POST(req: Request) {
       } else if (isAdvanceOnlyMessage(text)) {
         // 「立替」だけ（写真を送った直後など）→ 直前に登録した支出に後から適用する。
         await handleAdvanceOnlyText(event, profileId, text);
+      } else if (isSplitOnlyMessage(text)) {
+        // 「3人で2人分」だけ（レシートを送った直後など）→ 直前の支出に割り勘を適用する。
+        await handleSplitOnlyText(event, profileId, text);
       } else if (text === "承認") {
         await handleApproveCommand(event, profileId);
       } else if (text === "完了") {
