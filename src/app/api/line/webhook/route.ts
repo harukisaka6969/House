@@ -36,6 +36,7 @@ import {
 } from "@/lib/expenses";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
+import { containsMoneyAmount } from "@/lib/moneyText";
 import { recordLineAction, undoLineLastAction } from "@/lib/lineLastAction";
 import { profileNameOf } from "@/lib/profiles";
 import { getIncomes, replaceIncomes } from "@/lib/incomes";
@@ -411,13 +412,31 @@ async function handleFreeText(event: LineEvent, profileId: string, text: string)
   }
   try {
     const intent = await classifyLineText(text);
-    if (intent === "meal") return await handleMealText(event, profileId, text);
+    // 金額（円）が書かれていれば、必ず支出としても登録する。
+    // 「お昼ご飯にうどん500円」のように食事とも読める文章が、食事だけ記録されて
+    // 支出が残らないのを防ぐため。収入・節約は金額を含むのが当然なので対象外。
+    const alsoExpense = containsMoneyAmount(text) && intent !== "income" && intent !== "savings" && intent !== "expense";
+
     if (intent === "expense") return await handleExpenseText(event, profileId, text);
     if (intent === "income") return await handleIncomeText(event, profileId, text);
     if (intent === "savings") return await handleSavingsText(event, profileId, text);
-    if (intent === "gym") return await handleGymText(event, profileId, text);
-    if (intent === "smarthome") return await reply(event, await runSmartHomeTextCommand(text));
-    await reply(event, USAGE_HINT);
+
+    if (intent === "meal") {
+      await handleMealText(event, profileId, text);
+    } else if (intent === "gym") {
+      await handleGymText(event, profileId, text);
+    } else if (intent === "smarthome") {
+      await reply(event, await runSmartHomeTextCommand(text));
+    } else if (!alsoExpense) {
+      await reply(event, USAGE_HINT);
+      return;
+    }
+
+    if (alsoExpense) {
+      // LINEのreplyTokenは1回しか使えないため、2件目以降はpush送信になるようtokenを外して呼ぶ。
+      const pushEvent = intent === "meal" || intent === "gym" || intent === "smarthome" ? { ...event, replyToken: undefined } : event;
+      await handleExpenseText(pushEvent, profileId, text);
+    }
   } catch (e) {
     if (e instanceof ExpenseValidationError) {
       await reply(event, `記録に失敗しました: ${e.message}`);
