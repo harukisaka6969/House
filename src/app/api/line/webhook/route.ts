@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { replyLineMessage, sendLineMessage, fetchLineImageContent, type LineQuickReplyButton } from "@/lib/lineNotify";
 import { findProfileIdByLineUserId, getAllProfiles, getLineRecipients } from "@/lib/profiles";
-import { getPendingApprovalsFor, approveShoppingItemAndNotify, getShoppingItems, setShoppingItemBought } from "@/lib/shoppingList";
+import {
+  getPendingApprovalsFor,
+  approveShoppingItemAndNotify,
+  getShoppingItems,
+  setShoppingItemBought,
+  createShoppingItem,
+} from "@/lib/shoppingList";
+import { parseShoppingListMessage, type ShoppingListItem } from "@/lib/shoppingListText";
 import { getDueRemindersToday, updateReminder } from "@/lib/reminders";
 import { runSmartHomeTextCommand } from "@/lib/switchbotCommand";
 import {
@@ -25,7 +32,7 @@ import { getMealPreps, consumeMealPrep, matchMealPrepFromText } from "@/lib/meal
 import { DEFAULT_PFC_TARGET } from "@/lib/pfcDefaults";
 import { getExercises, createExercise, createLog as createGymLog, getOrCreateLineSplit, findExerciseByName } from "@/lib/gymLog";
 import { formatSets } from "@/lib/gymSuggestion";
-import type { GymExerciseRow } from "@/lib/types";
+import type { GymExerciseRow, ShoppingStore } from "@/lib/types";
 import { isDuplicateLineMessage } from "@/lib/lineDedup";
 import {
   addExpenseEntries,
@@ -68,10 +75,10 @@ interface LineEvent {
 }
 
 const ID_MESSAGE = (userId: string) =>
-  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
+  `あなたのLINEユーザーIDです。\n\n${userId}\n\nこれをコピーして、家計簿アプリの「設定」→「LINE通知」に貼り付けて保存してください。\n\n連携後は、このトークで「承認」と送ると買い物の承認待ちを承認、「完了」と送ると今日のリマインダーを完了、「買い物リスト」と送ると西友の買い物リストをふたりに送信（送った分は購入済みに）、「買い物リスト確認」なら購入済みにせず内容だけ確認、「醤油 買い物リスト」で西友のリストに追加、「Amazon醤油 https://…」でAmazonのリストにリンク付きで追加（リンク無しでもOK）、食事・支出・収入・節約アクション・筋トレ・家電操作は文章でも写真でもそのまま送るだけで自動で処理できます。`;
 
 const USAGE_HINT =
-  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・友達との割り勘「3人で夜ご飯を食べて50000円だった。2人分」（自分たちの負担分だけを支出にします。「1人分」なら参加した1人の支出に）、写真を送った直後なら「3人で2人分」だけでもOK\n・直前に送った記録の取り消し「取り消し」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
+  "認識できませんでした。次のように送ってみてください。\n・食事「朝ごはんは卵かけご飯」「サイゼリヤで外食、満腹度8割」「（作り置きの名前）を150g食べた」「ヨーグルト300グラム」\n・支出「コンビニで480円」\n・収入「給料25万円」\n・節約アクション「コーヒーを自炊した」\n・筋トレ「ベンチプレス60kg10回8回8回」\n・家電「リビングの照明つけて」「おやすみモード」\n・立替（第3口座などの支払いを自分のカードで払ったとき）「コスメ 3800円 立替」、写真を送った直後なら「立替」だけでもOK（返信のボタンでも切替可）\n・友達との割り勘「3人で夜ご飯を食べて50000円だった。2人分」（自分たちの負担分だけを支出にします。「1人分」なら参加した1人の支出に）、写真を送った直後なら「3人で2人分」だけでもOK\n・直前に送った記録の取り消し「取り消し」\n・買い物の承認「承認」\n・今日のリマインダーを完了「完了」\n・西友の買い物リストを送信「買い物リスト」（送った分は購入済みに）\n・買い物リストを見るだけ「買い物リスト確認」\n・西友の買い物リストに追加「醤油 買い物リスト」「醤油、味噌、米 買い物リスト」\n・Amazonの買い物リストに追加「Amazon醤油 https://…」（リンクは無くてもOK）\n（食事・食品パッケージや栄養成分表示・レシート・Amazon等の注文詳細画面のスクリーンショット・トレーニングノートの写真もそのまま送れます。複数枚まとめて送っても1枚ずつ処理します）";
 
 async function reply(event: LineEvent, text: string, buttons?: LineQuickReplyButton[]): Promise<void> {
   if (event.replyToken) await replyLineMessage(event.replyToken, text, buttons);
@@ -212,6 +219,58 @@ async function handleShoppingListCommand(event: LineEvent, profileId: string): P
   const lines = [`🛒 西友の買い物リスト（${me?.name ?? "パートナー"}より）`, "", ...items.map((i) => `・${i.name}`)];
   await Promise.all(recipients.map((r) => sendLineMessage(r.line_user_id, lines.join("\n"))));
   await Promise.all(items.map((i) => setShoppingItemBought(i.id, true)));
+}
+
+const STORE_LABEL: Record<ShoppingStore, string> = { seiyu: "西友", amazon: "Amazon", conveni: "コンビニ", other: "その他" };
+const STORE_ORDER: ShoppingStore[] = ["seiyu", "amazon", "conveni", "other"];
+
+/** テキスト「買い物リスト確認」: 今の買い物リスト（未購入分）を送った本人に返すだけ。
+ * 「買い物リスト」と違って購入済みにはしないので、内容の確認だけしたいときに使う。 */
+async function handleShoppingListShowCommand(event: LineEvent): Promise<void> {
+  const items = (await getShoppingItems()).filter((i) => !i.bought);
+  if (items.length === 0) {
+    await reply(event, "買うものは今ありません。");
+    return;
+  }
+  const lines: string[] = ["🛒 今の買い物リスト（確認のみ・購入済みにはしません）"];
+  for (const store of STORE_ORDER) {
+    const group = items.filter((i) => i.store === store);
+    if (group.length === 0) continue;
+    lines.push("", `【${STORE_LABEL[store]}】`);
+    for (const i of group) {
+      const pending = i.needs_approval && !i.approved ? "（承認待ち）" : "";
+      lines.push(`・${i.name}${pending}${i.url ? `\n　${i.url}` : ""}`);
+    }
+  }
+  await reply(event, lines.join("\n"));
+}
+
+/** 「醤油 買い物リスト」「Amazon醤油 https://…」: 買い物リストに商品を追加する。 */
+async function handleShoppingListAdd(
+  event: LineEvent,
+  profileId: string,
+  store: "seiyu" | "amazon",
+  items: ShoppingListItem[]
+): Promise<void> {
+  const added: string[] = [];
+  const failed: string[] = [];
+  for (const item of items) {
+    try {
+      const row = await createShoppingItem(profileId, { name: item.name, store, url: item.url });
+      added.push(`・${row.name}${row.url ? `\n　${row.url}` : ""}`);
+    } catch (e) {
+      console.error("shopping item add via LINE failed", e);
+      failed.push(item.name);
+    }
+  }
+  if (added.length === 0) {
+    await reply(event, "買い物リストに追加できませんでした。商品名を確認してもう一度送ってください。");
+    return;
+  }
+  // Amazon・その他はパートナーの承認が必要な運用なので、そのことも伝える。
+  const note = store === "amazon" ? "\n\n※Amazonはパートナーの承認後に購入できます（相手が「承認」と送ればOK）" : "";
+  const failedNote = failed.length > 0 ? `\n\n追加できなかったもの: ${failed.join("、")}` : "";
+  await reply(event, `🛒 ${STORE_LABEL[store]}の買い物リストに追加しました:\n${added.join("\n")}${note}${failedNote}`);
 }
 
 /** その日の食事ログ合計を、pfc_targets（未設定ならDEFAULT_PFC_TARGET）に対する「何g中何g（%）」で
@@ -755,6 +814,7 @@ export async function POST(req: Request) {
         await reply(event, ID_MESSAGE(userId));
         continue;
       }
+      const shoppingCommand = parseShoppingListMessage(text);
       if (isCancelMessage(text)) {
         // 「取り消し」「とりけし」「キャンセル」等 → 直前にLINEから登録した内容を消す。
         await handleCancelCommand(event, profileId);
@@ -768,8 +828,12 @@ export async function POST(req: Request) {
         await handleApproveCommand(event, profileId);
       } else if (text === "完了") {
         await handleCompleteCommand(event);
-      } else if (text === "買い物リスト") {
-        await handleShoppingListCommand(event, profileId);
+      } else if (shoppingCommand) {
+        // 「買い物リスト」→ 西友リストを送信（購入済みに）、「買い物リスト確認」→ 見るだけ、
+        // 「醤油 買い物リスト」「Amazon醤油 リンク」→ リストに追加。
+        if (shoppingCommand.kind === "send") await handleShoppingListCommand(event, profileId);
+        else if (shoppingCommand.kind === "show") await handleShoppingListShowCommand(event);
+        else await handleShoppingListAdd(event, profileId, shoppingCommand.store, shoppingCommand.items);
       } else {
         await handleFreeText(event, profileId, text);
       }
