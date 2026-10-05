@@ -904,12 +904,29 @@ export async function estimateSavingsAction(description: string, todayStr: strin
 
 /** 日次・週次ダイジェスト（前日/先週のまとめ）を生成する。promptはlib/digestContext.tsで構築したもの。 */
 export async function generateDigest(prompt: string, maxTokens: number): Promise<string> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: maxTokens,
-    messages: [{ role: "user", content: prompt }],
-  });
-  return joinText(res.content).trim() || "まとめを生成できませんでした。";
+  // 生活tipsと同じ理由（適応的思考の分も max_tokens に含まれる）で、本文の目安より十分大きい上限にする。
+  // 本文が取れなかった場合は失敗文を返さず例外にする（呼び出し元が保存しないようにするため。
+  // 失敗文を保存すると「生成済み」として扱われ、作り直されなくなる）。
+  const budget = Math.max(maxTokens * 4, 4_000);
+  let diagnostic = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await anthropic().messages.create({
+        model: MODEL,
+        max_tokens: budget,
+        output_config: { effort: "low" },
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = joinText(res.content).trim();
+      if (text) return text;
+      diagnostic = `stop=${res.stop_reason} output_tokens=${res.usage?.output_tokens}`;
+      console.error(`digest: empty text (attempt ${attempt}) ${diagnostic}`);
+    } catch (e) {
+      diagnostic = e instanceof Error ? e.message : String(e);
+      console.error(`digest request failed (attempt ${attempt})`, e);
+    }
+  }
+  throw new Error(`ダイジェストを生成できませんでした: ${diagnostic}`);
 }
 
 /** 銘柄・テーマのリサーチ（web_search有効）。現行版 runResearch を移植。 */
@@ -931,17 +948,62 @@ export async function runResearch(query: string): Promise<string> {
 }
 
 /** LINEに1日数回送る生活tips用。useWebSearchがtrueならweb検索を使う（前日ニュースダイジェスト用）。
- * maxTokensは呼び出し側（lib/lineDailyTips.ts）がコーナーごとの分量に応じて指定する
- * （短すぎると、引用や具体例を含む長めのコーナーで</output>閉じタグの手前で応答が切れてしまうため）。
- * 呼び出し側が<output>タグで本文を抽出する前提の、タグ込みの生テキストを返す。 */
+ * maxTokensは呼び出し側（lib/lineDailyTips.ts）が指定する「本文の分量の目安」。
+ * 呼び出し側が<output>タグで本文を抽出する前提の、タグ込みの生テキストを返す。
+ *
+ * 生成が失敗しやすかった原因への対策を2つ入れている。
+ * 1) 現行のSonnetはthinkingを指定しないと「適応的思考」が有効になり、思考分も max_tokens に
+ *    含まれる。コーナーごとの目安（700〜2000）をそのまま上限にしていたため、思考が長引いた回は
+ *    本文が1文字も返らないまま打ち切られていた（ニュース・健康コーナーで頻発していた）。
+ *    上限は目安の数倍まで引き上げ、effortを下げて思考の長さ自体も抑える。
+ * 2) web検索を使うと、サーバー側の検索ループが上限に達した合図として stop_reason="pause_turn"
+ *    が返ることがある。この応答には本文がまだ無い（検索中の独り言だけのことがある）ため、
+ *    応答をそのまま会話に積み直してターンを続行する。
+ * それでも本文が取れなければ例外にする。呼び出し元は記録・送信を行わないので、
+ * 15分おきの追いつき配信で同じ日のうちに再試行される（失敗文を送らない・記録しない）。 */
 export async function generateDailyTip(prompt: string, useWebSearch: boolean, maxTokens: number): Promise<string> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: maxTokens,
-    messages: [{ role: "user", content: prompt }],
-    ...(useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" }] } : {}),
-  });
-  return joinText(res.content).trim() || "本日分の生成に失敗しました。";
+  const toolOptions = useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const }] } : {};
+  const budget = Math.max(maxTokens * 4, useWebSearch ? 12_000 : 4_000);
+  let diagnostic = "";
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+      const parts: string[] = [];
+      let res = await anthropic().messages.create({
+        model: MODEL,
+        max_tokens: budget,
+        // 思考を短めに抑える。分量・構成はプロンプト側で細かく指定しているので、
+        // effortを下げても記事の中身は変わらない。
+        output_config: { effort: useWebSearch ? "medium" : "low" },
+        messages,
+        ...toolOptions,
+      });
+      parts.push(joinText(res.content));
+
+      // pause_turnは「検索ループが一旦止まった」だけなので、応答を積み直して続行する（最大3回）。
+      for (let i = 0; i < 3 && res.stop_reason === "pause_turn"; i++) {
+        messages.push({ role: "assistant", content: res.content });
+        res = await anthropic().messages.create({
+          model: MODEL,
+          max_tokens: budget,
+          output_config: { effort: useWebSearch ? "medium" : "low" },
+          messages,
+          ...toolOptions,
+        });
+        parts.push(joinText(res.content));
+      }
+
+      const text = parts.join("\n").trim();
+      if (text) return text;
+      diagnostic = `stop=${res.stop_reason} output_tokens=${res.usage?.output_tokens}`;
+      console.error(`daily tip: empty text (attempt ${attempt}, webSearch=${useWebSearch}) ${diagnostic}`);
+    } catch (e) {
+      diagnostic = e instanceof Error ? e.message : String(e);
+      console.error(`daily tip request failed (attempt ${attempt}, webSearch=${useWebSearch})`, e);
+    }
+  }
+  throw new Error(`生活tipsの本文を生成できませんでした: ${diagnostic}`);
 }
 
 export interface WeeklyBodyReviewNarrative {

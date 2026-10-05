@@ -29,14 +29,21 @@ export async function GET(req: Request) {
   const results: { owner: string; kind: string; periodKey: string; action: string }[] = [];
 
   for (const owner of owners) {
+    // 1人分の生成に失敗しても、もう1人の分や週次の生成は続ける（生成できなかった分は保存しないので、
+    // ダッシュボードの「今すぐ生成する」や翌回の実行で作り直せる）。
     const existingDaily = await getDigest(owner.id, "daily", targetDate);
     if (existingDaily) {
       results.push({ owner: owner.name, kind: "daily", periodKey: targetDate, action: "skipped(exists)" });
     } else {
-      const data = await gatherDigestData(owner.id, targetDate, todayJst);
-      const body = hasAnyContent(data) ? await generateDigest(buildDailyDigestPrompt(owner.name, targetDate, data), 700) : NO_CONTENT_MESSAGE;
-      await upsertDigest(owner.id, "daily", targetDate, body);
-      results.push({ owner: owner.name, kind: "daily", periodKey: targetDate, action: "created" });
+      try {
+        const data = await gatherDigestData(owner.id, targetDate, todayJst);
+        const body = hasAnyContent(data) ? await generateDigest(buildDailyDigestPrompt(owner.name, targetDate, data), 700) : NO_CONTENT_MESSAGE;
+        await upsertDigest(owner.id, "daily", targetDate, body);
+        results.push({ owner: owner.name, kind: "daily", periodKey: targetDate, action: "created" });
+      } catch (e) {
+        console.error(`daily digest failed: ${owner.name}`, e);
+        results.push({ owner: owner.name, kind: "daily", periodKey: targetDate, action: "failed" });
+      }
     }
 
     if (isMonday) {
@@ -45,12 +52,17 @@ export async function GET(req: Request) {
       if (existingWeekly) {
         results.push({ owner: owner.name, kind: "weekly", periodKey: weekStart, action: "skipped(exists)" });
       } else {
-        const data = await gatherDigestData(owner.id, weekStart, todayJst);
-        const body = hasAnyContent(data)
-          ? await generateDigest(buildWeeklyDigestPrompt(owner.name, weekStart, prevDayStr(todayJst), data), 1100)
-          : NO_CONTENT_MESSAGE;
-        await upsertDigest(owner.id, "weekly", weekStart, body);
-        results.push({ owner: owner.name, kind: "weekly", periodKey: weekStart, action: "created" });
+        try {
+          const data = await gatherDigestData(owner.id, weekStart, todayJst);
+          const body = hasAnyContent(data)
+            ? await generateDigest(buildWeeklyDigestPrompt(owner.name, weekStart, prevDayStr(todayJst), data), 1100)
+            : NO_CONTENT_MESSAGE;
+          await upsertDigest(owner.id, "weekly", weekStart, body);
+          results.push({ owner: owner.name, kind: "weekly", periodKey: weekStart, action: "created" });
+        } catch (e) {
+          console.error(`weekly digest failed: ${owner.name}`, e);
+          results.push({ owner: owner.name, kind: "weekly", periodKey: weekStart, action: "failed" });
+        }
       }
     }
   }

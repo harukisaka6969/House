@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { generateDailyTip } from "./anthropic";
 import { prevDayStr } from "./date";
+import { extractTag, extractOutputContent, isUsableTipContent } from "./tipText";
 
 export type TipCategory =
   | "news"
@@ -46,21 +47,6 @@ function avoidRepeatClause(recentFull: string[], olderSummaries: string[]): stri
  * 挟むことがあり、プロンプトで禁止するだけでは防ぎきれないため、本文をタグで囲んで確実に抽出する。 */
 const COMMON_RULE =
   "本文の直前や直後に、前置き・作成プロセスの説明・「以下にまとめます」のような言葉は一切書かないでください。回答は必ず本文だけを <output> と </output> のタグで囲んで出力し、そのすぐ後に、今日扱ったテーマを15字程度で要約したものを <summary> と </summary> のタグで囲んで出力してください（タグの外には何も書かないこと）。絵文字は使っても構いませんが多用しないでください。";
-
-function extractTag(text: string, tag: string): string {
-  const match = text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-  return (match ? match[1] : "").trim();
-}
-
-/** <output>本文を取り出す。万一トークン上限で応答が</output>閉じタグの手前で切れてしまった場合でも、
- * 生の<output>タグをそのままLINEに表示してしまわないよう、開始タグの直後から末尾までを使う。 */
-function extractOutputContent(raw: string): string {
-  const closed = extractTag(raw, "output");
-  if (closed) return closed;
-  const openIdx = raw.indexOf("<output>");
-  if (openIdx !== -1) return raw.slice(openIdx + "<output>".length).trim();
-  return raw.trim();
-}
 
 export const TIP_DEFS: TipDef[] = [
   {
@@ -196,12 +182,19 @@ async function recordTip(category: TipCategory, date: string, content: string, s
   if (error) throw error;
 }
 
-/** 指定のtip定義について本文を生成し、送信履歴に記録する（送信自体は呼び出し側で行う）。 */
+/** 指定のtip定義について本文を生成し、送信履歴に記録する（送信自体は呼び出し側で行う）。
+ * 記事になっていない応答（空・タグが残っている・検索中の独り言など）は記録せず例外にする。
+ * 以前は「本日分の生成に失敗しました。」という文字列をそのまま記録・送信していたため、
+ * その日はもう送られたことになり再試行もされなかった。記録しなければ15分おきの
+ * 追いつき配信が同じ日のうちに何度でも作り直す。 */
 export async function generateAndRecordTip(def: TipDef, today: string): Promise<string> {
   const { recentFull, olderSummaries } = await getAntiRepeatContext(def.category);
   const prompt = def.buildPrompt(recentFull, olderSummaries, today);
   const raw = await generateDailyTip(prompt, def.useWebSearch, def.maxTokens);
   const content = extractOutputContent(raw);
+  if (!isUsableTipContent(content)) {
+    throw new Error(`tip content rejected (${def.category}): ${content.slice(0, 120)}`);
+  }
   const summary = extractTag(raw, "summary") || content.slice(0, 30);
   await recordTip(def.category, today, content, summary);
   return content;
