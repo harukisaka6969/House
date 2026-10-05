@@ -7,6 +7,30 @@
  * 検品に落ちたものは送らず記録もしないことで、同じ日のうちに再生成される（追いつき配信）。
  */
 
+import { prevDayStr } from "./date";
+
+/** 日付をまたいで追いつき配信できる時刻の下限。これ以降に予定されているコーナーは、
+ * 日付が変わった後でも「前日分」として送れるようにする（23:00・23:30のコーナーは
+ * 当日中の猶予が30分〜1時間しかなく、cronの起動が飛ぶとその日は送られないまま終わるため）。 */
+export const CARRYOVER_FROM = "18:00";
+/** 前日分の追いつき配信を認める時刻の上限（これを過ぎたら前日分はあきらめる）。 */
+export const CARRYOVER_UNTIL = "05:00";
+
+/**
+ * 今の時刻（JSTの"HH:MM"）で送るべきコーナーと、その対象日を返す。
+ * ・予定時刻を過ぎていて今日まだ送っていないもの → 当日分
+ * ・深夜（CARRYOVER_UNTILより前）なら、まだ予定時刻が来ていない夜のコーナー → 前日分
+ *   （前日の夜に起動が飛んで送れなかった分の救済。古い方を先に返す）
+ * 実際に送るかは呼び出し側のhasTipSent（カテゴリ＋日付）が最終判定する。
+ */
+export function selectDueTips<T extends { time: string }>(defs: T[], nowHhmm: string, today: string): { def: T; date: string }[] {
+  const dueToday = defs.filter((d) => d.time <= nowHhmm).map((def) => ({ def, date: today }));
+  if (nowHhmm >= CARRYOVER_UNTIL) return dueToday;
+  const yesterday = prevDayStr(today);
+  const carried = defs.filter((d) => d.time >= CARRYOVER_FROM && d.time > nowHhmm).map((def) => ({ def, date: yesterday }));
+  return [...carried, ...dueToday];
+}
+
 export function extractTag(text: string, tag: string): string {
   const match = (text ?? "").match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
   return (match ? match[1] : "").trim();

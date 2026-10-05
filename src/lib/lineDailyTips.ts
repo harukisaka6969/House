@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { generateDailyTip } from "./anthropic";
 import { prevDayStr } from "./date";
-import { extractTag, extractOutputContent, isUsableTipContent } from "./tipText";
+import { extractTag, extractOutputContent, isUsableTipContent, selectDueTips } from "./tipText";
 
 export type TipCategory =
   | "news"
@@ -143,15 +143,17 @@ ${COMMON_RULE}${avoidRepeatClause(recentFull, olderSummaries)}`,
   },
 ];
 
-/** GitHub Actionsの実際の発火間隔は設定通り15分おきとは限らず、混雑時は1時間近く空くこともある。
- * 時刻の完全一致で判定すると、その1回のタイミングを逃した瞬間そのカテゴリは一日中送られなくなって
- * しまうため、「予定時刻を過ぎていて、今日まだ送っていない」ものは全て対象にする（自己修復・追いつき
- * 配信）。実際に送るかどうかは呼び出し側のhasTipSentTodayが最終判定する。 */
-export function tipsDueForTime(currentHhmm: string): TipDef[] {
-  return TIP_DEFS.filter((t) => t.time <= currentHhmm);
+/** GitHub Actionsの実際の発火間隔は設定通り15分おきとは限らない（実測では1日5〜6回、3〜6時間
+ * 空くこともある）。時刻の完全一致で判定すると、その1回のタイミングを逃した瞬間そのカテゴリは
+ * 一日中送られなくなってしまうため、「予定時刻を過ぎていて、その日まだ送っていない」ものは全て
+ * 対象にする（自己修復・追いつき配信）。
+ * さらに21:00・23:00・23:30のコーナーは当日中の猶予が短く、起動が飛ぶとその日は送られないまま
+ * 終わっていたため、深夜（朝5時まで）は前日分としても送れるようにしている（selectDueTips）。 */
+export function tipsDueFor(currentHhmm: string, today: string): { def: TipDef; date: string }[] {
+  return selectDueTips(TIP_DEFS, currentHhmm, today);
 }
 
-export async function hasTipSentToday(category: TipCategory, date: string): Promise<boolean> {
+export async function hasTipSent(category: TipCategory, date: string): Promise<boolean> {
   const { data, error } = await db().from("line_daily_tips").select("id").eq("category", category).eq("date", date).maybeSingle();
   if (error) throw error;
   return !!data;
@@ -186,16 +188,17 @@ async function recordTip(category: TipCategory, date: string, content: string, s
  * 記事になっていない応答（空・タグが残っている・検索中の独り言など）は記録せず例外にする。
  * 以前は「本日分の生成に失敗しました。」という文字列をそのまま記録・送信していたため、
  * その日はもう送られたことになり再試行もされなかった。記録しなければ15分おきの
- * 追いつき配信が同じ日のうちに何度でも作り直す。 */
-export async function generateAndRecordTip(def: TipDef, today: string): Promise<string> {
+ * 追いつき配信が同じ日のうちに何度でも作り直す。
+ * dateは対象日（通常は当日。深夜に前日分を追いつき配信する場合は前日）。 */
+export async function generateAndRecordTip(def: TipDef, date: string): Promise<string> {
   const { recentFull, olderSummaries } = await getAntiRepeatContext(def.category);
-  const prompt = def.buildPrompt(recentFull, olderSummaries, today);
+  const prompt = def.buildPrompt(recentFull, olderSummaries, date);
   const raw = await generateDailyTip(prompt, def.useWebSearch, def.maxTokens);
   const content = extractOutputContent(raw);
   if (!isUsableTipContent(content)) {
     throw new Error(`tip content rejected (${def.category}): ${content.slice(0, 120)}`);
   }
   const summary = extractTag(raw, "summary") || content.slice(0, 30);
-  await recordTip(def.category, today, content, summary);
+  await recordTip(def.category, date, content, summary);
   return content;
 }

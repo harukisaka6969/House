@@ -1,0 +1,21 @@
+name: LINE daily life tips (backup schedule)
+
+# line-daily-tips.yml と同じエンドポイントを、ずらした時刻で叩くだけのワークフロー。
+# GitHub Actionsのscheduleは設定通りには発火せず、実測ではこのリポジトリで1日5〜6回（3〜6時間
+# 空くこともある）。そのため21:00・23:00・23:30(JST)のコーナーは、当日中に1度も起動されず
+# 送られないまま終わる日が多かった。ワークフロー単位では別々の時刻に発火するので、2本に分けて
+# 起動の機会を増やす（送信は「1カテゴリ1日1回」で冪等。同時に走っても
+# line_daily_tips の (category, date) ユニーク制約で二重送信にならない）。
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and send due LINE daily tips
+        run: |
+          curl -sS -f -X GET "${{ vars.APP_BASE_URL || 'https://house-wheat-nine.vercel.app' }}/api/cron/line-daily-tips" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

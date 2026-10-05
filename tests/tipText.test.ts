@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractTag, extractOutputContent, isUsableTipContent } from "@/lib/tipText";
+import { extractTag, extractOutputContent, isUsableTipContent, selectDueTips } from "@/lib/tipText";
 
 /** 毎日の記事（生活tips）の生成が失敗していた問題への対応。
  * 「本日分の生成に失敗しました。」や検索中の独り言がそのままLINEに送られていたため、
@@ -48,5 +48,45 @@ describe("isUsableTipContent", () => {
 
   it("タグが残っているものは送らない", () => {
     expect(isUsableTipContent("<summary>要約だけが返ってきてしまった場合の長めのテキストです。</summary>")).toBe(false);
+  });
+});
+
+/** 21:00・23:00・23:30のコーナーが、cronの起動が飛んだ日に送られないまま終わっていた問題への対応。
+ * 深夜（朝5時まで）は前日分としても送れるようにする。 */
+describe("selectDueTips", () => {
+  const defs = [
+    { time: "06:00", name: "news" },
+    { time: "12:00", name: "health" },
+    { time: "18:00", name: "philosophy" },
+    { time: "21:00", name: "wellbeing" },
+    { time: "23:30", name: "fashion" },
+  ];
+  const today = "2026-10-05";
+
+  it("予定時刻を過ぎたコーナーを当日分として返す", () => {
+    expect(selectDueTips(defs, "12:30", today)).toEqual([
+      { def: defs[0], date: today },
+      { def: defs[1], date: today },
+    ]);
+  });
+
+  it("深夜は、前日の夜に送れなかったコーナーを前日分として先に返す", () => {
+    const due = selectDueTips(defs, "00:45", today);
+    expect(due).toEqual([
+      { def: defs[2], date: "2026-10-04" },
+      { def: defs[3], date: "2026-10-04" },
+      { def: defs[4], date: "2026-10-04" },
+    ]);
+  });
+
+  it("朝5時を過ぎたら前日分はあきらめる", () => {
+    expect(selectDueTips(defs, "05:00", today)).toEqual([]);
+    expect(selectDueTips(defs, "06:15", today)).toEqual([{ def: defs[0], date: today }]);
+  });
+
+  it("夜のコーナーも、当日中に予定時刻を過ぎていれば当日分として返す", () => {
+    const due = selectDueTips(defs, "23:45", today);
+    expect(due.every((d) => d.date === today)).toBe(true);
+    expect(due).toHaveLength(5);
   });
 });
