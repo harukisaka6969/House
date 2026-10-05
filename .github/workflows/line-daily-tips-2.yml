@@ -17,5 +17,5 @@ jobs:
     steps:
       - name: Check and send due LINE daily tips
         run: |
-          curl -sS -f -X GET "${{ vars.APP_BASE_URL || 'https://house-wheat-nine.vercel.app' }}/api/cron/line-daily-tips" \
+          curl -sS -f --max-time 90 -X GET "${{ vars.APP_BASE_URL || 'https://house-wheat-nine.vercel.app' }}/api/cron/line-daily-tips" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

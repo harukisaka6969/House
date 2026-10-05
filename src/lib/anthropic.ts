@@ -951,7 +951,7 @@ export async function runResearch(query: string): Promise<string> {
  * maxTokensは呼び出し側（lib/lineDailyTips.ts）が指定する「本文の分量の目安」。
  * 呼び出し側が<output>タグで本文を抽出する前提の、タグ込みの生テキストを返す。
  *
- * 生成が失敗しやすかった原因への対策を2つ入れている。
+ * 生成が失敗しやすかった原因への対策。
  * 1) 現行のSonnetはthinkingを指定しないと「適応的思考」が有効になり、思考分も max_tokens に
  *    含まれる。コーナーごとの目安（700〜2000）をそのまま上限にしていたため、思考が長引いた回は
  *    本文が1文字も返らないまま打ち切られていた（ニュース・健康コーナーで頻発していた）。
@@ -959,38 +959,56 @@ export async function runResearch(query: string): Promise<string> {
  * 2) web検索を使うと、サーバー側の検索ループが上限に達した合図として stop_reason="pause_turn"
  *    が返ることがある。この応答には本文がまだ無い（検索中の独り言だけのことがある）ため、
  *    応答をそのまま会話に積み直してターンを続行する。
- * それでも本文が取れなければ例外にする。呼び出し元は記録・送信を行わないので、
- * 15分おきの追いつき配信で同じ日のうちに再試行される（失敗文を送らない・記録しない）。 */
-export async function generateDailyTip(prompt: string, useWebSearch: boolean, maxTokens: number): Promise<string> {
-  const toolOptions = useWebSearch ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const }] } : {};
-  const budget = Math.max(maxTokens * 4, useWebSearch ? 12_000 : 4_000);
-  let diagnostic = "";
+ * 3) 1と2で1回の生成が長くなり、今度は関数の実行時間上限（60秒）に先に当たって
+ *    502/504になり、cronのジョブ自体が失敗するようになった。そのためAI呼び出しには
+ *    自前の制限時間を持たせ（SDKのtimeout・リトライ無効）、検索回数も絞って、
+ *    関数が打ち切られる前に必ずこちらで諦めるようにしている。
+ * 本文が取れなければ例外にする。呼び出し元は記録・送信を行わないので、次回の追いつき配信で
+ * 再試行される（失敗文を送らない・記録しない）。 */
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
-      const parts: string[] = [];
-      let res = await anthropic().messages.create({
+/** 1コーナーの生成にかけてよい時間。関数の実行上限(60秒)より十分小さくして、
+ * Vercel側で打ち切られる（=ジョブが失敗する）前に自分で諦める。 */
+const TIP_DEADLINE_MS = 42_000;
+
+export async function generateDailyTip(prompt: string, useWebSearch: boolean, maxTokens: number): Promise<string> {
+  const startedAt = Date.now();
+  const remainingMs = () => TIP_DEADLINE_MS - (Date.now() - startedAt);
+  // 検索回数を絞る（既定のままだと検索と地の文で時間とトークンを使い切ってしまう）。
+  const toolOptions = useWebSearch
+    ? { tools: [{ type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 3 }] }
+    : {};
+  const budget = Math.max(maxTokens * 4, useWebSearch ? 8_000 : 4_000);
+  const call = (messages: Anthropic.MessageParam[]) =>
+    anthropic().messages.create(
+      {
         model: MODEL,
         max_tokens: budget,
         // 思考を短めに抑える。分量・構成はプロンプト側で細かく指定しているので、
         // effortを下げても記事の中身は変わらない。
-        output_config: { effort: useWebSearch ? "medium" : "low" },
+        output_config: { effort: "low" },
         messages,
         ...toolOptions,
-      });
+      },
+      // 残り時間を超えないようにし、SDKの自動リトライで二重に時間を使わないようにする。
+      { timeout: Math.max(remainingMs(), 5_000), maxRetries: 0 }
+    );
+
+  // web検索ありの回は1回で時間を使い切るため、やり直しは次回のcronに任せる。
+  const maxAttempts = useWebSearch ? 1 : 2;
+  let diagnostic = "";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+      const parts: string[] = [];
+      let res = await call(messages);
       parts.push(joinText(res.content));
 
-      // pause_turnは「検索ループが一旦止まった」だけなので、応答を積み直して続行する（最大3回）。
-      for (let i = 0; i < 3 && res.stop_reason === "pause_turn"; i++) {
+      // pause_turnは「検索ループが一旦止まった」だけなので、応答を積み直して続行する
+      // （残り時間があるうちだけ。最大3回）。
+      for (let i = 0; i < 3 && res.stop_reason === "pause_turn" && remainingMs() > 12_000; i++) {
         messages.push({ role: "assistant", content: res.content });
-        res = await anthropic().messages.create({
-          model: MODEL,
-          max_tokens: budget,
-          output_config: { effort: useWebSearch ? "medium" : "low" },
-          messages,
-          ...toolOptions,
-        });
+        res = await call(messages);
         parts.push(joinText(res.content));
       }
 
@@ -1002,6 +1020,7 @@ export async function generateDailyTip(prompt: string, useWebSearch: boolean, ma
       diagnostic = e instanceof Error ? e.message : String(e);
       console.error(`daily tip request failed (attempt ${attempt}, webSearch=${useWebSearch})`, e);
     }
+    if (remainingMs() < 10_000) break;
   }
   throw new Error(`生活tipsの本文を生成できませんでした: ${diagnostic}`);
 }
