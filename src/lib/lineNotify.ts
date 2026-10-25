@@ -40,8 +40,10 @@ function quickReplyPayload(buttons: LineQuickReplyButton[] | undefined) {
   if (!buttons || buttons.length === 0) return {};
   return {
     quickReply: {
-      // LINEの仕様上、labelは20文字まで。
-      items: buttons.slice(0, 13).map((b) => ({
+      // LINEの仕様上、labelは20文字まで・postbackのdataは300文字まで・ボタンは13個まで。
+      // dataが長すぎるボタンが1つでもあると返信ごと拒否されるため、そのボタンだけ外す
+      // （Amazonの注文で品目が多いと、支出idを並べたdataが300文字を超える）。
+      items: buttons.filter((b) => b.data.length <= 300).slice(0, 13).map((b) => ({
         type: "action" as const,
         action: { type: "postback" as const, label: b.label.slice(0, 20), data: b.data, displayText: b.displayText },
       })),

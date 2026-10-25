@@ -6,6 +6,7 @@ import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import { VALID_ACCOUNT_IDS } from "./constants";
 import { isMaskedForViewer } from "./aggregate";
 import { isMasterProfile } from "./profiles";
+import { categoryForAccount } from "./lineAccount";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
@@ -208,6 +209,24 @@ export async function updateExpense(id: string, callerId: string, patch: Expense
   const { data, error } = await db().from("expenses").update(update).eq("id", id).select("*").single();
   if (error) throw error;
   return data as ExpenseRow;
+}
+
+/** 支出の口座を付け替える（LINEの「口座を変更」ボタン用）。付け替え先の口座で選べないカテゴリは
+ * categoryForAccountで近いものに直す。見えない・存在しない支出は飛ばし、更新できた行を返す。 */
+export async function changeExpenseAccount(ids: string[], callerId: string, accountId: string): Promise<ExpenseRow[]> {
+  if (!VALID_ACCOUNTS.includes(accountId as AccountId)) throw new ValidationError(`invalid account_id: ${accountId}`);
+  const updated: ExpenseRow[] = [];
+  for (const id of ids) {
+    const current = await assertVisibleExpense(id, callerId);
+    if (!current) continue;
+    const { data: row, error: selErr } = await db().from("expenses").select("category").eq("id", id).single();
+    if (selErr) throw selErr;
+    const category = categoryForAccount((row as { category: string }).category, accountId);
+    const { data, error } = await db().from("expenses").update({ account_id: accountId, category }).eq("id", id).select("*").single();
+    if (error) throw error;
+    updated.push(data as ExpenseRow);
+  }
+  return updated;
 }
 
 /** 友達との割り勘の後付け設定。numが人数分の分子（自分たちの人数）、denが合計人数。
