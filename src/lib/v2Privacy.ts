@@ -7,7 +7,9 @@
 import type { WishlistItemRow, LifeEventRow, MaintenanceTaskRow, AssetRow } from "./types";
 
 /** is_private=trueの他人のアイテムは存在ごと除外する（v2 spec §2.5: 第3口座と違い合計すら共有しない）。 */
-export function visibleWishlistItems(rows: WishlistItemRow[], viewerProfileId: string): WishlistItemRow[] {
+export function visibleWishlistItems(rows: WishlistItemRow[], viewerProfileId: string, viewerSeesAll = false): WishlistItemRow[] {
+  // マスターアカウントは相手の非公開アイテムも見える。
+  if (viewerSeesAll) return rows;
   return rows.filter((r) => !r.is_private || r.owner === viewerProfileId);
 }
 

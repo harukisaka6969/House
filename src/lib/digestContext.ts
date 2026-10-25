@@ -6,6 +6,7 @@ import { getRehabLogsInRange } from "./rehabLog";
 import { getIdeaNotesCreatedInRange } from "./ideaNotes";
 import { getIncomes } from "./incomes";
 import { isMaskedForViewer, sumAmount } from "./aggregate";
+import { isMasterProfile } from "./profiles";
 import { fmt } from "./judge";
 import { nowMonthKeyJST } from "./date";
 import type { RehabLogRow } from "./types";
@@ -60,14 +61,15 @@ export async function gatherDigestData(ownerId: string, fromDate: string, toDate
     .map((j) => `${j.date}: ${j.body.trim()}`)
     .join("\n\n");
 
-  const visibleExpenses = expenseRows.filter((e) => !isMaskedForViewer(e, ownerId));
+  const seesAll = await isMasterProfile(ownerId);
+  const visibleExpenses = expenseRows.filter((e) => !isMaskedForViewer(e, ownerId, seesAll));
   const expenseLines = visibleExpenses.map((e) => `${e.date} ${e.category}${e.sub ? `(${e.sub})` : ""} ${fmt(e.amount)}${e.memo ? ` ${e.memo}` : ""}`).join("\n");
 
   const monthKey = nowMonthKeyJST();
   const { from, toExclusive } = monthRange(monthKey);
   const [monthIncomes, monthExpenses] = await Promise.all([getIncomes(monthKey), getExpensesInRange(from, toExclusive)]);
   const monthIncomeTotal = sumAmount(monthIncomes);
-  const monthExpenseVisible = sumAmount(monthExpenses.filter((e) => !isMaskedForViewer(e, ownerId)));
+  const monthExpenseVisible = sumAmount(monthExpenses.filter((e) => !isMaskedForViewer(e, ownerId, seesAll)));
   const monthContext = `今期（${monthKey}、25日始まり）収入 ${fmt(monthIncomeTotal)} / 支出(自分視点) ${fmt(monthExpenseVisible)}`;
 
   const mealLines = mealRows.map((m) => `${m.date} ${m.description}（${Math.round(m.calories)}kcal）`).join("\n");

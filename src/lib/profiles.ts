@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { MASTER_PROFILE_SLUG } from "./constants";
 import type { Profile } from "./types";
 
 let cache: Profile[] | null = null;
@@ -108,6 +109,13 @@ export async function profileNameOf(profileId: string | null): Promise<string> {
 export function makeNameLookup(profiles: Profile[]): (profileId: string) => string {
   const map = new Map(profiles.map((p) => [p.id, p.name]));
   return (id: string) => map.get(id) ?? "？";
+}
+
+/** マスターアカウント（相手の第3口座の明細や非公開のウィッシュアイテムも含めてすべて閲覧できるowner）かどうか。 */
+export async function isMasterProfile(profileId: string): Promise<boolean> {
+  const profiles = await getAllProfiles();
+  const p = profiles.find((x) => x.id === profileId);
+  return !!p && p.role === "owner" && p.slug === MASTER_PROFILE_SLUG;
 }
 
 export async function findProfileBySlug(slug: string): Promise<Profile | null> {

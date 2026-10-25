@@ -5,7 +5,7 @@ import { getIncomesInMonthRange } from "./incomes";
 import { getInvestmentsInRange } from "./investments";
 import { buildPerCategory, isMaskedForViewer, sumAmount } from "./aggregate";
 import { nowMonthKeyJST, shiftMonth, periodRange, periodKeyOfDate, DASHBOARD_MIN_MONTH } from "./date";
-import { getAllProfiles, makeNameLookup } from "./profiles";
+import { getAllProfiles, makeNameLookup, isMasterProfile } from "./profiles";
 import type { ExpenseRow, IncomeRow } from "./types";
 
 const SPECIAL_EVENT_THRESHOLD = 300000;
@@ -76,6 +76,7 @@ export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: str
     getAllProfiles(),
   ]);
   const nameOf = makeNameLookup(profiles);
+  const seesAll = await isMasterProfile(viewerProfileId);
   const incomeRows = ownerFilter ? incomeRowsAll.filter((r) => r.owner === ownerFilter || r.owner === null) : incomeRowsAll;
   const expenseRows = ownerFilter ? expenseRowsAll.filter((r) => r.owner === ownerFilter) : expenseRowsAll;
   const investRows = ownerFilter ? investRowsAll.filter((r) => r.owner === ownerFilter) : investRowsAll;
@@ -95,7 +96,7 @@ export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: str
     const net = incomeTotal - expenseTotal;
     cumulativeNet += net;
 
-    const perCategory = buildPerCategory(expForMonth, viewerProfileId);
+    const perCategory = buildPerCategory(expForMonth, viewerProfileId, seesAll);
     perCategory.forEach((c) => categorySet.add(c.name));
 
     return {
@@ -124,7 +125,7 @@ export async function getFlowAnalysis(viewerProfileId: string, ownerFilter?: str
     ...expenseRows
       .filter(
         (r: ExpenseRow) =>
-          r.amount >= SPECIAL_EVENT_THRESHOLD && !isMaskedForViewer(r, viewerProfileId) && !r.memo?.startsWith("月次支出")
+          r.amount >= SPECIAL_EVENT_THRESHOLD && !isMaskedForViewer(r, viewerProfileId, seesAll) && !r.memo?.startsWith("月次支出")
       )
       .map((r: ExpenseRow) => ({
         type: "expense" as const,

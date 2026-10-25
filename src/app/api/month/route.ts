@@ -5,7 +5,7 @@ import { getExpensesInRange, monthRange } from "@/lib/expenses";
 import { getIncomes } from "@/lib/incomes";
 import { getInvestmentsInRange, getCumulativeInvestment } from "@/lib/investments";
 import { getAccounts } from "@/lib/accounts";
-import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
+import { getAllProfiles, makeNameLookup, isMasterProfile } from "@/lib/profiles";
 import { maskExpenses, buildPerAccount, buildPerCategory, buildPerDay, buildMonthTotals } from "@/lib/aggregate";
 
 export async function GET(req: Request) {
@@ -29,8 +29,9 @@ export async function GET(req: Request) {
       getCumulativeInvestment(owner),
     ]);
     const nameOf = makeNameLookup(profiles);
+    const seesAll = await isMasterProfile(session.profile_id);
 
-    const expenses = maskExpenses(expenseRows, session.profile_id, nameOf);
+    const expenses = maskExpenses(expenseRows, session.profile_id, nameOf, seesAll);
     const incomes = incomeRows.map((i) => ({ ...i, owner_name: i.owner ? nameOf(i.owner) : null }));
     const investments = investmentRows.map((iv) => ({ ...iv, owner_name: nameOf(iv.owner) }));
 
@@ -41,8 +42,8 @@ export async function GET(req: Request) {
     const aggregates = {
       perAccount: buildPerAccount(accounts, aggExpenses, session.profile_id),
       monthTotals: buildMonthTotals(aggIncomes, aggExpenses, aggInvestments),
-      perCategory: buildPerCategory(aggExpenses, session.profile_id),
-      perDay: buildPerDay(aggExpenses, session.profile_id),
+      perCategory: buildPerCategory(aggExpenses, session.profile_id, seesAll),
+      perDay: buildPerDay(aggExpenses, session.profile_id, seesAll),
       cumInvest,
     };
 

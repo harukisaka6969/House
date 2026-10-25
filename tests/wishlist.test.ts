@@ -48,6 +48,11 @@ describe("v2 spec §2.5 ウィッシュの is_private — 相手には存在ご�
     expect(serialized).not.toContain("w4");
   });
 
+  it("the master account sees every item, including the partner's private ones", () => {
+    const visible = visibleWishlistItems(all, HARUKI, true);
+    expect(visible.map((i) => i.id).sort()).toEqual(["w1", "w2", "w3", "w4"]);
+  });
+
   it("symmetric: Arisa sees her own items and Haruki's public item, not Haruki's private one", () => {
     const visible = visibleWishlistItems(all, ARISA);
     expect(visible.map((i) => i.id).sort()).toEqual(["w1", "w3", "w4"]);

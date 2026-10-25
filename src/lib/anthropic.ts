@@ -4,6 +4,8 @@ import { fetchOgImage } from "./ogImage";
 import { rateLimit } from "./rateLimit";
 import { extractJsonObject, toMealEstimate, type MealEstimate } from "./aiJson";
 import { parseParkingResearch, type ParkingOption, type ParkingResearch } from "./parkingParse";
+import { todayStrJST } from "./date";
+import { normalizeReceiptDate } from "./receiptDate";
 
 // spec §2 / §8: サーバー側でClaudeを呼ぶ。旧モデルID（claude-sonnet-4-6）がAnthropic側で
 // 廃止され、LINEの写真・文章読み取りなど全てのAI機能が一斉に失敗するようになったため、
@@ -118,6 +120,7 @@ export async function ocrReceipt(
   accounts: { id: string; name: string }[]
 ): Promise<OcrResult> {
   const acctList = accounts.map((a) => `${a.id}=${a.name}`).join(", ");
+  const today = todayStrJST();
   const res = await anthropic().messages.create({
     model: MODEL,
     max_tokens: 1000,
@@ -130,6 +133,7 @@ export async function ocrReceipt(
             type: "text",
             text: `このレシート画像を読み取り、次のJSONのみを返してください。前置きやコードブロックは不要です。
 ${accountRuleText(acctList)}
+dateには、レシートに印字された購入日（取引日）をYYYY-MM-DD形式で入れてください。今日は${today}です。和暦（令和7年、R7など）は西暦に直し、「25/10/24」のような2桁の年は20XX年として扱い、年が印字されていなければ今日以前で一番近い日付になる年を補ってください。有効期限・発行日・返品期限など購入日以外の日付と取り違えないこと。読み取れなければnullにしてください。また、date_textにはレシートに印字されている日付の表記をそのまま（例:「2025年10月24日(金)」「R7.10.24」「25/10/24 18:32」）入れてください（無ければnull）。
 海外のレシート（日本円以外の通貨）の場合、totalはレシートに印字された金額そのままの数値にしてください（円への換算は絶対に行わないでください。換算は別のシステムが行います）。currencyにはISO 4217の3文字コード（例: USD, EUR, KRW）を入れてください。日本円のレシートならcurrencyは"JPY"にしてください。
 レシートに「○%OFF」「定価○○円→○○円」のような割引の表示がある場合は、discount_percentにその割引率（0〜99の数値）を入れてください。割引の表示が無ければdiscount_percentはnullにしてください。割引額そのものの計算は不要です（率だけでよい）。
 レシートに「スター リワード」「ポイント」「クーポン」などで商品代金の全額または一部が相殺されている明細がある場合、その商品名をredeemed_item、相殺される前のその商品の通常価格をredeemed_original_priceに入れてください（無ければ両方null）。この場合でも、totalはレシートに印字された最終的な支払合計をそのまま入れてください（0円になっている場合はtotalも0にしてください。読み取り失敗ではありません）。
@@ -137,21 +141,26 @@ ${accountRuleText(acctList)}
 レシートの支払い欄にクレジットカード番号（「****6725」「XXXX XXXX XXXX 6725」のようにマスクされていることが多い）が印字されていれば、その下4桁の数字だけをcard_last4に入れてください（読み取れなければnull）。合計金額など他の数字と取り違えないこと。
 支払い手段の表記（「VISA」「クレジット」「PayPay」「現金」「Suica」「電子マネー」など）があれば、その文字列をそのままpayment_textに入れてください（読み取れなければnull）。
 itemsには、レシートに記載されている購入品ごとに{"name":"商品名","price":その商品単体の価格の数値（読み取れなければnull）}を、読み取れる範囲でできるだけ具体的にすべて配列で入れてください。小計・割引・ポイント等の行そのものは含めないでください。読み取れなければ空配列にしてください。
-{"date":"YYYY-MM-DD（不明ならnull）","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない。0円の場合も0を入れる）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\"","discount_percent":割引率の数値、読み取れなければnull,"redeemed_item":"ポイント等で相殺された商品名、無ければnull","redeemed_original_price":その商品の通常価格の数値、無ければnull,"gift_card_amount":ギフトカード等で充当された金額の数値、無ければnull,"items":[{"name":"購入品名","price":数値またはnull}, "..."],"card_last4":"カード下4桁の数字、読み取れなければnull","payment_text":"支払い手段の表記、読み取れなければnull"}`,
+{"date":"YYYY-MM-DD（不明ならnull）","date_text":"レシート上の日付表記そのまま、無ければnull","store":"店名","total":合計金額の数値（レシート記載通貨のまま、換算しない。0円の場合も0を入れる）,"category":"${categories.join("|")} のいずれか","account":"口座id","currency":"ISO 4217コード。日本円なら\\"JPY\\"","discount_percent":割引率の数値、読み取れなければnull,"redeemed_item":"ポイント等で相殺された商品名、無ければnull","redeemed_original_price":その商品の通常価格の数値、無ければnull,"gift_card_amount":ギフトカード等で充当された金額の数値、無ければnull,"items":[{"name":"購入品名","price":数値またはnull}, "..."],"card_last4":"カード下4桁の数字、読み取れなければnull","payment_text":"支払い手段の表記、読み取れなければnull"}`,
           },
         ],
       },
     ],
   });
   const text = stripFence(joinText(res.content));
-  const parsed = JSON.parse(text) as Partial<OcrResult>;
+  const parsed = JSON.parse(text) as Partial<OcrResult> & { date_text?: unknown };
+  // AIの返す日付は形式が揺れる（2025/10/24、和暦、年なし等）ため、サーバー側で正規化・妥当性確認する。
+  // dateが使えなければ、印字そのままの表記(date_text)から読み直す。
+  const { date_text: dateText, ...rest } = parsed;
+  const date = normalizeReceiptDate(parsed.date, today) ?? normalizeReceiptDate(dateText, today);
   const discount = Number(parsed.discount_percent);
   const redeemedOriginalPrice = Number(parsed.redeemed_original_price);
   const redeemedItem = typeof parsed.redeemed_item === "string" ? parsed.redeemed_item.trim() : "";
   const giftCardAmount = Number(parsed.gift_card_amount);
   const cardLast4 = typeof parsed.card_last4 === "string" ? parsed.card_last4.replace(/[^0-9]/g, "").slice(-4) : "";
   return {
-    ...parsed,
+    ...rest,
+    date,
     card_last4: cardLast4.length === 4 ? cardLast4 : null,
     payment_text: typeof parsed.payment_text === "string" && parsed.payment_text.trim() ? parsed.payment_text.trim() : null,
     currency: (parsed.currency || "JPY").toUpperCase(),

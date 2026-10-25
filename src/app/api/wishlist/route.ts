@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireOwnerSession, errorResponse } from "@/lib/apiAuth";
 import { getAllWishlistItems, visibleWishlistItems, createWishlistItem } from "@/lib/wishlist";
 import { getWishlistCommentsForItems } from "@/lib/wishlistComments";
-import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
+import { getAllProfiles, makeNameLookup, isMasterProfile } from "@/lib/profiles";
 
 export async function GET(req: Request) {
   try {
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     const owner = searchParams.get("owner") || undefined;
     const [rows, profiles] = await Promise.all([getAllWishlistItems(), getAllProfiles()]);
     const nameOf = makeNameLookup(profiles);
-    const visible = visibleWishlistItems(rows, session.profile_id);
+    const visible = visibleWishlistItems(rows, session.profile_id, await isMasterProfile(session.profile_id));
     const scoped = owner ? visible.filter((r) => r.owner === owner) : visible;
     const comments = await getWishlistCommentsForItems(scoped.map((r) => r.id));
     const items = scoped.map((r) => ({

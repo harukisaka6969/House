@@ -447,10 +447,13 @@ export default function ExpensePanel() {
           : "";
       const redeemedNote = redeemed ? `（${redeemed.item}のポイント等での無料入手を検出。追加時に節約履歴にも登録します）` : "";
       const giftCardNote = giftCard > 0 ? `（ギフトカードで${giftCard.toLocaleString()}円分の充当を検出。追加時に節約履歴にも登録します）` : "";
+      const dateNote = parsed.date
+        ? `（日付: ${parsed.date.replace(/-/g, "/")}）`
+        : "（レシートの日付は読み取れませんでした。日付欄を確認してください。空のままなら今日で登録します）";
       setMsg(
         (foreign
-          ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}。円換算を確認して追加してください。`
-          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}。内容を確認して追加してください。`) +
+          ? `読み取り成功: ${parsed.store || "店名不明"} ${parsed.total}${foreign}${dateNote}。円換算を確認して追加してください。`
+          : `読み取り成功: ${parsed.store || "店名不明"} ${fmt(parsed.total || 0)}${dateNote}。内容を確認して追加してください。`) +
           discountNote +
           redeemedNote +
           giftCardNote

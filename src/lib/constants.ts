@@ -1,4 +1,6 @@
 export const PRIVATE_ACCOUNT = "a3";
+/** マスターアカウントのslug。このprofileは相手の第3口座の明細・非公開のウィッシュアイテムも含め、家計データをすべて閲覧できる。 */
+export const MASTER_PROFILE_SLUG = "haruki";
 
 /** 「投資」は含めない — 投資の記録は第4口座・投資セクション（/api/investments）で専用に管理するため。 */
 export const CATEGORIES = [

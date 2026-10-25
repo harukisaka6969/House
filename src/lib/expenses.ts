@@ -1,10 +1,11 @@
 import "server-only";
 import { db } from "./db";
-import { businessDateJST, periodRange } from "./date";
+import { businessDateJST, isValidDateStr, periodRange } from "./date";
 import { fetchJpyRate } from "./currency";
 import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import { VALID_ACCOUNT_IDS } from "./constants";
 import { isMaskedForViewer } from "./aggregate";
+import { isMasterProfile } from "./profiles";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
@@ -78,6 +79,7 @@ async function validateEntry(input: NewExpenseInput, allCats: string[]): Promise
   // 日付が空・未指定なら当日の日付（JST）で登録する (spec §7-1)。「当日」は午前3:30始まりの日付
   // （深夜0:00〜3:29は前日扱い）で判定する。
   const date = input.date && input.date.trim() ? input.date.trim() : businessDateJST();
+  if (!isValidDateStr(date)) throw new ValidationError(`invalid date: ${input.date}`);
   return {
     date,
     account_id: input.account_id as AccountId,
@@ -152,7 +154,7 @@ async function assertVisibleExpense(id: string, callerId: string): Promise<Visib
   if (error) throw error;
   if (!data) return null;
   const row = data as VisibleExpense;
-  if (isMaskedForViewer(row, callerId)) return null;
+  if (isMaskedForViewer(row, callerId, await isMasterProfile(callerId))) return null;
   return row;
 }
 
@@ -268,7 +270,8 @@ export async function getLatestExpense(callerId: string): Promise<ExpenseRow | n
     .limit(5);
   if (error) throw error;
   const rows = (data ?? []) as ExpenseRow[];
-  return rows.find((r) => !isMaskedForViewer(r, callerId)) ?? null;
+  const seesAll = await isMasterProfile(callerId);
+  return rows.find((r) => !isMaskedForViewer(r, callerId, seesAll)) ?? null;
 }
 
 /** 指定した人が当月（家計簿の月）に立て替えた合計額。LINEの返信で残高として示す。 */

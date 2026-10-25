@@ -691,6 +691,8 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         categories
       );
       const jpyAmount = resolved[0]?.amount ?? chargeAmount;
+      const expenseDate = resolved[0]?.date ?? ocr.date ?? businessDateJST();
+      const dateNote = ocr.date ? "" : "\n（レシートの日付を読み取れなかったため今日の日付で登録しました。違う場合はアプリで修正してください）";
       const currencyNote = currency ? `（${ocr.total}${currency}）` : "";
       let discountNote = "";
       // レシートに割引表示（○%OFFなど）が読み取れた場合は、支出とは別に節約履歴にも記録する（カードは作らない）。
@@ -724,7 +726,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       await recordLineAction(profileId, "expense", { expenseIds: ids }, `${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円（支出）`);
       await reply(
         event,
-        `🧾 支出を記録しました: ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${giftCardNote}${redeemedNote}`,
+        `🧾 支出を記録しました: ${expenseDate.slice(5).replace("-", "/")} ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${giftCardNote}${redeemedNote}${dateNote}`,
         advanceButtons(ids, await profileNameOf(profileId))
       );
       return;
