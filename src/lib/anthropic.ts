@@ -150,9 +150,10 @@ itemsには、レシートに記載されている購入品ごとに{"name":"商
   const text = stripFence(joinText(res.content));
   const parsed = JSON.parse(text) as Partial<OcrResult> & { date_text?: unknown };
   // AIの返す日付は形式が揺れる（2025/10/24、和暦、年なし等）ため、サーバー側で正規化・妥当性確認する。
-  // dateが使えなければ、印字そのままの表記(date_text)から読み直す。
+  // 印字そのままの表記(date_text)は並び（海外式の日/月など）の手掛かりを残しているので優先し、
+  // 読めなければAIが変換したdateを使う。
   const { date_text: dateText, ...rest } = parsed;
-  const date = normalizeReceiptDate(parsed.date, today) ?? normalizeReceiptDate(dateText, today);
+  const date = normalizeReceiptDate(dateText, today) ?? normalizeReceiptDate(parsed.date, today);
   const discount = Number(parsed.discount_percent);
   const redeemedOriginalPrice = Number(parsed.redeemed_original_price);
   const redeemedItem = typeof parsed.redeemed_item === "string" ? parsed.redeemed_item.trim() : "";
