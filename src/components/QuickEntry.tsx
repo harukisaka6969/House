@@ -229,7 +229,10 @@ function QuickEntryInner() {
         };
       });
       setMode("manual");
-      setMsg(`読み取り成功: ${p.store || "店名不明"} ${fmt(p.total || 0)}。内容を確認して追加してください。`);
+      // 読み取った日付が見えるように詳細欄を開いておく
+      setShowOpt(true);
+      const dateNote = p.date ? `（日付: ${p.date.replace(/-/g, "/")}）` : "（日付は読み取れなかったため、空のままなら今日で登録します）";
+      setMsg(`読み取り成功: ${p.store || "店名不明"} ${fmt(p.total || 0)}${dateNote}。内容を確認して追加してください。`);
     } catch {
       setMsg("読み取りに失敗しました。手入力してください。");
     }
