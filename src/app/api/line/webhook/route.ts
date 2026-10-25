@@ -41,8 +41,10 @@ import {
   updateExpenseOwner,
   getLatestExpense,
   getMonthlyAdvanceTotal,
+  changeExpenseAccount,
   ValidationError as ExpenseValidationError,
 } from "@/lib/expenses";
+import { accountChangeButtons, parseAccountPostback, shortAccountName } from "@/lib/lineAccount";
 import { parseSplitHint, isSplitOnlyMessage, findMentionedPersonId, type SplitHint } from "@/lib/splitText";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
@@ -95,6 +97,39 @@ function advanceButtons(ids: string[], myName: string): LineQuickReplyButton[] {
     { label: `${myName}が立替`.slice(0, 20), data: `paidby:${data}`, displayText: `${myName}が立替` },
     { label: "立替を取消", data: `paidby_clear:${data}`, displayText: "立替を取消" },
   ];
+}
+
+/* ---- 口座の付け替え（AIの自動判定が間違っていたとき） ---- */
+
+/** 支出を登録した返信に添えるボタン一式（立替＋口座の変更）。LINEのクイックリプライは13個まで。 */
+async function expenseButtons(ids: string[], myName: string, currentAccountIds: string[]): Promise<LineQuickReplyButton[]> {
+  const accounts = await getAccounts();
+  return [...advanceButtons(ids, myName), ...accountChangeButtons(ids, currentAccountIds, accounts)];
+}
+
+/** 「○○口座に変更」ボタンが押されたとき: 対象の支出の口座を付け替えて結果を返信する。 */
+async function applyAccountChange(event: LineEvent, profileId: string, accountId: string, ids: string[]): Promise<void> {
+  const accounts = await getAccounts();
+  const account = accounts.find((a) => a.id === accountId);
+  if (!account) {
+    await reply(event, "その口座が見つかりませんでした。アプリから変更してください。");
+    return;
+  }
+  const updated = await changeExpenseAccount(ids, profileId, accountId);
+  if (updated.length === 0) {
+    await reply(event, "対象の支出が見つかりませんでした。アプリから変更してください。");
+    return;
+  }
+  const lines = updated.map((e) => `・${e.memo || e.category} ${e.amount.toLocaleString()}円（${e.category}）`).join("\n");
+  await reply(
+    event,
+    `🔁 口座を${shortAccountName(account.name)}に変更しました（${updated.length}件）:\n${lines}`,
+    accountChangeButtons(
+      updated.map((e) => e.id),
+      updated.map((e) => e.account_id),
+      accounts
+    )
+  );
 }
 
 /** 立替の設定・解除を適用して結果を返信する（ボタン・「立替」コマンドの共通処理）。 */
@@ -341,6 +376,7 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
   const bodyText = advance?.command === "set" && advance.rest !== "" ? advance.rest : text;
 
   const [categories, accounts] = await Promise.all([getAllCategories(), getAccounts()]);
+  const accountName = (id: string) => shortAccountName(accounts.find((a) => a.id === id)?.name ?? id);
   const parsed = await parseExpenseText(bodyText, accounts, categories, businessDateJST());
   const valid = parsed.filter((p) => Number(p.amount) > 0);
   if (valid.length === 0) {
@@ -373,12 +409,17 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
   const summary = resolved
     .map((e) =>
       e.original_currency
-        ? `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円（${e.original_amount}${e.original_currency}）`
-        : `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円`
+        ? `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円（${e.original_amount}${e.original_currency}）［${e.category} / ${accountName(e.account_id)}］`
+        : `・${e.memo || e.category} ${share(e.amount).toLocaleString()}円［${e.category} / ${accountName(e.account_id)}］`
     )
     .join("\n");
 
   const myName = await profileNameOf(profileId);
+  const buttons = await expenseButtons(
+    ids,
+    myName,
+    resolved.map((e) => e.account_id)
+  );
   await recordLineAction(profileId, "expense", { expenseIds: ids }, `${summary.replace(/^・/, "").split("\n")[0]} 他計${total.toLocaleString()}円（支出）`);
   const splitLine = splitNote ? `\n\n${splitNote.message}` : "";
   if (advance?.command === "set") {
@@ -387,11 +428,11 @@ async function handleExpenseText(event: LineEvent, profileId: string, text: stri
     await reply(
       event,
       `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}${splitLine}\n\n💳 ${myName}の立替として記録しました。今月の立替合計: ${advanceTotal.toLocaleString()}円`,
-      advanceButtons(ids, myName)
+      buttons
     );
     return;
   }
-  await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}${splitLine}`, advanceButtons(ids, myName));
+  await reply(event, `🧾 支出を記録しました（計${total.toLocaleString()}円）:\n${summary}${splitLine}`, buttons);
 }
 
 interface AppliedSplit extends SplitHint {
@@ -727,7 +768,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       await reply(
         event,
         `🧾 支出を記録しました: ${expenseDate.slice(5).replace("-", "/")} ${ocr.store || "店名不明"} ${jpyAmount.toLocaleString()}円${currencyNote}（${category} / ${account.name}）${discountNote}${giftCardNote}${redeemedNote}${dateNote}`,
-        advanceButtons(ids, await profileNameOf(profileId))
+        await expenseButtons(ids, await profileNameOf(profileId), [account.id])
       );
       return;
     }
@@ -764,7 +805,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       await reply(
         event,
         `🧾 支出を記録しました（Amazon・${resolved.length}件、計${total.toLocaleString()}円）（${category} / ${account.name}）\n${itemLines}`,
-        advanceButtons(ids, await profileNameOf(profileId))
+        await expenseButtons(ids, await profileNameOf(profileId), [account.id])
       );
       return;
     }
@@ -851,6 +892,14 @@ export async function POST(req: Request) {
         const set = data.startsWith("paidby:");
         const ids = data.slice(data.indexOf(":") + 1).split(",").filter(Boolean);
         await applyAdvance(event, profileId, ids, set);
+      } else if (parseAccountPostback(data)) {
+        const { accountId, ids } = parseAccountPostback(data)!;
+        try {
+          await applyAccountChange(event, profileId, accountId, ids);
+        } catch (e) {
+          console.error("LINE account change failed", e);
+          await reply(event, "口座の変更に失敗しました。アプリから変更してください。");
+        }
       }
       continue;
     }
