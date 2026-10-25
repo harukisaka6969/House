@@ -40,7 +40,7 @@ export default function AccountDetail({ accounts, expenses }: { accounts: Accoun
           </button>
         ))}
       </div>
-      <div className="mf-quicklabel">カテゴリ別金額{sel === PRIVATE_ACCOUNT ? "（相手の分は金額非公開のため除外）" : ""}</div>
+      <div className="mf-quicklabel">カテゴリ別金額{sel === PRIVATE_ACCOUNT && maskedRows.length > 0 ? "（相手の分は金額非公開のため除外）" : ""}</div>
       {catRows.length === 0 ? (
         <div className="mf-empty">この口座の支出はまだありません。</div>
       ) : (

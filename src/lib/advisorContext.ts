@@ -4,7 +4,7 @@ import { getAccounts } from "./accounts";
 import { getIncomes } from "./incomes";
 import { getExpensesInRange, monthRange } from "./expenses";
 import { getInvestmentsInRange, getCumulativeInvestment } from "./investments";
-import { getAllProfiles, makeNameLookup, findPartnerOwner } from "./profiles";
+import { getAllProfiles, makeNameLookup, findPartnerOwner, isMasterProfile } from "./profiles";
 import { getTrend } from "./trend";
 import { buildPerAccount, buildPerCategory, buildMonthTotals, buildMonthJudge, isMaskedForViewer } from "./aggregate";
 import { getAllWishlistItems, visibleWishlistItems } from "./wishlist";
@@ -34,11 +34,12 @@ export async function buildAdvisorContext(viewerProfileId: string, viewerName: s
   ]);
   const nameOf = makeNameLookup(profiles);
   const partner = findPartnerOwner(profiles, viewerProfileId);
+  const seesAll = await isMasterProfile(viewerProfileId);
 
   const perAccount = buildPerAccount(accounts, expenseRows, viewerProfileId);
   const totals = buildMonthTotals(incomeRows, expenseRows, investmentRows);
   const judge = buildMonthJudge(totals);
-  const perCategory = buildPerCategory(expenseRows, viewerProfileId);
+  const perCategory = buildPerCategory(expenseRows, viewerProfileId, seesAll);
 
   const acctLines = perAccount
     .map((a) => `- ${a.name}: 予算${fmt(a.budget)} / 使用${fmt(a.spent)}（判定: ${a.judge.label}）`)
@@ -46,7 +47,7 @@ export async function buildAdvisorContext(viewerProfileId: string, viewerName: s
   const catLine = perCategory.map((c) => `${c.name} ${fmt(c.value)}`).join(", ");
   const trendLines = trend.map((t) => `${t.month}: 収入${fmt(t.income)} 支出${fmt(t.expense)} 投資${fmt(t.invest)}`).join("\n");
 
-  const visibleExpenses = expenseRows.filter((e) => !isMaskedForViewer(e, viewerProfileId)).slice(-40);
+  const visibleExpenses = expenseRows.filter((e) => !isMaskedForViewer(e, viewerProfileId, seesAll)).slice(-40);
   const items = visibleExpenses
     .map((e) => {
       const acct = accounts.find((a) => a.id === e.account_id);
@@ -55,7 +56,7 @@ export async function buildAdvisorContext(viewerProfileId: string, viewerName: s
     .join("\n");
   const invItems = investmentRows.map((iv) => `${iv.date} ${iv.name} ${fmt(iv.amount)} ${iv.memo || ""}`).join("\n");
 
-  const visibleWishlist = visibleWishlistItems(wishlistRows, viewerProfileId).filter((w) => w.status === "planning" || w.status === "saving");
+  const visibleWishlist = visibleWishlistItems(wishlistRows, viewerProfileId, seesAll).filter((w) => w.status === "planning" || w.status === "saving");
   const wishlistLines = visibleWishlist
     .map((w) => `- ${w.name}（${w.status === "saving" ? "貯蓄中" : "検討中"}）: 価格${fmt(w.price)} / 貯蓄済${fmt(w.saved)} / 月々${fmt(w.monthly_plan)}${w.is_private ? "（本人限定）" : ""}`)
     .join("\n");
@@ -83,7 +84,7 @@ ${acctLines}
 【カテゴリ別支出】${catLine || "なし"}
 【月別推移】
 ${trendLines || "データなし"}
-【今月の支出明細（相手のプライベート第3口座分は除外済み・直近40件）】
+【今月の支出明細（${seesAll ? "相手の第3口座分も含む" : "相手のプライベート第3口座分は除外済み"}・直近40件）】
 ${items || "なし"}
 【今月の投資】
 ${invItems || "なし"}
@@ -96,5 +97,9 @@ ${eventLines || "なし"}
 ${maintenanceLines || "なし"}
 【直近1年のメンテ実績費用】${fmt(maintenanceAnnualActual)}
 
-注意: 第3口座は夫婦間のプライベート口座であり、${partner?.name ?? "相手"}の第3口座の明細はあなたにも渡されていません。内容を聞かれたら「非公開のため分かりません」と答えてください。相手のis_private=trueのウィッシュアイテムも同様に渡されていません。`;
+${
+    seesAll
+      ? `注意: ${viewerName}はマスターアカウントのため、${partner?.name ?? "相手"}の第3口座の明細や非公開のウィッシュアイテムも含めたすべてのデータが渡されています。`
+      : `注意: 第3口座は夫婦間のプライベート口座であり、${partner?.name ?? "相手"}の第3口座の明細はあなたにも渡されていません。内容を聞かれたら「非公開のため分かりません」と答えてください。相手のis_private=trueのウィッシュアイテムも同様に渡されていません。`
+  }`;
 }

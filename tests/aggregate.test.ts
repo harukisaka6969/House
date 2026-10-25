@@ -106,6 +106,14 @@ describe("spec §5 privacy masking (第3口座)", () => {
     expect(serialized).toContain("2000");
   });
 
+  it("the master account sees the partner's a3 rows unmasked, including in breakdowns", () => {
+    expect(isMaskedForViewer(arisaPrivate, HARUKI, true)).toBe(false);
+    const outputs = maskExpenses([arisaPrivate], HARUKI, () => "アリサ", true);
+    expect(outputs[0]).toMatchObject({ masked: false, amount: 5000, memo: expect.stringContaining("サウナ") });
+    expect(buildPerCategory([arisaPrivate], HARUKI, true).find((c) => c.name === "趣味")?.value).toBe(5000);
+    expect(buildPerDay([arisaPrivate], HARUKI, true)["2026-07-02"]).toBe(5000);
+  });
+
   it("keeps everything visible when the owner views their own data", () => {
     const outputs = maskExpenses([arisaPrivate], ARISA, () => "アリサ");
     expect(outputs[0].masked).toBe(false);

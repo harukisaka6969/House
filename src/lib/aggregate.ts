@@ -9,7 +9,13 @@ import type { Account, AccountAggregate, ExpenseOut, ExpenseRow, IncomeRow, Inve
  * date/amount/memo/sub keys are omitted entirely, not just blanked, so a
  * naive client that ignores `masked` still can't recover the values.
  */
-export function isMaskedForViewer(row: Pick<ExpenseRow, "account_id" | "owner">, viewerProfileId: string): boolean {
+export function isMaskedForViewer(
+  row: Pick<ExpenseRow, "account_id" | "owner">,
+  viewerProfileId: string,
+  viewerSeesAll = false
+): boolean {
+  // マスターアカウント（MASTER_PROFILE_SLUG）は相手の第3口座も含めてすべて見える。
+  if (viewerSeesAll) return false;
   return row.account_id === PRIVATE_ACCOUNT && row.owner !== null && row.owner !== viewerProfileId;
 }
 
@@ -17,9 +23,10 @@ export function maskExpenseRow(
   row: ExpenseRow,
   viewerProfileId: string,
   ownerName: string,
-  paidByName: string | null = null
+  paidByName: string | null = null,
+  viewerSeesAll = false
 ): ExpenseOut {
-  if (isMaskedForViewer(row, viewerProfileId)) {
+  if (isMaskedForViewer(row, viewerProfileId, viewerSeesAll)) {
     return { id: row.id, account_id: row.account_id, category: row.category, owner_name: ownerName, masked: true };
   }
   const { owner: _owner, paid_by: _paidBy, ...rest } = row;
@@ -32,16 +39,17 @@ export function maskExpenseRow(
 export function maskExpenses(
   rows: ExpenseRow[],
   viewerProfileId: string,
-  ownerNameOf: (profileId: string) => string
+  ownerNameOf: (profileId: string) => string,
+  viewerSeesAll = false
 ): ExpenseOut[] {
   return rows.map((r) =>
-    maskExpenseRow(r, viewerProfileId, r.owner ? ownerNameOf(r.owner) : "共有", r.paid_by ? ownerNameOf(r.paid_by) : null)
+    maskExpenseRow(r, viewerProfileId, r.owner ? ownerNameOf(r.owner) : "共有", r.paid_by ? ownerNameOf(r.paid_by) : null, viewerSeesAll)
   );
 }
 
 /** Rows usable for aggregation that must exclude the partner's private-account spending. */
-function visibleForAggregation(rows: ExpenseRow[], viewerProfileId: string): ExpenseRow[] {
-  return rows.filter((r) => !isMaskedForViewer(r, viewerProfileId));
+function visibleForAggregation(rows: ExpenseRow[], viewerProfileId: string, viewerSeesAll: boolean): ExpenseRow[] {
+  return rows.filter((r) => !isMaskedForViewer(r, viewerProfileId, viewerSeesAll));
 }
 
 export function sumAmount(rows: { amount: number }[]): number {
@@ -58,8 +66,8 @@ export function buildPerAccount(accounts: Account[], expenses: ExpenseRow[], vie
   });
 }
 
-export function buildPerCategory(expenses: ExpenseRow[], viewerProfileId: string): { name: string; value: number }[] {
-  const visible = visibleForAggregation(expenses, viewerProfileId);
+export function buildPerCategory(expenses: ExpenseRow[], viewerProfileId: string, viewerSeesAll = false): { name: string; value: number }[] {
+  const visible = visibleForAggregation(expenses, viewerProfileId, viewerSeesAll);
   const totals = new Map<string, number>();
   for (const e of visible) {
     const key = e.category || "その他";
@@ -68,8 +76,8 @@ export function buildPerCategory(expenses: ExpenseRow[], viewerProfileId: string
   return [...totals.entries()].map(([name, value]) => ({ name, value })).filter((c) => c.value > 0);
 }
 
-export function buildPerDay(expenses: ExpenseRow[], viewerProfileId: string): Record<string, number> {
-  const visible = visibleForAggregation(expenses, viewerProfileId);
+export function buildPerDay(expenses: ExpenseRow[], viewerProfileId: string, viewerSeesAll = false): Record<string, number> {
+  const visible = visibleForAggregation(expenses, viewerProfileId, viewerSeesAll);
   const totals: Record<string, number> = {};
   for (const e of visible) {
     totals[e.date] = (totals[e.date] ?? 0) + (Number(e.amount) || 0);

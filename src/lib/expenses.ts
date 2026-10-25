@@ -5,6 +5,7 @@ import { fetchJpyRate } from "./currency";
 import { addItemHistoryEntries, type NewItemHistoryEntry } from "./itemHistory";
 import { VALID_ACCOUNT_IDS } from "./constants";
 import { isMaskedForViewer } from "./aggregate";
+import { isMasterProfile } from "./profiles";
 import type { AccountId, ExpenseRow } from "./types";
 
 const VALID_ACCOUNTS: AccountId[] = VALID_ACCOUNT_IDS;
@@ -153,7 +154,7 @@ async function assertVisibleExpense(id: string, callerId: string): Promise<Visib
   if (error) throw error;
   if (!data) return null;
   const row = data as VisibleExpense;
-  if (isMaskedForViewer(row, callerId)) return null;
+  if (isMaskedForViewer(row, callerId, await isMasterProfile(callerId))) return null;
   return row;
 }
 
@@ -269,7 +270,8 @@ export async function getLatestExpense(callerId: string): Promise<ExpenseRow | n
     .limit(5);
   if (error) throw error;
   const rows = (data ?? []) as ExpenseRow[];
-  return rows.find((r) => !isMaskedForViewer(r, callerId)) ?? null;
+  const seesAll = await isMasterProfile(callerId);
+  return rows.find((r) => !isMaskedForViewer(r, callerId, seesAll)) ?? null;
 }
 
 /** 指定した人が当月（家計簿の月）に立て替えた合計額。LINEの返信で残高として示す。 */

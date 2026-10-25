@@ -5,7 +5,7 @@ import { getExpensesInRange } from "@/lib/expenses";
 import { getIncomesInMonthRange } from "@/lib/incomes";
 import { getInvestmentsInRange } from "@/lib/investments";
 import { getAccounts } from "@/lib/accounts";
-import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
+import { getAllProfiles, makeNameLookup, isMasterProfile } from "@/lib/profiles";
 import { buildAnalysisExport, analysisExportToCsv, type AnalysisFilters, type AnalysisType, type Granularity, type OwnerFilter } from "@/lib/analysisExport";
 import { getProfileById } from "@/lib/pinAuth";
 import { getAllWishlistItems } from "@/lib/wishlist";
@@ -75,6 +75,7 @@ export async function GET(req: Request) {
 
     const result = buildAnalysisExport({
       viewerProfileId: session.profile_id,
+      viewerSeesAll: await isMasterProfile(session.profile_id),
       requesterName: requester?.name ?? "",
       accounts,
       nameOf,

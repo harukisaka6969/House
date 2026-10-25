@@ -30,6 +30,8 @@ function inFilter<T>(value: T, set: Set<T> | null): boolean {
 
 export interface AnalysisExportInput {
   viewerProfileId: string;
+  /** マスターアカウントなら相手の第3口座・非公開ウィッシュアイテムもマスクせずに含める。 */
+  viewerSeesAll?: boolean;
   requesterName: string;
   accounts: Account[];
   nameOf: (id: string) => string;
@@ -44,6 +46,7 @@ export interface AnalysisExportInput {
 
 export function buildAnalysisExport(input: AnalysisExportInput) {
   const { viewerProfileId, requesterName, accounts, nameOf, filters } = input;
+  const seesAll = !!input.viewerSeesAll;
 
   const rowsInScope = input.expenseRows.filter(
     (e) => inFilter(e.account_id, filters.accountIds) && inFilter(e.category, filters.categories)
@@ -52,10 +55,10 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
   const visibleRows =
     filters.owner === "me"
       ? rowsInScope.filter((e) => e.owner === viewerProfileId)
-      : rowsInScope.filter((e) => !isMaskedForViewer(e, viewerProfileId));
+      : rowsInScope.filter((e) => !isMaskedForViewer(e, viewerProfileId, seesAll));
 
   const maskedRows =
-    filters.owner === "all" ? rowsInScope.filter((e) => isMaskedForViewer(e, viewerProfileId)) : [];
+    filters.owner === "all" ? rowsInScope.filter((e) => isMaskedForViewer(e, viewerProfileId, seesAll)) : [];
 
   const incomesInScope = filters.owner === "me" ? input.incomeRows.filter((i) => i.owner === viewerProfileId || !i.owner) : input.incomeRows;
   const investmentsInScope =
@@ -194,7 +197,7 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
   const lifeEventRows = input.lifeEventRows ?? [];
   const maintenanceTaskRows = input.maintenanceTaskRows ?? [];
   const wishlistScoped =
-    filters.owner === "me" ? wishlistRows.filter((w) => w.owner === viewerProfileId) : visibleWishlistItems(wishlistRows, viewerProfileId);
+    filters.owner === "me" ? wishlistRows.filter((w) => w.owner === viewerProfileId) : visibleWishlistItems(wishlistRows, viewerProfileId, seesAll);
   const wishlistOut = filters.types.has("wishlist")
     ? wishlistScoped.map((w) => ({
         name: w.name,
@@ -248,8 +251,9 @@ export function buildAnalysisExport(input: AnalysisExportInput) {
       requester: requesterName,
       currency: "JPY",
       accounts: accounts.map((a) => ({ id: a.id, name: a.name, budget_monthly: a.budget })),
-      privacy_note:
-        "第3口座(a3)の相手の明細は amount/date/memo/sub を含まない(masked:true)。集計値のうち total_all のみ相手分を含む。is_private=trueのウィッシュアイテムは相手のものを一切含まない。",
+      privacy_note: seesAll
+        ? "マスターアカウントのため、第3口座(a3)の相手の明細・is_private=trueのウィッシュアイテムも含めたすべてのデータを含む。"
+        : "第3口座(a3)の相手の明細は amount/date/memo/sub を含まない(masked:true)。集計値のうち total_all のみ相手分を含む。is_private=trueのウィッシュアイテムは相手のものを一切含まない。",
       schema_note: "amounts are integers in JPY. dates are ISO-8601. wishlist/life_events/maintenance are point-in-time snapshots, not scoped to the from/to period.",
       truncated,
       truncated_reason: truncated ? `明細行数が${RAW_ROW_LIMIT}件を超えたため granularity=daily にフォールバックしました。` : undefined,
