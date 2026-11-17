@@ -7,7 +7,7 @@ const putSchema = z.object({
   accounts: z
     .array(
       z.object({
-        id: z.enum(["a1", "a2", "a3", "a4", "a5"]),
+        id: z.enum(["a1", "a2", "a3", "a4"]),
         name: z.string().optional(),
         budget: z.number().optional(),
       })
