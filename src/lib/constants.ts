@@ -32,7 +32,6 @@ export const DEFAULT_ACCOUNTS = [
   { id: "a2", name: "第2口座（ローン等）", color: "#63C7E8", budget: 0, sort: 2 },
   { id: "a3", name: "第3口座（趣味・娯楽・交際）", color: "#2FB8A6", budget: 60000, sort: 3 },
   { id: "a4", name: "第4口座（投資）", color: "#8B7CF6", budget: 80000, sort: 4 },
-  { id: "a5", name: "第5口座（特別支出）", color: "#FF8A7A", budget: 0, sort: 5 },
 ] as const;
 
 /** 有効な口座idの一覧（各所のバリデーションで共通利用。口座を増減する際はこことDEFAULT_ACCOUNTS、
