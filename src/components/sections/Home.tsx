@@ -10,6 +10,7 @@ import { SectionHead, StatCard } from "../common";
 import { useDashboard } from "../DashboardContext";
 import DigestBanner from "../DigestBanner";
 import { recurrenceLabel } from "./Reminders";
+import AdvanceSettlement from "./AdvanceSettlement";
 
 type UpcomingTask = MaintenanceTaskOut & { asset_name: string };
 
@@ -84,6 +85,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <AdvanceSettlement />
 
       <div className="mf-panel">
         <div className="mf-paneltitle">🍚 健康・食事（今日）</div>
