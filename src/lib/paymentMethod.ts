@@ -14,7 +14,7 @@ const CARD_LAST4: Record<string, string> = {
   "1089": "遥希MUFG",
   "2015": "遥希SMBC",
   "1052": "遥希AU",
-  "5626": "PayPayカード",
+  "5626": "遥希PayPayカード",
   // Apple Pay（デバイスアカウント番号）
   "9088": "共用カード",
   "5708": "遥希MUFG",
@@ -22,8 +22,8 @@ const CARD_LAST4: Record<string, string> = {
   "3034": "遥希AU", // QUICPay
   "9170": "遥希SMBC", // Visa
   "6489": "遥希SMBC", // iD
-  "9891": "PayPayカード", // Visa
-  "9354": "PayPayカード", // QUICPay
+  "9891": "遥希PayPayカード", // Visa
+  "9354": "遥希PayPayカード", // QUICPay
 };
 
 /** 選択肢として出す代表的な支払い方法（アプリのボタン・AIへの候補提示に使う）。 */
@@ -33,7 +33,7 @@ export const PAYMENT_METHODS = [
   "遥希MUFG",
   "遥希SMBC",
   "遥希AU",
-  "PayPayカード",
+  "遥希PayPayカード",
   "PayPay",
   "現金",
   "交通系IC",
@@ -42,7 +42,7 @@ export const PAYMENT_METHODS = [
 /** 決済サービス名の表記ゆれ → 正式な呼び名。カード以外の支払い手段はここで拾う。 */
 const SERVICE_PATTERNS: { re: RegExp; label: string }[] = [
   // 「PayPayカード」はクレジットカードなので、QRコード決済の「PayPay」より先に見る。
-  { re: /(paypay|ペイペイ|ぺいぺい)\s*(カード|card)/i, label: "PayPayカード" },
+  { re: /(paypay|ペイペイ|ぺいぺい)\s*(カード|card)/i, label: "遥希PayPayカード" },
   { re: /paypay|ペイペイ|ぺいぺい/i, label: "PayPay" },
   { re: /楽天ペイ|rakuten\s*pay/i, label: "楽天ペイ" },
   { re: /d払い|ｄ払い|docomo\s*pay/i, label: "d払い" },

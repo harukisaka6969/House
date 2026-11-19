@@ -33,13 +33,13 @@ describe("resolvePaymentMethod", () => {
     expect(resolvePaymentMethod({ cardLast4: "3034", rawText: "QUICPay" })).toBe("遥希AU");
     expect(resolvePaymentMethod({ cardLast4: "9170" })).toBe("遥希SMBC");
     expect(resolvePaymentMethod({ cardLast4: "6489", rawText: "iD" })).toBe("遥希SMBC");
-    expect(resolvePaymentMethod({ cardLast4: "9891" })).toBe("PayPayカード");
-    expect(resolvePaymentMethod({ cardLast4: "9354", rawText: "QUICPay" })).toBe("PayPayカード");
-    expect(resolvePaymentMethod({ cardLast4: "5626" })).toBe("PayPayカード");
+    expect(resolvePaymentMethod({ cardLast4: "9891" })).toBe("遥希PayPayカード");
+    expect(resolvePaymentMethod({ cardLast4: "9354", rawText: "QUICPay" })).toBe("遥希PayPayカード");
+    expect(resolvePaymentMethod({ cardLast4: "5626" })).toBe("遥希PayPayカード");
   });
 
   it("PayPayカードとQRコード決済のPayPayを区別する", () => {
-    expect(resolvePaymentMethod({ rawText: "PayPayカード" })).toBe("PayPayカード");
+    expect(resolvePaymentMethod({ rawText: "PayPayカード" })).toBe("遥希PayPayカード");
     expect(resolvePaymentMethod({ rawText: "PayPayで支払い" })).toBe("PayPay");
   });
 
