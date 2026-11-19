@@ -3,14 +3,27 @@
  * 純粋関数のみなのでテストから直接読める。レシートOCR・LINEの文章・アプリの選択肢で共通に使う。
  */
 
-/** カード下4桁 → 家庭内での呼び名。 */
+/** カード下4桁 → 家庭内での呼び名。Apple Payで払うとレシートにはカード本体ではなく
+ * デバイスアカウント番号（ウォレットの「カード情報」に出る番号）の下4桁が印字されるため、
+ * そちらも同じ呼び名に寄せる。QUICPay・iDとして印字される場合は番号がさらに別になる。 */
 const CARD_LAST4: Record<string, string> = {
+  // カード本体
   "6725": "共用カード",
   "6925": "共用カード",
   "0926": "アリサEPOS",
   "1089": "遥希MUFG",
   "2015": "遥希SMBC",
   "1052": "遥希AU",
+  "5626": "PayPayカード",
+  // Apple Pay（デバイスアカウント番号）
+  "9088": "共用カード",
+  "5708": "遥希MUFG",
+  "3746": "遥希AU", // Mastercard
+  "3034": "遥希AU", // QUICPay
+  "9170": "遥希SMBC", // Visa
+  "6489": "遥希SMBC", // iD
+  "9891": "PayPayカード", // Visa
+  "9354": "PayPayカード", // QUICPay
 };
 
 /** 選択肢として出す代表的な支払い方法（アプリのボタン・AIへの候補提示に使う）。 */
@@ -20,6 +33,7 @@ export const PAYMENT_METHODS = [
   "遥希MUFG",
   "遥希SMBC",
   "遥希AU",
+  "PayPayカード",
   "PayPay",
   "現金",
   "交通系IC",
@@ -27,6 +41,8 @@ export const PAYMENT_METHODS = [
 
 /** 決済サービス名の表記ゆれ → 正式な呼び名。カード以外の支払い手段はここで拾う。 */
 const SERVICE_PATTERNS: { re: RegExp; label: string }[] = [
+  // 「PayPayカード」はクレジットカードなので、QRコード決済の「PayPay」より先に見る。
+  { re: /(paypay|ペイペイ|ぺいぺい)\s*(カード|card)/i, label: "PayPayカード" },
   { re: /paypay|ペイペイ|ぺいぺい/i, label: "PayPay" },
   { re: /楽天ペイ|rakuten\s*pay/i, label: "楽天ペイ" },
   { re: /d払い|ｄ払い|docomo\s*pay/i, label: "d払い" },
@@ -54,7 +70,8 @@ export interface PaymentMethodHints {
 function findKnownLast4(text: string): string | null {
   // 既知の下4桁が、数字の並びの最後に現れるかを見る（金額の一部を誤検出しないよう区切りを要求）。
   for (const last4 of Object.keys(CARD_LAST4)) {
-    const re = new RegExp(`(?:^|[^0-9])(?:[*xX\\u2217\\s-]*)${last4}(?![0-9])`);
+    // 「5708円」「¥9,088」のような金額は除く（登録した下4桁が増えて、金額と重なりやすくなったため）。
+    const re = new RegExp(`(?:^|[^0-9¥￥,])(?:[*xX\\u2217\\s-]*)${last4}(?![0-9円,.])`);
     if (re.test(text)) return last4;
   }
   return null;

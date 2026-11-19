@@ -26,6 +26,23 @@ describe("resolvePaymentMethod", () => {
     expect(resolvePaymentMethod({ rawText: "現金でお支払い" })).toBe("現金");
   });
 
+  it("Apple Payのデバイスアカウント番号（QUICPay・iD含む）も本体と同じ呼び名にする", () => {
+    expect(resolvePaymentMethod({ cardLast4: "9088" })).toBe("共用カード");
+    expect(resolvePaymentMethod({ cardLast4: "5708" })).toBe("遥希MUFG");
+    expect(resolvePaymentMethod({ cardLast4: "3746" })).toBe("遥希AU");
+    expect(resolvePaymentMethod({ cardLast4: "3034", rawText: "QUICPay" })).toBe("遥希AU");
+    expect(resolvePaymentMethod({ cardLast4: "9170" })).toBe("遥希SMBC");
+    expect(resolvePaymentMethod({ cardLast4: "6489", rawText: "iD" })).toBe("遥希SMBC");
+    expect(resolvePaymentMethod({ cardLast4: "9891" })).toBe("PayPayカード");
+    expect(resolvePaymentMethod({ cardLast4: "9354", rawText: "QUICPay" })).toBe("PayPayカード");
+    expect(resolvePaymentMethod({ cardLast4: "5626" })).toBe("PayPayカード");
+  });
+
+  it("PayPayカードとQRコード決済のPayPayを区別する", () => {
+    expect(resolvePaymentMethod({ rawText: "PayPayカード" })).toBe("PayPayカード");
+    expect(resolvePaymentMethod({ rawText: "PayPayで支払い" })).toBe("PayPay");
+  });
+
   it("カード下4桁はサービス名より優先する（PayPay経由のカード決済などを取り違えないため）", () => {
     expect(resolvePaymentMethod({ cardLast4: "0926", rawText: "PayPay" })).toBe("アリサEPOS");
   });
@@ -42,6 +59,9 @@ describe("resolvePaymentMethod", () => {
   it("金額の数字を下4桁と誤認しない", () => {
     expect(resolvePaymentMethod({ rawText: "合計 16725円" })).toBeNull();
     expect(resolvePaymentMethod({ rawText: "支払 20150円" })).toBeNull();
+    expect(resolvePaymentMethod({ rawText: "コンビニで5708円" })).toBeNull();
+    expect(resolvePaymentMethod({ rawText: "合計 ¥9088" })).toBeNull();
+    expect(resolvePaymentMethod({ rawText: "ディナー 3,034円" })).toBeNull();
   });
 
   it("全角の表記でも判定できる", () => {
