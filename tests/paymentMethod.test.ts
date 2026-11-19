@@ -36,6 +36,12 @@ describe("resolvePaymentMethod", () => {
     expect(resolvePaymentMethod({ cardLast4: "9891" })).toBe("遥希PayPayカード");
     expect(resolvePaymentMethod({ cardLast4: "9354", rawText: "QUICPay" })).toBe("遥希PayPayカード");
     expect(resolvePaymentMethod({ cardLast4: "5626" })).toBe("遥希PayPayカード");
+    // アリサのiPhoneのApple Pay（同じカードでも端末ごとに番号が違う）
+    expect(resolvePaymentMethod({ cardLast4: "1836" })).toBe("共用カード");
+    expect(resolvePaymentMethod({ cardLast4: "9805", rawText: "iD" })).toBe("遥希SMBC");
+    expect(resolvePaymentMethod({ cardLast4: "3278" })).toBe("遥希SMBC");
+    expect(resolvePaymentMethod({ cardLast4: "6786", rawText: "QUICPay" })).toBe("アリサEPOS");
+    expect(resolvePaymentMethod({ cardLast4: "6118" })).toBe("アリサEPOS");
   });
 
   it("PayPayカードとQRコード決済のPayPayを区別する", () => {
