@@ -9,6 +9,8 @@ import { PAYMENT_METHODS } from "@/lib/paymentMethod";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import type { SplitEventOut, SplitEventDetailOut, CurrencyRateOut, SavingsActionOut } from "@/lib/apiTypes";
 import { TT, fmtTooltip, MoneyViewToggle, ownerFilterName } from "../common";
+import MultiSelectDropdown from "../MultiSelectDropdown";
+import { matchesExpenseFilters, filterOptions, NONE_VALUE, type ExpenseFilterKey, type ExpenseFilterState } from "@/lib/expenseFilters";
 import { useDashboard } from "../DashboardContext";
 import AiSuggestButton from "../AiSuggestButton";
 import RecurringExpenses from "./RecurringExpenses";
@@ -48,7 +50,7 @@ export default function ExpensePanel() {
   const [busy, setBusy] = useState(false);
   const [textIn, setTextIn] = useState("");
   const [textBusy, setTextBusy] = useState(false);
-  const [filterAcct, setFilterAcct] = useState("all");
+  const [filters, setFilters] = useState<ExpenseFilterState>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ date: string; account_id: string; category: string; sub: string; amount: string; memo: string }>({
     date: "",
@@ -502,7 +504,7 @@ export default function ExpensePanel() {
   };
 
   const sorted = [...month.expenses]
-    .filter((e) => filterAcct === "all" || e.account_id === filterAcct)
+    .filter((e) => matchesExpenseFilters(e, filters))
     .filter((e) => !filterName || e.owner_name === filterName)
     .sort((a, b) => {
       const ad = a.masked ? "" : a.date;
@@ -511,6 +513,15 @@ export default function ExpensePanel() {
     });
   const acctName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "—";
   const acctColor = (id: string) => accounts.find((a) => a.id === id)?.color ?? "#93A0AE";
+  // 明細の絞り込み（切り口ごとに複数選択）。選択肢はこの月の明細に実際に出てくる値だけ。
+  const filterDefs: { key: ExpenseFilterKey; label: string; labelOf: (v: string) => string; colorOf?: (v: string) => string }[] = [
+    { key: "account", label: "口座", labelOf: (v) => acctName(v).replace(/（.*）/, ""), colorOf: acctColor },
+    { key: "category", label: "カテゴリ", labelOf: (v) => v },
+    { key: "owner", label: "誰の支出", labelOf: (v) => v },
+    { key: "paidBy", label: "立替", labelOf: (v) => (v === NONE_VALUE ? "立替なし" : `${v}が立替`) },
+    { key: "payment", label: "支払い方法", labelOf: (v) => (v === NONE_VALUE ? "未設定" : v) },
+  ];
+  const activeFilterCount = Object.values(filters).filter((v) => v && v.length > 0).length;
 
   const deleteExpense = async (id: string) => {
     await apiDelete(`/api/expenses/${id}`);
@@ -947,15 +958,20 @@ export default function ExpensePanel() {
           )}
         </div>
         <div className="mf-chips" style={{ margin: "8px 0" }}>
-          <button className={"mf-chipbtn" + (filterAcct === "all" ? " on" : "")} onClick={() => setFilterAcct("all")}>
-            全て
-          </button>
-          {accounts.map((a) => (
-            <button key={a.id} className={"mf-chipbtn" + (filterAcct === a.id ? " on" : "")} onClick={() => setFilterAcct(a.id)}>
-              <span className="mf-dot" style={{ background: a.color }} />
-              {a.name.replace(/（.*）/, "")}
-            </button>
+          {filterDefs.map((d) => (
+            <MultiSelectDropdown
+              key={d.key}
+              label={d.label}
+              options={filterOptions(month.expenses, d.key).map((o) => ({ value: o.value, label: d.labelOf(o.value), count: o.count, color: d.colorOf?.(o.value) }))}
+              selected={filters[d.key] ?? []}
+              onChange={(next) => setFilters((f) => ({ ...f, [d.key]: next }))}
+            />
           ))}
+          {activeFilterCount > 0 && (
+            <button className="mf-btn ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setFilters({})}>
+              絞り込みを解除
+            </button>
+          )}
         </div>
 
         {bulkMode && (
