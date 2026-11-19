@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getActiveRecurringExpensesForDay, markRecurringExpenseGenerated } from "@/lib/recurringExpenses";
 import { createExpenseFromRecurring } from "@/lib/expenses";
+import { generateRecurringIncomes } from "@/lib/recurringIncomes";
 import { todayStrJST, periodKeyOfDate } from "@/lib/date";
 
-/** Vercel Cronから毎日呼ばれる。今日が支払日の定期支払をexpensesへ生成する（同月に生成済みならスキップ、冪等）。 */
+/** Vercel Cronから毎日呼ばれる。今日が支払日の定期支払をexpensesへ生成する（同月に生成済みならスキップ、冪等）。
+ * あわせて、毎月の定期収入（給与など）を今月の incomes に登録する（月に1回だけ）。 */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -29,5 +31,7 @@ export async function GET(req: Request) {
     created++;
   }
 
-  return NextResponse.json({ date: today, checked: due.length, created });
+  const incomesCreated = await generateRecurringIncomes(monthKey);
+
+  return NextResponse.json({ date: today, checked: due.length, created, incomesCreated });
 }
