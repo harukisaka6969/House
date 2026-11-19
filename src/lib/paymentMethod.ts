@@ -15,7 +15,7 @@ const CARD_LAST4: Record<string, string> = {
   "2015": "遥希SMBC",
   "1052": "遥希AU",
   "5626": "遥希PayPayカード",
-  // Apple Pay（デバイスアカウント番号）
+  // Apple Pay（遥希のiPhone。デバイスアカウント番号）
   "9088": "共用カード",
   "5708": "遥希MUFG",
   "3746": "遥希AU", // Mastercard
@@ -24,6 +24,12 @@ const CARD_LAST4: Record<string, string> = {
   "6489": "遥希SMBC", // iD
   "9891": "遥希PayPayカード", // Visa
   "9354": "遥希PayPayカード", // QUICPay
+  // Apple Pay（アリサのiPhone）
+  "1836": "共用カード",
+  "9805": "遥希SMBC", // iD
+  "3278": "遥希SMBC", // Visa
+  "6786": "アリサEPOS", // QUICPay
+  "6118": "アリサEPOS", // Visa
 };
 
 /** 選択肢として出す代表的な支払い方法（アプリのボタン・AIへの候補提示に使う）。 */
