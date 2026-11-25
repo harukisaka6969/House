@@ -835,6 +835,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
         return;
       }
       const category = categories.includes(parsed.category) ? parsed.category : "趣味";
+      const paymentMethod = resolvePaymentMethod({ cardLast4: parsed.card_last4, rawText: parsed.payment_text });
       // 注文の合計ではなく、品目ごとに別々の支出として登録する（1商品＝1支出）。
       const { entries: resolved, ids } = await addExpenseEntries(
         profileId,
@@ -844,6 +845,8 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
           category,
           amount: i.price,
           memo: i.name,
+          // 注文画面の支払い方法欄のカード末尾（例: 0926 → アリサEPOS）から、何で払ったかも記録する。
+          payment_method: paymentMethod,
         })),
         categories
       );
@@ -852,7 +855,7 @@ async function handleImageMessage(event: LineEvent, profileId: string): Promise<
       await recordLineAction(profileId, "expense", { expenseIds: ids }, `Amazon ${resolved.length}件 計${total.toLocaleString()}円（支出）`);
       await reply(
         event,
-        `🧾 支出を記録しました（Amazon・${resolved.length}件、計${total.toLocaleString()}円）（${category} / ${account.name}）\n${itemLines}`,
+        `🧾 支出を記録しました（Amazon・${resolved.length}件、計${total.toLocaleString()}円）（${category} / ${account.name}${paymentMethod ? ` / ${paymentMethod}` : ""}）\n${itemLines}`,
         await expenseButtons(ids, await profileNameOf(profileId), [account.id])
       );
       return;
