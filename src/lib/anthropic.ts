@@ -399,6 +399,10 @@ export interface AmazonOrderOcrResult {
   /** 画面に表示されている商品ごとの{name, price}。複数の配送グループに分かれるスクリーンショットの場合、
    * その画像に写っている分だけでよい（1メッセージ＝1件の支出として登録するため）。 */
   items: { name: string; price: number | null }[];
+  /** 支払い方法欄のカード番号の下4桁（「ending in 0926」「末尾0926」など）。読み取れなければnull。 */
+  card_last4: string | null;
+  /** 支払い方法欄の表記（「Visa」「Amazonギフトカード」など）。読み取れなければnull。 */
+  payment_text: string | null;
 }
 
 /** Amazon等の通販サイトの注文詳細画面のスクリーンショット → {date, category, account, items}。
@@ -425,7 +429,8 @@ export async function ocrAmazonOrder(
 ${accountRuleText(acctList)}
 「Order placed」「注文日」のような注文日の記載が読み取れればYYYY-MM-DD形式で、読み取れなければnullにしてください。
 画面に表示されている商品ごとに{"name":"商品名","price":その商品の価格の数値（日本円、読み取れなければnull）}を、表示されている範囲ですべて配列で入れてください（送料・割引等の行そのものは含めない）。
-{"date":"YYYY-MM-DD（不明ならnull）","category":"${categories.join("|")} のいずれか","account":"口座id","items":[{"name":"商品名","price":数値またはnull}, "..."]}`,
+支払い方法（Payment method / お支払い方法）の欄にカード番号の末尾（「ending in 0926」「末尾 0926」「****0926」など）があれば、その下4桁の数字だけをcard_last4に入れてください（金額などほかの数字と取り違えないこと。読み取れなければnull）。支払い手段の表記（「Visa」「Mastercard」「Amazonギフトカード」など）があればpayment_textにそのまま入れてください（読み取れなければnull）。
+{"date":"YYYY-MM-DD（不明ならnull）","category":"${categories.join("|")} のいずれか","account":"口座id","items":[{"name":"商品名","price":数値またはnull}, "..."],"card_last4":"カード下4桁の数字、読み取れなければnull","payment_text":"支払い手段の表記、読み取れなければnull"}`,
           },
         ],
       },
@@ -433,7 +438,10 @@ ${accountRuleText(acctList)}
   });
   const text = stripFence(joinText(res.content));
   const parsed = JSON.parse(text) as Partial<AmazonOrderOcrResult>;
+  const cardLast4 = typeof parsed.card_last4 === "string" ? parsed.card_last4.replace(/[^0-9]/g, "").slice(-4) : "";
   return {
+    card_last4: cardLast4.length === 4 ? cardLast4 : null,
+    payment_text: typeof parsed.payment_text === "string" && parsed.payment_text.trim() ? parsed.payment_text.trim() : null,
     date: typeof parsed.date === "string" && parsed.date.trim() ? parsed.date.trim() : null,
     category: typeof parsed.category === "string" && parsed.category ? parsed.category : "その他",
     account: typeof parsed.account === "string" ? parsed.account : undefined,
