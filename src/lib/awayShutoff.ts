@@ -139,3 +139,41 @@ export function isNearSunset(now: Date, bufferMinutes = SUNSET_BUFFER_MINUTES): 
 export function motionDetected(statuses: Record<string, unknown>[]): boolean {
   return statuses.some((s) => s.moveDetected === true);
 }
+
+/* ---- 玄関の解錠 ---- */
+
+/** 外出していたとみなす最短の時間。これより短い外出（家の前でGPSがぶれた等）では解錠しない。 */
+export const UNLOCK_MIN_AWAY_MS = 90 * 1000;
+
+/**
+ * 到着時に使う出発時刻を決める。iPhone側に保存した出発時刻（param）とサーバー側の記録（serverLeftAt）のうち、
+ * 前回の到着（lastArrivedAt）より後のものだけを有効とし、新しい方を使う。
+ * 出発のショートカットが動かなかった日は、iPhoneに前回の出発時刻が残ったままになるため、
+ * それを「今回の外出」と取り違えないようにする（出発・到着の記録が抜けても次の回から正しく戻るための安全策）。
+ */
+export function effectiveLeftAt(param: string | null | undefined, serverLeftAt: string | null, lastArrivedAt: string | null): string | null {
+  const arrived = lastArrivedAt ? new Date(lastArrivedAt).getTime() : -Infinity;
+  const valid = [param, serverLeftAt]
+    .map((v) => (v ? new Date(v).getTime() : NaN))
+    .filter((t) => Number.isFinite(t) && t > arrived);
+  return valid.length > 0 ? new Date(Math.max(...valid)).toISOString() : null;
+}
+
+/**
+ * 到着時に玄関を解錠するか。
+ * - 出発の記録があり、UNLOCK_MIN_AWAY_MS 以上外出していた → 解錠
+ * - 出発の記録が無くても、家に誰かいる → 解錠（家に人がいるので開けても問題が少ない）
+ * - 出発の記録が無く、家に誰もいない → 解錠しない（誤作動で無人の家を開けないため）
+ */
+export function decideUnlock(
+  leftAt: string | null,
+  someoneElseHome: boolean,
+  now: Date,
+  minAwayMs = UNLOCK_MIN_AWAY_MS
+): { unlock: boolean; reason: string } {
+  if (leftAt) {
+    const awayMs = now.getTime() - new Date(leftAt).getTime();
+    return awayMs >= minAwayMs ? { unlock: true, reason: "away long enough" } : { unlock: false, reason: "away time too short" };
+  }
+  return someoneElseHome ? { unlock: true, reason: "no leave record, someone home" } : { unlock: false, reason: "no leave record" };
+}
