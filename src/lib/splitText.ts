@@ -96,3 +96,20 @@ export function findMentionedPersonId(text: string, people: { id: string; name: 
   }
   return null;
 }
+
+/**
+ * LINEの「割り勘」ボタンを押した後に送られてくる、人数だけの返事を読む。
+ * 「5」→ 5人で割って1人分（遥希かアリサのどちらか1人が参加）、
+ * 「2/5」→ 5人で割って2人分（遥希とアリサの2人が参加）。全角・「5人」表記も受け付ける。
+ * それ以外（金額・文章など）はnull。
+ */
+export function parseSplitReply(text: string): SplitHint | null {
+  const t = normalize(text).trim().replace(/[人名]$/, "");
+  const frac = /^(\d+)\s*[/／]\s*(\d+)$/.exec(t);
+  const single = /^(\d+)$/.exec(t);
+  const num = frac ? Number(frac[1]) : single ? 1 : NaN;
+  const den = frac ? Number(frac[2]) : single ? Number(single[1]) : NaN;
+  if (!Number.isInteger(num) || !Number.isInteger(den)) return null;
+  if (num < 1 || den < 2 || den > MAX_PEOPLE || num >= den) return null;
+  return { num, den };
+}

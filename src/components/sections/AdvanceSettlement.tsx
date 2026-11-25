@@ -61,7 +61,7 @@ export default function AdvanceSettlement() {
   }, []);
 
   const toggle = async (cycle: CycleView, settled: boolean) => {
-    if (settled && !window.confirm(`${cycleLabel(cycle)}の立替 ${fmt(cycle.total)} を清算済みにしますか？`)) return;
+    if (settled && !window.confirm(`${cycleLabel(cycle)}の立替（合計 ${fmt(cycle.total)}）を清算済みにしますか？`)) return;
     setBusy(cycle.key);
     setErr("");
     try {
@@ -94,10 +94,23 @@ export default function AdvanceSettlement() {
               </span>
             </div>
             <PeopleTotals cycle={c} />
-            <div className="mf-row" style={{ justifyContent: "space-between", marginTop: 6 }}>
-              <span>清算する合計</span>
-              <span className="mf-mono" style={{ fontWeight: 700 }}>{fmt(c.total)}</span>
-            </div>
+            {c.total > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <div className="mf-statsub">清算する金額</div>
+                {/* 立替は「どの口座の支出を、誰が自分のカードで払ったか」なので、その口座から立て替えた人に戻す。 */}
+                {c.people.flatMap((p) =>
+                  p.byAccount.map((a) => (
+                    <div key={`${p.profileId}-${a.accountId}`} className="mf-row" style={{ justifyContent: "space-between" }}>
+                      <span>
+                        {a.name}から{p.name}に
+                      </span>
+                      <span className="mf-mono" style={{ fontWeight: 700 }}>{fmt(a.amount)}</span>
+                    </div>
+                  ))
+                )}
+                <div className="mf-statsub mf-mono" style={{ textAlign: "right" }}>合計 {fmt(c.total)}</div>
+              </div>
+            )}
             {c.settled ? (
               <div className="mf-row" style={{ justifyContent: "space-between", marginTop: 8, gap: 8 }}>
                 <span style={{ color: "#45C48F" }}>
