@@ -15,6 +15,8 @@ interface CycleView {
   status: "confirmed" | "pending" | "current";
   total: number;
   people: { profileId: string; name: string; total: number; count: number; byAccount: { accountId: string; name: string; amount: number }[] }[];
+  /** 誰から誰にいくら払えば清算できるか（相殺後）。差し引き0円ならnull。 */
+  transfer: { fromName: string; toName: string; amount: number } | null;
   settled: { settledAt: string; settledByName: string | null; amounts: Record<string, number> } | null;
 }
 
@@ -39,11 +41,6 @@ function PeopleTotals({ cycle }: { cycle: CycleView }) {
               {fmt(p.total)}（{p.count}件）
             </span>
           </div>
-          {p.byAccount.length > 0 && (
-            <div className="mf-statsub mf-mono" style={{ textAlign: "right" }}>
-              {p.byAccount.map((a) => `${a.name} ${fmt(a.amount)}`).join(" ／ ")}
-            </div>
-          )}
         </div>
       ))}
     </div>
@@ -61,7 +58,8 @@ export default function AdvanceSettlement() {
   }, []);
 
   const toggle = async (cycle: CycleView, settled: boolean) => {
-    if (settled && !window.confirm(`${cycleLabel(cycle)}の立替（合計 ${fmt(cycle.total)}）を清算済みにしますか？`)) return;
+    const what = cycle.transfer ? `${cycle.transfer.fromName}から${cycle.transfer.toName}に ${fmt(cycle.transfer.amount)}` : "立替";
+    if (settled && !window.confirm(`${cycleLabel(cycle)}の${what}を清算済みにしますか？`)) return;
     setBusy(cycle.key);
     setErr("");
     try {
@@ -95,20 +93,10 @@ export default function AdvanceSettlement() {
             </div>
             <PeopleTotals cycle={c} />
             {c.total > 0 && (
-              <div style={{ marginTop: 6 }}>
-                <div className="mf-statsub">清算する金額</div>
-                {/* 立替は「どの口座の支出を、誰が自分のカードで払ったか」なので、その口座から立て替えた人に戻す。 */}
-                {c.people.flatMap((p) =>
-                  p.byAccount.map((a) => (
-                    <div key={`${p.profileId}-${a.accountId}`} className="mf-row" style={{ justifyContent: "space-between" }}>
-                      <span>
-                        {a.name}から{p.name}に
-                      </span>
-                      <span className="mf-mono" style={{ fontWeight: 700 }}>{fmt(a.amount)}</span>
-                    </div>
-                  ))
-                )}
-                <div className="mf-statsub mf-mono" style={{ textAlign: "right" }}>合計 {fmt(c.total)}</div>
+              <div className="mf-row" style={{ justifyContent: "space-between", marginTop: 6 }}>
+                {/* 共通の支出は半分ずつ、相手の支出は全額を相手が負担するとして相殺した金額。 */}
+                <span>{c.transfer ? `${c.transfer.fromName}から${c.transfer.toName}に` : "清算額"}</span>
+                <span className="mf-mono" style={{ fontWeight: 700 }}>{c.transfer ? fmt(c.transfer.amount) : "0円（相殺済み）"}</span>
               </div>
             )}
             {c.settled ? (

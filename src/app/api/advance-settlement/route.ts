@@ -4,7 +4,7 @@ import { requireOwnerSession, errorResponse, ApiError } from "@/lib/apiAuth";
 import { todayStrJST, shiftMonth, isValidMonthKey } from "@/lib/date";
 import { getAllProfiles, makeNameLookup } from "@/lib/profiles";
 import { getAccounts } from "@/lib/accounts";
-import { advanceCycle, cycleKeyOfDate, latestConfirmedCycleKey, summarizeAdvances, type AdvanceCycle } from "@/lib/advanceSettlement";
+import { advanceCycle, cycleKeyOfDate, latestConfirmedCycleKey, summarizeAdvances, settlementTransfer, type AdvanceCycle } from "@/lib/advanceSettlement";
 import { getAdvanceRowsInRange, getAdvanceSettlements, markAdvanceSettled, unmarkAdvanceSettled } from "@/lib/advanceSettlementStore";
 
 /** 確定済みのサイクルを何件さかのぼって見せるか（清算し忘れた月も拾えるように）。 */
@@ -33,11 +33,15 @@ async function buildCycleViews() {
 
   const view = (c: AdvanceCycle, status: "confirmed" | "pending" | "current") => {
     const s = summarizeAdvances(rows, c, owners.map((o) => o.id));
+    // 2人の間で誰から誰にいくら払うか（口座は関係なく、相殺した1本にまとめる）。
+    const t = owners.length === 2 ? settlementTransfer(rows, c, [owners[0].id, owners[1].id]) : null;
+    const transfer = t ? { fromName: nameOf(t.from), toName: nameOf(t.to), amount: t.amount } : null;
     const settled = settlements.find((x) => x.cycle_key === c.key) ?? null;
     return {
       ...c,
       status,
       total: s.total,
+      transfer,
       people: s.byPerson.map((p) => ({
         profileId: p.profileId,
         name: nameOf(p.profileId),
@@ -78,7 +82,11 @@ export async function POST(req: Request) {
     const target = views.confirmed.find((c) => c.key === cycle);
     if (!target) throw new ApiError(400, "まだ金額が確定していないサイクルです");
     if (settled) {
-      await markAdvanceSettled(cycle, session.profile_id, Object.fromEntries(target.people.map((p) => [p.profileId, p.total])));
+      // 清算したときの金額を残す（人ごとの立替合計と、誰から誰にいくら払ったか）。
+      await markAdvanceSettled(cycle, session.profile_id, {
+        ...Object.fromEntries(target.people.map((p) => [p.profileId, p.total])),
+        ...(target.transfer ? { transfer: target.transfer.amount } : {}),
+      });
     } else {
       await unmarkAdvanceSettled(cycle);
     }

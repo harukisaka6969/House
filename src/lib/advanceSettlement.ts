@@ -68,6 +68,8 @@ export interface AdvanceRow {
   amount: number;
   paid_by: string | null;
   account_id: string;
+  /** 誰の支出か（nullは2人の共通の支出）。 */
+  owner?: string | null;
 }
 
 export interface AdvanceTotals {
@@ -86,4 +88,35 @@ export function summarizeAdvances(rows: AdvanceRow[], cycle: AdvanceCycle, peopl
     return { profileId, total: mine.reduce((s, r) => s + (Number(r.amount) || 0), 0), count: mine.length, byAccount };
   });
   return { byPerson, total: byPerson.reduce((s, p) => s + p.total, 0) };
+}
+
+export interface SettlementTransfer {
+  from: string;
+  to: string;
+  amount: number;
+}
+
+/**
+ * 2人の間で、誰から誰にいくら払えば立替が精算されるか（相殺後の1本にまとめる）。
+ * 立て替えた支出ごとに、相手が負担すべき分を数える:
+ *   共通の支出（owner=null）→ 半分、相手の支出 → 全額、自分の支出 → 0。
+ * 差し引き0円ならnull。people は2人（遥希とアリサ）のprofile id。
+ */
+export function settlementTransfer(rows: AdvanceRow[], cycle: AdvanceCycle, people: [string, string]): SettlementTransfer | null {
+  const [a, b] = people;
+  // 正の値: b が a に払う額、負の値: a が b に払う額
+  let bOwesA = 0;
+  for (const r of rows) {
+    if (!r.paid_by || r.date < cycle.from || r.date > cycle.to) continue;
+    const payer = r.paid_by;
+    if (payer !== a && payer !== b) continue;
+    const other = payer === a ? b : a;
+    const amount = Number(r.amount) || 0;
+    const owner = r.owner ?? null;
+    const otherShare = owner === null ? amount / 2 : owner === other ? amount : 0;
+    bOwesA += payer === a ? otherShare : -otherShare;
+  }
+  const amount = Math.round(Math.abs(bOwesA));
+  if (amount === 0) return null;
+  return bOwesA > 0 ? { from: b, to: a, amount } : { from: a, to: b, amount };
 }
