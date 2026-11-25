@@ -22,3 +22,10 @@ export async function clearLeft(slug: string): Promise<void> {
     .upsert({ profile_slug: slug, left_at: null, updated_at: new Date().toISOString() }, { onConflict: "profile_slug" });
   if (error) throw error;
 }
+
+/** 全員分の外出状態（外出時の消灯ジョブで「家に誰もいなくなったか」を見るため）。 */
+export async function getAllPresence(): Promise<{ profile_slug: string; left_at: string | null }[]> {
+  const { data, error } = await db().from("home_presence").select("profile_slug, left_at");
+  if (error) throw error;
+  return (data ?? []) as { profile_slug: string; left_at: string | null }[];
+}
