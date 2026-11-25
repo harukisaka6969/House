@@ -98,25 +98,13 @@ export interface SettlementTransfer {
 
 /**
  * 2人の間で、誰から誰にいくら払えば立替が精算されるか（相殺後の1本にまとめる）。
- * 立て替えた支出ごとに、相手が負担すべき分を数える:
- *   共通の支出（owner=null）→ 半分、相手の支出 → 全額、自分の支出 → 0。
+ * 口座や「誰の支出か」は見ず、それぞれが立て替えた合計どうしの差額を、少ない方から多い方へ払う。
  * 差し引き0円ならnull。people は2人（遥希とアリサ）のprofile id。
  */
 export function settlementTransfer(rows: AdvanceRow[], cycle: AdvanceCycle, people: [string, string]): SettlementTransfer | null {
   const [a, b] = people;
-  // 正の値: b が a に払う額、負の値: a が b に払う額
-  let bOwesA = 0;
-  for (const r of rows) {
-    if (!r.paid_by || r.date < cycle.from || r.date > cycle.to) continue;
-    const payer = r.paid_by;
-    if (payer !== a && payer !== b) continue;
-    const other = payer === a ? b : a;
-    const amount = Number(r.amount) || 0;
-    const owner = r.owner ?? null;
-    const otherShare = owner === null ? amount / 2 : owner === other ? amount : 0;
-    bOwesA += payer === a ? otherShare : -otherShare;
-  }
-  const amount = Math.round(Math.abs(bOwesA));
-  if (amount === 0) return null;
-  return bOwesA > 0 ? { from: b, to: a, amount } : { from: a, to: b, amount };
+  const totals = summarizeAdvances(rows, cycle, [a, b]).byPerson;
+  const diff = Math.round(totals[0].total - totals[1].total);
+  if (diff === 0) return null;
+  return diff > 0 ? { from: b, to: a, amount: diff } : { from: a, to: b, amount: -diff };
 }
