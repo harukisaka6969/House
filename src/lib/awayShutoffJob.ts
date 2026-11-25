@@ -31,7 +31,7 @@ async function loadDevices(): Promise<{ devices: DeviceCandidate[]; rooms: Recor
 }
 
 /** 判定対象（遥希とアリサ）以外の全員が外出中か。 */
-async function othersAwayNow(slug: string): Promise<boolean> {
+export async function othersAwayNow(slug: string): Promise<boolean> {
   const [presence, profiles] = await Promise.all([getAllPresence(), getAllProfiles()]);
   const people = profiles.filter((p) => p.role === "owner").map((p) => p.slug);
   return othersAway(slug, people, presence, new Date());

@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { othersAway, planDeparture, planArrival, sunsetUtc, isNearSunset, motionDetected, type DeviceCandidate } from "@/lib/awayShutoff";
+import {
+  othersAway,
+  planDeparture,
+  planArrival,
+  sunsetUtc,
+  isNearSunset,
+  motionDetected,
+  effectiveLeftAt,
+  decideUnlock,
+  type DeviceCandidate,
+} from "@/lib/awayShutoff";
 
 const NOW = new Date("2026-11-25T10:00:00Z");
 const PEOPLE = ["haruki", "arisa"];
@@ -115,5 +125,37 @@ describe("motionDetected", () => {
   it("人感センサーのどれかが動きを検知していればtrue", () => {
     expect(motionDetected([{ moveDetected: false }, { moveDetected: true }])).toBe(true);
     expect(motionDetected([{ moveDetected: false }, {}])).toBe(false);
+  });
+});
+
+
+describe("effectiveLeftAt（記録が抜けたときの安全策）", () => {
+  it("前回の到着より後の出発時刻だけを使い、新しい方を採る", () => {
+    expect(effectiveLeftAt("2026-11-25T01:00:00Z", "2026-11-25T02:00:00Z", "2026-11-24T20:00:00Z")).toBe("2026-11-25T02:00:00.000Z");
+  });
+
+  it("出発のショートカットが動かず、iPhoneに前回の出発時刻が残っていても使わない", () => {
+    expect(effectiveLeftAt("2026-11-20T01:00:00Z", null, "2026-11-20T09:00:00Z")).toBeNull();
+  });
+
+  it("到着の記録が一度も無い・不正な値は無視する", () => {
+    expect(effectiveLeftAt("2026-11-25T01:00:00Z", null, null)).toBe("2026-11-25T01:00:00.000Z");
+    expect(effectiveLeftAt("not a date", null, null)).toBeNull();
+    expect(effectiveLeftAt(undefined, null, null)).toBeNull();
+  });
+});
+
+describe("decideUnlock", () => {
+  const now = new Date("2026-11-25T10:00:00Z");
+  const before = (sec: number) => new Date(now.getTime() - sec * 1000).toISOString();
+
+  it("90秒以上外出していたら解錠、短ければしない", () => {
+    expect(decideUnlock(before(90), false, now).unlock).toBe(true);
+    expect(decideUnlock(before(60), false, now).unlock).toBe(false);
+  });
+
+  it("出発の記録が無くても、家に誰かいれば解錠する", () => {
+    expect(decideUnlock(null, true, now).unlock).toBe(true);
+    expect(decideUnlock(null, false, now).unlock).toBe(false);
   });
 });
