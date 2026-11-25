@@ -45,7 +45,8 @@ import {
   ValidationError as ExpenseValidationError,
 } from "@/lib/expenses";
 import { accountChangeButtons, parseAccountPostback, shortAccountName } from "@/lib/lineAccount";
-import { parseSplitHint, isSplitOnlyMessage, findMentionedPersonId, type SplitHint } from "@/lib/splitText";
+import { parseSplitHint, parseSplitReply, isSplitOnlyMessage, findMentionedPersonId, type SplitHint } from "@/lib/splitText";
+import { setPendingSplit, takePendingSplit } from "@/lib/linePendingSplit";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
 import { containsMoneyAmount } from "@/lib/moneyText";
@@ -101,10 +102,29 @@ function advanceButtons(ids: string[], myName: string): LineQuickReplyButton[] {
 
 /* ---- 口座の付け替え（AIの自動判定が間違っていたとき） ---- */
 
-/** 支出を登録した返信に添えるボタン一式（立替＋口座の変更）。LINEのクイックリプライは13個まで。 */
+/** 支出を登録した返信に添えるボタン一式（立替＋割り勘＋口座の変更）。LINEのクイックリプライは13個まで。 */
 async function expenseButtons(ids: string[], myName: string, currentAccountIds: string[]): Promise<LineQuickReplyButton[]> {
   const accounts = await getAccounts();
-  return [...advanceButtons(ids, myName), ...accountChangeButtons(ids, currentAccountIds, accounts)];
+  const split: LineQuickReplyButton[] = ids.length > 0 ? [{ label: "割り勘", data: `split:${ids.join(",")}`, displayText: "割り勘" }] : [];
+  return [...advanceButtons(ids, myName), ...split, ...accountChangeButtons(ids, currentAccountIds, accounts)];
+}
+
+/** 「割り勘」ボタンが押されたとき: 対象の支出を覚えて、人数を聞く。 */
+async function handleSplitButton(event: LineEvent, profileId: string, ids: string[]): Promise<void> {
+  await setPendingSplit(profileId, ids);
+  await reply(
+    event,
+    "👥 何人で割り勘？ 数字で送ってね。\n・「5」→ 5人で割って1人分（遥希かアリサのどちらか1人が参加）\n・「2/5」→ 5人で割って2人分（遥希とアリサの2人が参加）"
+  );
+}
+
+/** 「割り勘」ボタンの後に人数（「5」「2/5」）が送られてきたとき。返事待ちの支出が無ければfalseを返し、通常の処理に回す。 */
+async function handleSplitReply(event: LineEvent, profileId: string, split: SplitHint): Promise<boolean> {
+  const ids = await takePendingSplit(profileId);
+  if (!ids) return false;
+  const applied = await applySplit(ids, profileId, split, "");
+  await reply(event, applied ? `🧮 割り勘を適用しました。\n\n${applied.message}` : "対象の支出が見つかりませんでした。アプリから変更してください。");
+  return true;
 }
 
 /** 「○○口座に変更」ボタンが押されたとき: 対象の支出の口座を付け替えて結果を返信する。 */
@@ -448,7 +468,13 @@ interface AppliedSplit extends SplitHint {
  */
 async function applySplitFromText(ids: string[], profileId: string, text: string): Promise<AppliedSplit | null> {
   const split = parseSplitHint(text);
-  if (!split || ids.length === 0) return null;
+  if (!split) return null;
+  return applySplit(ids, profileId, split, text);
+}
+
+/** 割り勘を適用する。textは「1人分」のときに参加者の名前を探すための文章（無ければ送った本人とみなす）。 */
+async function applySplit(ids: string[], profileId: string, split: SplitHint, text: string): Promise<AppliedSplit | null> {
+  if (ids.length === 0) return null;
 
   let full = 0;
   let ours = 0;
@@ -858,6 +884,9 @@ export async function POST(req: Request) {
         continue;
       }
       const shoppingCommand = parseShoppingListMessage(text);
+      // 「割り勘」ボタンの後の人数（「5」「2/5」）。返事待ちが無ければ通常の処理に回す。
+      const splitReply = parseSplitReply(text);
+      if (splitReply && (await handleSplitReply(event, profileId, splitReply))) continue;
       if (isCancelMessage(text)) {
         // 「取り消し」「とりけし」「キャンセル」等 → 直前にLINEから登録した内容を消す。
         await handleCancelCommand(event, profileId);
@@ -892,6 +921,9 @@ export async function POST(req: Request) {
         const set = data.startsWith("paidby:");
         const ids = data.slice(data.indexOf(":") + 1).split(",").filter(Boolean);
         await applyAdvance(event, profileId, ids, set);
+      } else if (data.startsWith("split:")) {
+        const ids = data.slice("split:".length).split(",").filter(Boolean);
+        await handleSplitButton(event, profileId, ids);
       } else if (parseAccountPostback(data)) {
         const { accountId, ids } = parseAccountPostback(data)!;
         try {

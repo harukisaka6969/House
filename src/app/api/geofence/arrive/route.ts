@@ -2,14 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLeftAt, clearLeft } from "@/lib/homePresence";
 import { sendCommand, switchBotAvailable } from "@/lib/switchbot";
-import { getLineRecipients, findProfileBySlug } from "@/lib/profiles";
-import { sendLineMessage } from "@/lib/lineNotify";
 
 const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40), leftAt: z.string().optional() });
 const AWAY_THRESHOLD_MS = 15 * 60 * 1000;
 
 /** iOSショートカットの「到着」オートメーションから呼ばれる想定のWebhook。15分以上外出していた場合のみ、
- * 設定済みの鍵デバイスを解錠し、念のため世帯のLINEに通知する（無条件解錠を避けるための最低限の安全策）。
+ * 設定済みの鍵デバイスを解錠する（無条件解錠を避けるための最低限の安全策）。
  * 外出時刻は、不安定になりがちな「外出」側の通信を避けるため、ショートカット側でローカル保存した値を
  * この到着リクエストのbodyに`leftAt`として乗せて送ってもらう想定。省略された場合のみ、旧来のサーバー側
  * 記録（/api/geofence/leave経由）にフォールバックする。 */
@@ -38,11 +36,8 @@ export async function POST(req: Request) {
     const deviceId = process.env.SWITCHBOT_HOME_LOCK_DEVICE_ID;
     if (!switchBotAvailable() || !deviceId) return NextResponse.json({ ok: true, unlocked: false, reason: "switchbot not configured" });
 
+    // 解錠・施錠のLINE通知は送らない（不要との要望で停止。結果はレスポンスで返す）。
     await sendCommand(deviceId, "unlock");
-
-    const [profile, recipients] = await Promise.all([findProfileBySlug(slug), getLineRecipients()]);
-    const message = `🔓 ${profile?.name ?? slug}が帰宅したので、玄関を自動解錠しました。`;
-    await Promise.all(recipients.map((r) => sendLineMessage(r.line_user_id, message)));
 
     return NextResponse.json({ ok: true, unlocked: true });
   } catch (e) {

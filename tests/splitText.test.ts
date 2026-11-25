@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSplitHint, isSplitOnlyMessage, findMentionedPersonId } from "@/lib/splitText";
+import { parseSplitHint, isSplitOnlyMessage, findMentionedPersonId, parseSplitReply } from "@/lib/splitText";
 
 /** 「3人で夜ご飯を食べて50,000円だった。2人分。」を送ったら、自分たちの負担を2/3にするための判定。 */
 describe("parseSplitHint", () => {
@@ -66,5 +66,28 @@ describe("findMentionedPersonId", () => {
 
   it("名前が出ていなければnull", () => {
     expect(findMentionedPersonId("3人で食事 15000円 1人分", people)).toBeNull();
+  });
+});
+
+describe("parseSplitReply（割り勘ボタンの後の返事）", () => {
+  it("数字だけなら、その人数で割った1人分", () => {
+    expect(parseSplitReply("5")).toEqual({ num: 1, den: 5 });
+    expect(parseSplitReply("５")).toEqual({ num: 1, den: 5 });
+    expect(parseSplitReply("5人")).toEqual({ num: 1, den: 5 });
+  });
+
+  it("分数なら、分母の人数で割った分子の人数分", () => {
+    expect(parseSplitReply("2/5")).toEqual({ num: 2, den: 5 });
+    expect(parseSplitReply("２／５")).toEqual({ num: 2, den: 5 });
+    expect(parseSplitReply(" 2 / 5 ")).toEqual({ num: 2, den: 5 });
+  });
+
+  it("割り勘にならない・人数ではないものはnull", () => {
+    expect(parseSplitReply("1")).toBeNull();
+    expect(parseSplitReply("5/5")).toBeNull();
+    expect(parseSplitReply("3/2")).toBeNull();
+    expect(parseSplitReply("4800")).toBeNull();
+    expect(parseSplitReply("コンビニで480円")).toBeNull();
+    expect(parseSplitReply("")).toBeNull();
   });
 });
