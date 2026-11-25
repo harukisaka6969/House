@@ -94,7 +94,7 @@ export default function AdvanceSettlement() {
             <PeopleTotals cycle={c} />
             {c.total > 0 && (
               <div className="mf-row" style={{ justifyContent: "space-between", marginTop: 6 }}>
-                {/* 共通の支出は半分ずつ、相手の支出は全額を相手が負担するとして相殺した金額。 */}
+                {/* それぞれの立替合計の差額（少ない方から多い方へ）。 */}
                 <span>{c.transfer ? `${c.transfer.fromName}から${c.transfer.toName}に` : "清算額"}</span>
                 <span className="mf-mono" style={{ fontWeight: 700 }}>{c.transfer ? fmt(c.transfer.amount) : "0円（相殺済み）"}</span>
               </div>
