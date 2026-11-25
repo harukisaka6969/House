@@ -19,8 +19,9 @@ export const AWAY_RECORD_MAX_AGE_HOURS = 72;
 /** 照明以外はそのままにする部屋（家電画面の部屋名）。 */
 export const DINING_ROOM = "Dining room";
 
-/** 赤外線リモコンの照明を常夜灯にするときに押すボタン名（SwitchBotアプリで学習・追加したボタン）。 */
-export const NIGHT_LIGHT_BUTTONS = ["常夜灯", "night light", "Night Light"];
+/** 赤外線リモコンの照明を常夜灯にするときに押すボタン名（SwitchBotアプリで「night」と表示されているボタン。
+ * 名前の違いに備えて、前から順に試す）。 */
+export const NIGHT_LIGHT_BUTTONS = ["night", "Night", "常夜灯", "night light", "Night Light"];
 
 export interface PresenceRow {
   profile_slug: string;

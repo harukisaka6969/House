@@ -49,7 +49,7 @@ import { parseSplitHint, parseSplitReply, isSplitOnlyMessage, findMentionedPerso
 import { setPendingSplit, takePendingSplit } from "@/lib/linePendingSplit";
 import { parsePresenceCommand, type PresenceCommand } from "@/lib/presenceText";
 import { markLeft, clearLeft } from "@/lib/homePresence";
-import { runArrivalAutomation, runDepartureAutomation } from "@/lib/awayShutoffJob";
+import { runArrivalAutomation, runDepartureAutomation, presenceMessage } from "@/lib/awayShutoffJob";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
 import { containsMoneyAmount } from "@/lib/moneyText";
@@ -122,13 +122,13 @@ async function handlePresenceCommand(event: LineEvent, profileId: string, comman
   }
   if (command === "home") {
     await clearLeft(slug);
-    const r = await runArrivalAutomation(slug).catch(() => null);
-    await reply(event, `🏠 おかえり。在宅として記録しました。${r?.ran && r.done.length > 0 ? "\nダイニングの照明を点けました。" : ""}`);
+    const r = await runArrivalAutomation(slug).catch(() => ({ ran: false as const, reason: "error" }));
+    await reply(event, `${presenceMessage("arrive", r)}\n（在宅として記録しました）`);
     return;
   }
   await markLeft(slug);
-  const r = await runDepartureAutomation(slug).catch(() => null);
-  await reply(event, `🚪 いってらっしゃい。外出として記録しました。${r?.ran && r.done.length > 0 ? "\n家に誰もいなくなったので、照明を常夜灯に・家電をオフにしました。" : ""}`);
+  const r = await runDepartureAutomation(slug).catch(() => ({ ran: false as const, reason: "error" }));
+  await reply(event, `${presenceMessage("leave", r)}\n（外出として記録しました）`);
 }
 
 /** 「割り勘」ボタンが押されたとき: 対象の支出を覚えて、人数を聞く。 */

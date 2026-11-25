@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { markLeft } from "@/lib/homePresence";
 import { sendCommand, switchBotAvailable } from "@/lib/switchbot";
-import { runDepartureAutomation } from "@/lib/awayShutoffJob";
+import { runDepartureAutomation, notifyPresence } from "@/lib/awayShutoffJob";
 
 const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40) });
 
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const deviceId = process.env.SWITCHBOT_HOME_LOCK_DEVICE_ID;
     let locked = false;
     if (switchBotAvailable() && deviceId) {
-      // 解錠・施錠のLINE通知は送らない（不要との要望で停止。結果はレスポンスで返す）。
+      // 解錠・施錠の世帯全員へのLINE通知は送らない（本人への「いってらっしゃい／おかえり」だけ送る）。
       await sendCommand(deviceId, "lock");
       locked = true;
     }
@@ -35,6 +35,9 @@ export async function POST(req: Request) {
       return { ran: false as const, reason: "error" };
     });
 
+    // 出発・帰宅したその人だけに「いってらっしゃい」「おかえり」と家電の結果を送る（世帯全員には送らない）。
+    await notifyPresence(slug, "leave", shutoff);
+
     return NextResponse.json({ ok: true, locked, shutoff });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });
@@ -42,3 +45,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }
+

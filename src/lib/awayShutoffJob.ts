@@ -2,7 +2,8 @@ import "server-only";
 import { listDevices, sendCommand, switchBotAvailable, getDeviceStatus } from "./switchbot";
 import { getDeviceRooms } from "./switchbotRooms";
 import { getAllPresence } from "./homePresence";
-import { getAllProfiles } from "./profiles";
+import { getAllProfiles, findProfileBySlug, getLineUserId } from "./profiles";
+import { sendLineMessage } from "./lineNotify";
 import {
   othersAway,
   planDeparture,
@@ -110,4 +111,33 @@ export async function runArrivalAutomation(slug: string): Promise<HomeAutomation
 
   const { devices, rooms } = await loadDevices();
   return performAll(planArrival(devices, rooms));
+}
+
+/** 出発・帰宅したその人だけに送るLINE（「いってらっしゃい」「おかえり」と、家電をどうしたか）。 */
+export function presenceMessage(kind: "leave" | "arrive", result: HomeAutomationResult): string {
+  if (kind === "leave") {
+    if (result.ran) {
+      const failed = result.failed.length > 0 ? `\n（${result.failed.map((f) => f.name).join("、")}は操作できませんでした）` : "";
+      return `🚪 いってらっしゃい。家に誰もいなくなったので、照明を常夜灯に、照明以外の家電をオフにしました（ダイニングのエアコンはそのまま）。${failed}`;
+    }
+    return result.reason === "motion detected at home"
+      ? "🚪 いってらっしゃい。家の人感センサーが動きを検知しているので、家電はそのままにしました。"
+      : "🚪 いってらっしゃい。";
+  }
+  if (result.ran && result.done.length > 0) {
+    const failed = result.failed.length > 0 ? `\n（${result.failed.map((f) => f.name).join("、")}は操作できませんでした）` : "";
+    return `🏠 おかえり。ダイニングの照明を点けました。${failed}`;
+  }
+  return "🏠 おかえり。";
+}
+
+/** 出発・帰宅したその人だけにLINEで知らせる（世帯全員には送らない）。送れなくても処理は止めない。 */
+export async function notifyPresence(slug: string, kind: "leave" | "arrive", result: HomeAutomationResult): Promise<void> {
+  try {
+    const profile = await findProfileBySlug(slug);
+    const lineUserId = profile ? await getLineUserId(profile.id) : null;
+    if (lineUserId) await sendLineMessage(lineUserId, presenceMessage(kind, result));
+  } catch (e) {
+    console.error("presence LINE notify failed", e);
+  }
 }
