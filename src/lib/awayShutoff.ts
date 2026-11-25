@@ -1,40 +1,52 @@
 /**
- * 外出時の「家じゅうの電気を消す」ジョブの判定（純粋関数のみ・テストから直接読める）。
+ * 外出・帰宅に合わせた家電の自動操作の判定（純粋関数のみ・テストから直接読める）。
  *
- * 誰かが出発したとき、その時点で家に誰もいなくなるなら実行する。
+ * 【外出】誰かが出発して家に誰もいなくなったら、照明は常夜灯（省電力）に、照明以外の電気・家電は
+ * オフにする。Dining room は照明だけ常夜灯にし、エアコン等はそのままにする。
  *   ① アリサが家・遥希が出発 → 実行しない     ② 遥希が家・アリサが出発 → 実行しない
  *   ③ 2人で出発 → 2人目の出発で実行           ④⑤ 片方が外にいて、もう片方が出発 → 実行
- * 外出中かどうかは home_presence.left_at（出発で記録、帰宅で消える）で判断する。帰宅の記録が
- * 取りこぼされると外出のまま残ってしまうため、古すぎる外出記録は「家にいるかもしれない」とみなし、
- * 実行しない側に倒す（人がいるのに家じゅうの電気を消すほうが困るため）。
+ * 【帰宅】家に誰もいない状態で誰かが帰ってきたら、Dining room の照明を点ける（家に人がいれば何もしない）。
+ *   日の入りの時刻にはSwitchBot側の設定で照明が自動で点くため、日の入り±10分は何もしない。
+ *
+ * 外出中かどうかは home_presence.left_at（出発で記録、帰宅で消える）で判断する。スマホの電池切れなどで
+ * 帰宅の記録が取りこぼされると外出のまま残ってしまうため、古すぎる外出記録は「家にいるかもしれない」と
+ * みなし、実行しない側に倒す（人がいるのに家じゅうの電気を消すほうが困るため）。
  */
 
 /** これより前に出発したきり帰宅の記録が無い人は、外出中とはみなさない。 */
 export const AWAY_RECORD_MAX_AGE_HOURS = 72;
 
-/** 消さない部屋（家電画面の部屋名）。 */
-export const KEEP_ON_ROOMS = ["Dining room"];
+/** 照明以外はそのままにする部屋（家電画面の部屋名）。 */
+export const DINING_ROOM = "Dining room";
+
+/** 赤外線リモコンの照明を常夜灯にするときに押すボタン名（SwitchBotアプリで学習・追加したボタン）。 */
+export const NIGHT_LIGHT_BUTTONS = ["常夜灯", "night light", "Night Light"];
 
 export interface PresenceRow {
   profile_slug: string;
   left_at: string | null;
 }
 
-/** 家に誰もいなくなったか。people は判定対象（遥希とアリサ）のslug。 */
-export function everyoneAway(people: string[], presence: PresenceRow[], now: Date, maxAgeHours = AWAY_RECORD_MAX_AGE_HOURS): boolean {
-  const oldest = now.getTime() - maxAgeHours * 60 * 60 * 1000;
-  return (
-    people.length > 0 &&
-    people.every((slug) => {
-      const leftAt = presence.find((p) => p.profile_slug === slug)?.left_at;
-      if (!leftAt) return false;
-      const t = new Date(leftAt).getTime();
-      return Number.isFinite(t) && t >= oldest;
-    })
-  );
+/** その人が（新しい記録で）外出中か。記録が無い・古すぎる場合は家にいるかもしれないのでfalse。 */
+function isAway(slug: string, presence: PresenceRow[], now: Date, maxAgeHours: number): boolean {
+  const leftAt = presence.find((p) => p.profile_slug === slug)?.left_at;
+  if (!leftAt) return false;
+  const t = new Date(leftAt).getTime();
+  return Number.isFinite(t) && t >= now.getTime() - maxAgeHours * 60 * 60 * 1000;
 }
 
-export interface ShutoffCandidate {
+/** 自分以外の全員が外出中か。出発時は「これで家に誰もいなくなったか」、帰宅時は「家が空だったか」の判定に使う。 */
+export function othersAway(
+  self: string,
+  people: string[],
+  presence: PresenceRow[],
+  now: Date,
+  maxAgeHours = AWAY_RECORD_MAX_AGE_HOURS
+): boolean {
+  return people.includes(self) && people.filter((p) => p !== self).every((p) => isAway(p, presence, now, maxAgeHours));
+}
+
+export interface DeviceCandidate {
   deviceId: string;
   deviceName: string;
   /** 実機は deviceType、赤外線リモコンは remoteType。 */
@@ -42,21 +54,87 @@ export interface ShutoffCandidate {
   infrared: boolean;
 }
 
-/** 状態を持って確実に「オフ」にできる実機（スマートプラグ・電球・照明・空調家電など）。 */
-const PHYSICAL_OFF = /plug|bulb|strip light|ceiling light|floor lamp|light|lamp|humidifier|purifier|fan|relay switch|heater/i;
+export interface DeviceAction {
+  device: DeviceCandidate;
+  /** 送るコマンド。nightLight は機種に合わせて実行時に具体的なコマンドへ変換する。 */
+  action: "turnOff" | "nightLight" | "lightOn";
+}
+
+const PHYSICAL_LIGHT = /ceiling light|bulb|strip light|floor lamp|light|lamp/i;
+const PHYSICAL_OTHER_OFF = /plug|humidifier|purifier|fan|relay switch|heater/i;
+const NOT_CONTROLLABLE = /lock|keypad|hub|sensor|meter|camera|doorbell|curtain|blind|shade|vacuum|cleaner/i;
+const INFRARED_LIGHT = /^(diy )?light$/i;
 /** 赤外線リモコンのうち、オフの信号が独立していて送っても電源が入る心配が少ないもの。
  * テレビ・プロジェクター等は電源ボタンが入/切の切り替えのことが多く、消えている時に送ると点いてしまうので除く。 */
-const INFRARED_OFF = /^(diy )?(air conditioner|light|fan|air purifier)$/i;
+const INFRARED_OFF = /^(diy )?(air conditioner|fan|air purifier)$/i;
 
-/** 電気を消す対象。Dining room と、玄関の鍵（lockDeviceId）は除く。部屋が未設定の機器は対象に含める。 */
-export function selectShutoffTargets(
-  devices: ShutoffCandidate[],
-  rooms: Record<string, string>,
-  lockDeviceId?: string | null
-): ShutoffCandidate[] {
-  return devices.filter((d) => {
-    if (lockDeviceId && d.deviceId === lockDeviceId) return false;
-    if (KEEP_ON_ROOMS.includes(rooms[d.deviceId] ?? "")) return false;
-    return d.infrared ? INFRARED_OFF.test(d.type.trim()) : PHYSICAL_OFF.test(d.type) && !/lock|keypad|hub|sensor/i.test(d.type);
-  });
+export function isLight(d: DeviceCandidate): boolean {
+  const type = d.type.trim();
+  if (d.infrared) return INFRARED_LIGHT.test(type);
+  return PHYSICAL_LIGHT.test(type) && !NOT_CONTROLLABLE.test(type);
+}
+
+function isOtherOff(d: DeviceCandidate): boolean {
+  const type = d.type.trim();
+  if (d.infrared) return INFRARED_OFF.test(type);
+  return PHYSICAL_OTHER_OFF.test(type) && !NOT_CONTROLLABLE.test(type);
+}
+
+/** 外出時の操作。照明は常夜灯、照明以外はオフ。Dining room は照明だけ。玄関の鍵（lockDeviceId）は触らない。 */
+export function planDeparture(devices: DeviceCandidate[], rooms: Record<string, string>, lockDeviceId?: string | null): DeviceAction[] {
+  const actions: DeviceAction[] = [];
+  for (const d of devices) {
+    if (lockDeviceId && d.deviceId === lockDeviceId) continue;
+    if (isLight(d)) actions.push({ device: d, action: "nightLight" });
+    else if (rooms[d.deviceId] !== DINING_ROOM && isOtherOff(d)) actions.push({ device: d, action: "turnOff" });
+  }
+  return actions;
+}
+
+/** 帰宅時の操作。Dining room の照明だけを点ける。 */
+export function planArrival(devices: DeviceCandidate[], rooms: Record<string, string>): DeviceAction[] {
+  return devices.filter((d) => rooms[d.deviceId] === DINING_ROOM && isLight(d)).map((device) => ({ device, action: "lightOn" as const }));
+}
+
+/* ---- 日の入り ---- */
+
+/** 家の位置（埼玉県蕨市あたり）。日の入りの計算に使う。 */
+export const HOME_LOCATION = { lat: 35.826, lng: 139.68 };
+/** 日の入りの前後、帰宅時の点灯を見送る幅（SwitchBot側の自動点灯と重ならないように）。 */
+export const SUNSET_BUFFER_MINUTES = 10;
+
+/** その日の日の入り時刻（UTC）。NOAAの簡易式で、誤差は1〜2分程度。dateはJSTの日付（YYYY-MM-DD）。 */
+export function sunsetUtc(date: string, lat = HOME_LOCATION.lat, lng = HOME_LOCATION.lng): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  const rad = Math.PI / 180;
+  const dayOfYear = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y, 0, 0)) / 86400000);
+  const gamma = ((2 * Math.PI) / 365) * (dayOfYear - 1);
+  const eqTime =
+    229.18 *
+    (0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma) - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma));
+  const decl =
+    0.006918 -
+    0.399912 * Math.cos(gamma) +
+    0.070257 * Math.sin(gamma) -
+    0.006758 * Math.cos(2 * gamma) +
+    0.000907 * Math.sin(2 * gamma) -
+    0.002697 * Math.cos(3 * gamma) +
+    0.00148 * Math.sin(3 * gamma);
+  const ha = Math.acos(Math.cos(90.833 * rad) / (Math.cos(lat * rad) * Math.cos(decl)) - Math.tan(lat * rad) * Math.tan(decl)) / rad;
+  const minutesUtc = 720 - 4 * (lng - ha) - eqTime;
+  return new Date(Date.UTC(y, m - 1, d) + minutesUtc * 60000);
+}
+
+/** 今が日の入り±バッファの時間帯か（この間はSwitchBot側の自動点灯に任せる）。 */
+export function isNearSunset(now: Date, bufferMinutes = SUNSET_BUFFER_MINUTES): boolean {
+  const jstDate = new Date(now.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+  return Math.abs(now.getTime() - sunsetUtc(jstDate).getTime()) <= bufferMinutes * 60000;
+}
+
+/* ---- 安全策 ---- */
+
+/** 人感センサーが今まさに動きを検知していれば、家に人がいるとみなして外出時の操作をやめる
+ * （スマホの電池切れなどで帰宅の記録が抜け、家にいるのに外出中のままになっている場合の安全策）。 */
+export function motionDetected(statuses: Record<string, unknown>[]): boolean {
+  return statuses.some((s) => s.moveDetected === true);
 }
