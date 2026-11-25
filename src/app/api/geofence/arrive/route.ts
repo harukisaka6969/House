@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getLeftAt, clearLeft } from "@/lib/homePresence";
 import { sendCommand, switchBotAvailable } from "@/lib/switchbot";
+import { runArrivalAutomation, notifyPresence } from "@/lib/awayShutoffJob";
 
 const bodySchema = z.object({ token: z.string(), slug: z.string().min(1).max(40), leftAt: z.string().optional() });
 const AWAY_THRESHOLD_MS = 15 * 60 * 1000;
 
+/** 帰宅時の点灯で家電に1台ずつコマンドを送るため、既定の10秒より長く待つ。 */
+export const maxDuration = 60;
+
 /** iOSショートカットの「到着」オートメーションから呼ばれる想定のWebhook。15分以上外出していた場合のみ、
- * 設定済みの鍵デバイスを解錠する（無条件解錠を避けるための最低限の安全策）。
+ * 設定済みの鍵デバイスを解錠する（無条件解錠を避けるための最低限の安全策）。家が空のところへ帰ってきた場合は、
+ * Dining room の照明を点ける（日の入り±10分はSwitchBot側の自動点灯に任せる）。
  * 外出時刻は、不安定になりがちな「外出」側の通信を避けるため、ショートカット側でローカル保存した値を
  * この到着リクエストのbodyに`leftAt`として乗せて送ってもらう想定。省略された場合のみ、旧来のサーバー側
  * 記録（/api/geofence/leave経由）にフォールバックする。 */
@@ -30,19 +35,33 @@ export async function POST(req: Request) {
 
     if (!leftAt) return NextResponse.json({ ok: true, unlocked: false, reason: "no leave record" });
 
+    // 玄関の解錠を先に済ませる（家電の操作で待たせないため）。
     const awayMs = Date.now() - new Date(leftAt).getTime();
-    if (awayMs < AWAY_THRESHOLD_MS) return NextResponse.json({ ok: true, unlocked: false, reason: "away time too short" });
-
     const deviceId = process.env.SWITCHBOT_HOME_LOCK_DEVICE_ID;
-    if (!switchBotAvailable() || !deviceId) return NextResponse.json({ ok: true, unlocked: false, reason: "switchbot not configured" });
+    let unlocked = false;
+    let reason: string | undefined;
+    if (awayMs < AWAY_THRESHOLD_MS) reason = "away time too short";
+    else if (!switchBotAvailable() || !deviceId) reason = "switchbot not configured";
+    else {
+      // 解錠・施錠の世帯全員へのLINE通知は送らない（本人への「いってらっしゃい／おかえり」だけ送る）。
+      await sendCommand(deviceId, "unlock");
+      unlocked = true;
+    }
 
-    // 解錠・施錠のLINE通知は送らない（不要との要望で停止。結果はレスポンスで返す）。
-    await sendCommand(deviceId, "unlock");
+    // 家が空のところへ帰ってきたら、Dining room の照明を点ける（短い外出でも、外出時に常夜灯にしているので戻す）。
+    const lights = await runArrivalAutomation(slug).catch((e) => {
+      console.error("arrival automation failed", e);
+      return { ran: false as const, reason: "error" };
+    });
 
-    return NextResponse.json({ ok: true, unlocked: true });
+    // 出発・帰宅したその人だけに「いってらっしゃい」「おかえり」と家電の結果を送る（世帯全員には送らない）。
+    await notifyPresence(slug, "arrive", lights);
+
+    return NextResponse.json({ ok: true, unlocked, reason, lights });
   } catch (e) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: "invalid request" }, { status: 400 });
     console.error("geofence arrive failed", e);
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }
+

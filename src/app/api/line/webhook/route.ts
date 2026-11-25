@@ -47,6 +47,9 @@ import {
 import { accountChangeButtons, parseAccountPostback, shortAccountName } from "@/lib/lineAccount";
 import { parseSplitHint, parseSplitReply, isSplitOnlyMessage, findMentionedPersonId, type SplitHint } from "@/lib/splitText";
 import { setPendingSplit, takePendingSplit } from "@/lib/linePendingSplit";
+import { parsePresenceCommand, type PresenceCommand } from "@/lib/presenceText";
+import { markLeft, clearLeft } from "@/lib/homePresence";
+import { runArrivalAutomation, runDepartureAutomation, presenceMessage } from "@/lib/awayShutoffJob";
 import { parseAdvanceKeyword, isAdvanceOnlyMessage, isCancelMessage } from "@/lib/lineAdvance";
 import { resolvePaymentMethod } from "@/lib/paymentMethod";
 import { containsMoneyAmount } from "@/lib/moneyText";
@@ -107,6 +110,25 @@ async function expenseButtons(ids: string[], myName: string, currentAccountIds: 
   const accounts = await getAccounts();
   const split: LineQuickReplyButton[] = ids.length > 0 ? [{ label: "割り勘", data: `split:${ids.join(",")}`, displayText: "割り勘" }] : [];
   return [...advanceButtons(ids, myName), ...split, ...accountChangeButtons(ids, currentAccountIds, accounts)];
+}
+
+/** 「ただいま」「いってきます」: iPhoneの位置情報オートメーションが電池切れ等で動かなかったときに、
+ * 在宅・外出の記録を手で直す。家電の操作も出発・帰宅と同じ条件で行う（玄関の鍵は触らない）。 */
+async function handlePresenceCommand(event: LineEvent, profileId: string, command: PresenceCommand): Promise<void> {
+  const slug = (await getAllProfiles()).find((p) => p.id === profileId)?.slug;
+  if (!slug) {
+    await reply(event, "プロフィールが見つかりませんでした。");
+    return;
+  }
+  if (command === "home") {
+    await clearLeft(slug);
+    const r = await runArrivalAutomation(slug).catch(() => ({ ran: false as const, reason: "error" }));
+    await reply(event, `${presenceMessage("arrive", r)}\n（在宅として記録しました）`);
+    return;
+  }
+  await markLeft(slug);
+  const r = await runDepartureAutomation(slug).catch(() => ({ ran: false as const, reason: "error" }));
+  await reply(event, `${presenceMessage("leave", r)}\n（外出として記録しました）`);
 }
 
 /** 「割り勘」ボタンが押されたとき: 対象の支出を覚えて、人数を聞く。 */
@@ -887,6 +909,11 @@ export async function POST(req: Request) {
       // 「割り勘」ボタンの後の人数（「5」「2/5」）。返事待ちが無ければ通常の処理に回す。
       const splitReply = parseSplitReply(text);
       if (splitReply && (await handleSplitReply(event, profileId, splitReply))) continue;
+      const presenceCommand = parsePresenceCommand(text);
+      if (presenceCommand) {
+        await handlePresenceCommand(event, profileId, presenceCommand);
+        continue;
+      }
       if (isCancelMessage(text)) {
         // 「取り消し」「とりけし」「キャンセル」等 → 直前にLINEから登録した内容を消す。
         await handleCancelCommand(event, profileId);
