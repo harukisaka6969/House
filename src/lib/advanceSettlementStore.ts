@@ -13,7 +13,7 @@ export interface AdvanceSettlementRow {
 export async function getAdvanceRowsInRange(from: string, to: string): Promise<AdvanceRow[]> {
   const { data, error } = await db()
     .from("expenses")
-    .select("date, amount, paid_by, account_id")
+    .select("date, amount, paid_by, account_id, owner")
     .not("paid_by", "is", null)
     .gte("date", from)
     .lte("date", to);
